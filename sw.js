@@ -1,11 +1,10 @@
 /* Мʼясний Барон — service worker */
 
-const CACHE = 'mb-v1';
+const CACHE = 'mb-v2';
 const SHELL = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  'https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Manrope:wght@400;500;600&display=swap'
+  './',
+  './index.html',
+  './manifest.json'
 ];
 
 self.addEventListener('install', e => {
@@ -27,12 +26,14 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
-  // Замовлення і статуси — завжди з мережі, без кешу
   if (url.pathname.startsWith('/api/')) return;
   if (e.request.method !== 'GET') return;
 
-  // Сторінка: спершу мережа, кеш — як запасний варіант
-  if (e.request.mode === 'navigate') {
+  const isPage = e.request.mode === 'navigate' || url.pathname.endsWith('.html');
+  const isCode = url.pathname.endsWith('.js') || url.pathname.endsWith('.json');
+
+  // Сторінка і код: спершу мережа, кеш лише коли інтернету немає
+  if (isPage || isCode) {
     e.respondWith(
       fetch(e.request)
         .then(r => {
@@ -40,12 +41,12 @@ self.addEventListener('fetch', e => {
           caches.open(CACHE).then(c => c.put(e.request, copy));
           return r;
         })
-        .catch(() => caches.match('/index.html'))
+        .catch(() => caches.match(e.request).then(hit => hit || caches.match('./index.html')))
     );
     return;
   }
 
-  // Решта: спершу кеш, потім мережа
+  // Фото та іконки: спершу кеш — вони не змінюються
   e.respondWith(
     caches.match(e.request).then(hit => hit || fetch(e.request).then(r => {
       if (r.ok && url.origin === location.origin) {
@@ -53,6 +54,6 @@ self.addEventListener('fetch', e => {
         caches.open(CACHE).then(c => c.put(e.request, copy));
       }
       return r;
-    }).catch(() => hit))
+    }))
   );
 });
