@@ -195,6 +195,26 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .st-b .s{font-size:11.5px;color:var(--smoke)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
 :focus-visible{outline:2px solid var(--ember-hot);outline-offset:2px}
+.up-scroll{max-height:52vh;overflow-y:auto;margin:0 -4px 14px;padding:0 4px;
+  display:grid;gap:8px;align-content:start;
+  -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 26px),transparent);
+  mask-image:linear-gradient(to bottom,#000 calc(100% - 26px),transparent)}
+.up-scroll::-webkit-scrollbar{width:0}
+.up-grp{margin:8px 2px 1px;font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--smoke)}
+.up-grp:first-child{margin-top:0}
+.up{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:var(--coal);
+  border:1px solid var(--line);border-radius:11px;padding:9px 12px 9px 9px;transition:.14s}
+.up.on{border-color:var(--ember);background:rgba(196,52,42,.1)}
+.up-ph{width:46px;height:46px;border-radius:8px;background:var(--coal-2);flex:0 0 auto;
+  display:grid;place-items:center;overflow:hidden}
+.up-ph img{width:100%;height:100%;object-fit:cover;display:block}
+.up-ph svg{width:20px;height:20px;opacity:.3}
+.up-b{flex:1;min-width:0;line-height:1.35}
+.up-b .nm{display:block;font-size:13.5px;font-weight:500}
+.up-b .pr{display:block;font-size:12px;color:var(--smoke)}
+.up-add{width:27px;height:27px;border-radius:50%;background:var(--ember);color:#fff;
+  display:grid;place-items:center;font-size:15px;line-height:1;flex:0 0 auto}
+.up.on .up-add{background:var(--ok)}
 .inst{position:fixed;left:0;right:0;bottom:0;z-index:50;padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
 .inst-b{max-width:588px;margin:0 auto;background:var(--coal);border:1px solid var(--line-2);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:11px;box-shadow:0 10px 30px rgba(0,0,0,.55)}
 .inst-t{flex:1;min-width:0;line-height:1.35}
@@ -393,7 +413,7 @@ document.getElementById('shopBtn').onclick=()=>{
 /* ---------- item sheet ---------- */
 function openItem(id){
   const it=ITEMS.find(i=>i.id===id);
-  if(it.unit==='порція'){addToCart(it,1);return}
+  if(it.unit==='порція'){addToCart(it,1); maybeUpsell(it); return}
   let g=1000;
   open(`<div class="grab"></div>
   <div class="hero-img">${photoOf(it)?`<img src="${photoOf(it)}" alt="${it.name}">`:ICON}</div>
@@ -410,12 +430,46 @@ function openItem(id){
     sIn.querySelectorAll('.w').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.g===g))};
   sIn.querySelectorAll('.w').forEach(b=>b.onclick=()=>{g=+b.dataset.g;rg.value=g;paint()});
   rg.oninput=()=>{g=+rg.value;paint()};
-  sIn.querySelector('#addBtn').onclick=()=>{addToCart(it,g);close()};
+  sIn.querySelector('#addBtn').onclick=()=>{addToCart(it,g); if(!maybeUpsell(it)) close()};
 }
 function addToCart(it,g){
   const ex=cart.find(l=>l.id===it.id);
   if(ex) ex.g+=g; else cart.push({id:it.id,name:it.name,grp:it.grp,price:it.price,unit:it.unit,cat:it.cat,g});
   paintBar();
+}
+
+/* ---------- допродаж: пропозиції до мʼяса ---------- */
+const UPSELL_CATS=['extra','side'];
+let upsellShown=false;
+function maybeUpsell(it){
+  if(upsellShown) return false;
+  if(!(it.cat==='raw'||it.cat==='saus'||it.cat==='ready')) return false;
+  const inCart=new Set(cart.map(l=>l.id));
+  const pool=ITEMS.filter(i=>UPSELL_CATS.includes(i.cat)&&!inCart.has(i.id));
+  if(!pool.length) return false;
+  upsellShown=true;
+  const groups=[...new Set(pool.map(i=>i.grp))];
+  open(`<div class="grab"></div>
+  <div class="sh-h"><h3>Що до мʼяса?</h3><button class="x" onclick="close_()">✕</button></div>
+  <p class="hint" style="margin:-6px 0 12px">Соуси, сир, овочі та гарніри — щоб стіл був повний.</p>
+  <div class="up-scroll">${groups.map(g=>`
+    <p class="up-grp">${g}</p>
+    ${pool.filter(i=>i.grp===g).map(i=>`
+    <button class="up" data-u="${i.id}">
+      <div class="up-ph">${photoOf(i)?`<img src="${photoOf(i)}" alt="" loading="lazy">`:ICON}</div>
+      <div class="up-b"><span class="nm">${i.name}</span>
+      <span class="pr">${money(i.price)}${i.unit==='порція'?'':' / 100 г'}</span></div>
+      <span class="up-add">+</span>
+    </button>`).join('')}`).join('')}</div>
+  <button class="cta" onclick="close_()">Готово</button>`);
+  sIn.querySelector('.up-scroll').onclick=e=>{
+    const b=e.target.closest('[data-u]'); if(!b) return;
+    const item=ITEMS.find(i=>i.id===b.dataset.u);
+    if(b.classList.contains('on')) return;
+    addToCart(item, item.unit==='порція'?1:500);
+    b.classList.add('on'); b.querySelector('.up-add').textContent='✓';
+  };
+  return true;
 }
 function lineSum(l){return l.unit==='порція'? l.price*l.g : l.price*l.g/100}
 function goodsTotal(){return cart.reduce((s,l)=>s+lineSum(l),0)}
@@ -519,7 +573,7 @@ function openCheckout(){
       }catch(err){
         order={...payload,no:'—',shop:SHOPS[shop][0],offline:err.message};
       }
-      cart=[];paintBar();openStatus();
+      cart=[];upsellShown=false;paintBar();openStatus();
     };
   };
   draw();
