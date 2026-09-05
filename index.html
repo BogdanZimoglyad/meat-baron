@@ -54,13 +54,32 @@ a{color:inherit}
 .chev{color:var(--smoke);font-size:11px}
 
 /* hero */
-.hero{padding:30px 0 26px;border-bottom:1px solid var(--line);position:relative;isolation:isolate}
-.hero::before{content:'';position:absolute;inset:-1px 0 0;z-index:-2;
-  background:url('smoke.jpg') center right/cover no-repeat;opacity:.42}
+.hero{padding:30px 0 26px;border-bottom:1px solid var(--line);position:relative;isolation:isolate;
+  overflow:hidden}
+.hero .smk{position:absolute;inset:-1px 0 0;z-index:-3;overflow:hidden;pointer-events:none}
+.hero .smk i{position:absolute;top:-8%;left:0;width:220%;height:116%;display:block;
+  background:url('smoke-layer.jpg') left center/auto 100% repeat-x;
+  will-change:transform}
+.hero .smk i:nth-child(1){opacity:.34;animation:drift1 64s linear infinite}
+.hero .smk i:nth-child(2){opacity:.2;transform:scaleX(-1);animation:drift2 96s linear infinite}
+@keyframes drift1{
+  0%{transform:translate3d(0,0,0) scale(1.04)}
+  50%{transform:translate3d(-24%,-2%,0) scale(1.1)}
+  100%{transform:translate3d(-50%,0,0) scale(1.04)}
+}
+@keyframes drift2{
+  0%{transform:scaleX(-1) translate3d(0,0,0) scale(1.06)}
+  50%{transform:scaleX(-1) translate3d(-18%,2%,0) scale(1.02)}
+  100%{transform:scaleX(-1) translate3d(-40%,0,0) scale(1.06)}
+}
+.hero .mk-bg{position:absolute;z-index:-2;right:2%;top:50%;height:86%;aspect-ratio:1;
+  transform:translateY(-50%);background:url('logo-mark.png') center/contain no-repeat;
+  opacity:.34;pointer-events:none;animation:pulse 9s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:.42}}
 .hero::after{content:'';position:absolute;inset:-1px 0 0;z-index:-1;pointer-events:none;
   background:
-    linear-gradient(to right,var(--char) 4%,rgba(20,16,16,.8) 40%,rgba(20,16,16,.15) 100%),
-    linear-gradient(to bottom,rgba(20,16,16,.35),transparent 34%,rgba(20,16,16,.9))}
+    linear-gradient(to right,var(--char) 4%,rgba(20,16,16,.78) 42%,rgba(20,16,16,.1) 100%),
+    linear-gradient(to bottom,rgba(20,16,16,.3),transparent 36%,rgba(20,16,16,.92))}
 .hero>*{position:relative}
 .brand{margin:0 0 10px;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:.16em;
   text-transform:uppercase;color:var(--smoke)}
@@ -303,7 +322,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .inst-y{background:var(--ember);color:#fff;border-radius:9px;padding:9px 15px;font-size:13.5px;font-weight:600;flex:0 0 auto}
 .inst-n{color:var(--smoke);font-size:16px;padding:4px 2px;flex:0 0 auto}
 body:has(.inst) .bar{bottom:66px}
-@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
@@ -321,6 +340,8 @@ body:has(.inst) .bar{bottom:66px}
 
 <main class="wrap">
   <section class="hero">
+    <div class="smk" aria-hidden="true"><i></i><i></i></div>
+    <div class="mk-bg" aria-hidden="true"></div>
     <p class="brand">Мʼясний Барон</p>
     <h1><span>Найвигідніший шашлик</span>твого міста</h1>
     <p>Свіже мариноване мʼясо, ковбаски власного виробництва та мʼясо зі смокеру. Заберете сирим — або посмажимо на мангалі.</p>
