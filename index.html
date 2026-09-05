@@ -82,22 +82,59 @@ a{color:inherit}
 .grp-h{display:flex;align-items:baseline;gap:10px;margin-bottom:12px}
 .grp-h h2{font-size:21px;text-transform:uppercase}
 .grp-h em{font-style:normal;color:var(--smoke);font-size:12px}
-.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
-@media(min-width:560px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
-.card{background:var(--coal);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;text-align:left}
-.ph{aspect-ratio:1;background:var(--coal-2);display:grid;place-items:center;position:relative;overflow:hidden}
+.grid{display:grid;gap:9px}
+.card{background:var(--coal);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+  display:flex;align-items:stretch;gap:12px;text-align:left;padding:11px;transition:.15s}
+.card:hover{border-color:var(--line-2)}
+.ph{width:92px;height:92px;flex:0 0 auto;order:2;border-radius:9px;background:var(--coal-2);
+  display:grid;place-items:center;position:relative;overflow:hidden}
 .ph img{width:100%;height:100%;object-fit:cover;display:block}
-.ph svg{width:36px;height:36px;opacity:.28}
-.badge{position:absolute;top:8px;left:8px;background:rgba(20,16,16,.82);border-radius:999px;padding:3px 9px;font-size:10px;letter-spacing:.03em;color:var(--bone)}
+.ph svg{width:28px;height:28px;opacity:.28}
+.badge{position:absolute;top:6px;left:6px;background:rgba(20,16,16,.82);border-radius:999px;
+  padding:2px 7px;font-size:9.5px;letter-spacing:.03em;color:var(--bone)}
 .badge.fire{background:var(--ember);color:#fff}
-.c-b{padding:10px;display:flex;flex-direction:column;gap:2px;flex:1}
-.c-b .nm{font-size:13.5px;font-weight:500;line-height:1.3}
-.c-b .un{font-size:11px;color:var(--smoke)}
-.c-f{display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:8px}
-.pr{font-family:'Oswald';font-size:16px;font-weight:500}
-.add{width:30px;height:30px;border-radius:50%;background:var(--ember);color:#fff;display:grid;place-items:center;font-size:17px;line-height:1;transition:.15s}
-.add:active{transform:scale(.9)}
+.c-b{flex:1;min-width:0;order:1;display:flex;flex-direction:column;gap:3px;padding:2px 0}
+.c-b .nm{font-size:15px;font-weight:500;line-height:1.25}
+.c-b .pr-top{font-family:'Oswald';font-size:17px;font-weight:500;color:var(--ember-hot)}
+.c-b .ds{font-size:12.5px;color:var(--smoke);line-height:1.45;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.c-b .un{font-size:12px;color:var(--smoke);line-height:1.45}
+.c-f{display:flex;align-items:center;justify-content:flex-start;margin-top:auto;padding-top:8px}
+.add{height:31px;padding:0 14px;border-radius:8px;background:var(--ember);color:#fff;
+  display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;transition:.15s}
+.add:active{transform:scale(.96)}
 .empty{color:var(--smoke);padding:30px 0;text-align:center;font-size:14px}
+
+/* три колонки на широкому екрані */
+.layout{display:block}
+.side{display:none}
+.side-h{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--smoke);margin:0 0 10px}
+@media(min-width:900px){
+  .wrap{max-width:1180px}
+  .layout{display:grid;grid-template-columns:190px minmax(0,1fr) 240px;gap:26px;align-items:start}
+  .side{display:block;position:sticky;top:76px}
+  .tools{position:static;padding-top:14px}
+  .cats{display:none}
+  .side-cats{display:flex;flex-direction:column;gap:2px}
+  .side-cat{text-align:left;padding:9px 12px;border-radius:9px;font-size:14px;color:var(--smoke);transition:.14s}
+  .side-cat:hover{color:var(--bone);background:var(--coal)}
+  .side-cat[aria-selected=true]{background:var(--coal);color:var(--ember-hot);font-weight:500}
+  .info{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:15px}
+  .info-row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+  .info-row:last-of-type{border:none}
+  .info-row .ic{font-size:15px;line-height:1.4;flex:0 0 auto}
+  .info-row small{display:block;font-size:11px;color:var(--smoke)}
+  .info-row b{display:block;font-size:13px;font-weight:500;line-height:1.4}
+  .ig-sm{margin-top:10px;width:100%;justify-content:center;padding:9px 12px;font-size:13px}
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ph{width:104px;height:104px}
+  .about{max-width:none}
+  body{padding-bottom:40px}
+  .bar{max-width:none}
+}
+@media(min-width:1180px){
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 
 /* about */
 .about{margin-top:34px;padding:22px 0 8px;border-top:1px solid var(--line)}
@@ -194,6 +231,23 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .st.on .st-b .t,.st.done .st-b .t{color:var(--bone)}
 .st-b .s{font-size:11.5px;color:var(--smoke)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+/* спосіб отримання */
+.mode-bar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.mb-btn{border:1px solid var(--line-2);border-radius:11px;padding:11px 12px;text-align:left;
+  line-height:1.3;transition:.14s;background:var(--coal)}
+.mb-btn[aria-pressed=true]{border-color:var(--ember);background:rgba(196,52,42,.12)}
+.mb-ic{display:block;font-size:16px;margin-bottom:3px}
+.mb-t{display:block;font-size:14px;font-weight:500}
+.mb-s{display:block;font-size:11.5px;color:var(--smoke)}
+.mb-btn[aria-pressed=true] .mb-t{color:var(--ember-hot)}
+
+/* підкатегорії */
+.subs{display:flex;gap:7px;overflow-x:auto;padding:2px 0 12px;scrollbar-width:none}
+.subs::-webkit-scrollbar{display:none}
+.sub{flex:0 0 auto;border:1px solid var(--line);border-radius:999px;padding:6px 13px;
+  font-size:12.5px;color:var(--smoke);white-space:nowrap;transition:.14s;background:var(--coal)}
+.sub[aria-selected=true]{background:rgba(196,52,42,.14);border-color:var(--ember);color:var(--ember-hot)}
+
 :focus-visible{outline:2px solid var(--ember-hot);outline-offset:2px}
 .up-scroll{max-height:52vh;overflow-y:auto;margin:0 -4px 14px;padding:0 4px;
   display:grid;gap:8px;align-content:start;
@@ -244,22 +298,63 @@ body:has(.inst) .bar{bottom:66px}
     <p class="brand">Мʼясний Барон</p>
     <h1><span>Найвигідніший шашлик</span>твого міста</h1>
     <p>Свіже мариноване мʼясо, ковбаски власного виробництва та мʼясо зі смокеру. Заберете сирим — або посмажимо на мангалі.</p>
-    <div class="hero-tags">
-      <span class="tag">8 точок у місті</span>
-      <span class="tag">Смаження +50 ₴/кг</span>
-      <span class="tag">Самовивіз і доставка</span>
-    </div>
   </section>
 
-  <div class="tools">
-    <div class="search">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9A908A" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <input id="q" type="search" placeholder="Пошук: ошийок, чевапчічі, реберця…" aria-label="Пошук товарів">
-    </div>
-    <nav class="cats" id="cats" role="tablist" aria-label="Категорії"></nav>
+  <div class="mode-bar">
+    <button class="mb-btn" data-gm="pickup" aria-pressed="true">
+      <span class="mb-ic">🏪</span>
+      <span class="mb-t">Самовивіз</span>
+      <span class="mb-s">з точки на вибір</span>
+    </button>
+    <button class="mb-btn" data-gm="delivery" aria-pressed="false">
+      <span class="mb-ic">🚚</span>
+      <span class="mb-t">Доставка</span>
+      <span class="mb-s">вартість уточнить оператор</span>
+    </button>
   </div>
 
-  <div id="catalog"></div>
+  <div class="layout">
+
+    <aside class="side side-l">
+      <p class="side-h">Категорії</p>
+      <nav class="side-cats" id="sideCats"></nav>
+    </aside>
+
+    <div class="mid">
+      <div class="tools">
+        <div class="search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9A908A" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input id="q" type="search" placeholder="Пошук: ошийок, чевапчічі, реберця…" aria-label="Пошук товарів">
+        </div>
+        <nav class="cats" id="cats" role="tablist" aria-label="Категорії"></nav>
+      </div>
+      <nav class="subs" id="subs" aria-label="Підкатегорії"></nav>
+      <div id="catalog"></div>
+    </div>
+
+    <aside class="side side-r">
+      <div class="info">
+        <p class="side-h">Інформація</p>
+        <div class="info-row">
+          <span class="ic">📍</span>
+          <div><small>Точка видачі</small><b id="infoShop">Пр-т Героїв Харкова 256</b></div>
+        </div>
+        <div class="info-row">
+          <span class="ic">🔥</span>
+          <div><small>Смаження</small><b>50 ₴ за кг сирого мʼяса</b></div>
+        </div>
+        <div class="info-row">
+          <span class="ic">🚚</span>
+          <div><small>Отримання</small><b>Самовивіз і доставка</b></div>
+        </div>
+        <a class="ig ig-sm" href="https://instagram.com/meat.baron_" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
+          @meat.baron_
+        </a>
+      </div>
+    </aside>
+
+  </div>
 
   <section class="about">
     <h2>Про нас</h2>
@@ -326,6 +421,61 @@ const P=[
 ];
 const ITEMS=P.map((r,i)=>({id:'p'+i,cat:r[0],grp:r[1],name:r[2],price:r[3],unit:r[4]?'порція':'100г'}));
 
+/* короткі описи товарів: ключ — "Група/Назва" або "Назва" */
+const DESC={
+ 'Ошийок':'Найпопулярніший вибір для шашлику — соковитий, з тонкими прошарками сала.',
+ 'Мʼякоть':'Чиста мʼякоть без кістки, universal для шашлику й стейків.',
+ 'Вирізка':'Найніжніша частина туші, майже без жиру.',
+ 'Реберця':'Мʼясні реберця у маринаді — довго готуються, добре смакують.',
+ 'Грудинка':'З прошарками сала, виходить дуже соковитою на вогні.',
+ 'Стейк з ошийка':'Товстий зріз ошийка — соковитий навіть при сильному прожарюванні.',
+ 'Стейк з відбивної':'Пісний зріз корейки, ніжний і швидкий у приготуванні.',
+ 'Стейк на кістці':'Класика на кістці — мʼясо біля кістки найсмачніше.',
+ 'Косичка bbq':'Плетена косичка у соусі bbq — ефектно виглядає на грилі.',
+ 'Курка/Гомілка':'Соковита гомілка у маринаді, улюблена дитяча позиція.',
+ 'Курка/Крило':'Хрумкі крильця — ідеально під пиво.',
+ 'Курка/Стейк':'Стейк зі стегна — соковитіший за грудку.',
+ 'Курка/Філе':'Пісне філе грудки, готується швидко.',
+ 'Курка/Люля кебаб':'Рублене куряче мʼясо зі спеціями на шпажці.',
+ 'Курка/Шашлик з індика':'Дієтичний і ніжний, з делікатним смаком.',
+ 'Шашлик з телятини':'Молода яловичина — щільна текстура, насичений смак.',
+ 'Стейк Рібай':'Мармуровий зріз з жировими прошарками — король стейків.',
+ 'Стейк Нью-Йорк':'Щільний стриплойн з вираженим яловичим смаком.',
+ 'Філе-міньйон':'Найніжніший стейк з вирізки, майже без жиру.',
+ 'Баранина/Шашлик з мʼякоті':'Класичний баранячий шашлик з характерним ароматом.',
+ 'Баранина/Люля кебаб':'Рублена баранина зі спеціями та зеленню.',
+ 'Ковбаски/Віденська':'Ніжна ковбаска у натуральній оболонці.',
+ 'Ковбаски/Мисливська':'Підкопчена, з насиченим ароматом спецій.',
+ 'Ковбаски/Свиняча':'Класична домашня ковбаска зі свинини.',
+ 'Ковбаски/Куряча':'Легша за свинячу, ніжна текстура.',
+ 'Ковбаски/Куряча з сиром':'З начинкою з розплавленого сиру всередині.',
+ 'Ковбаски/Куряча з пивом':'З додаванням пива в фарш — мʼякша і ароматніша.',
+ 'Ковбаски/Індича':'Пісна ковбаска з індички.',
+ 'Ковбаски/Ковбаски гриль асорті':'Мікс наших ковбасок — щоб спробувати все.',
+ 'Чевапчічі/Класичні':'Балканські мʼясні ковбаски без оболонки.',
+ 'Чевапчічі/З сиром':'Чевапчічі з сирною начинкою.',
+ 'Чевапчічі/З грибами':'Чевапчічі з печерицями у фарші.',
+ 'Смокер/Курка bbq':'Ціла курка, томлена у смокері під соусом bbq.',
+ 'Смокер/Рулька свиняча':'Томлена рулька з хрусткою скоринкою.',
+ 'Смокер/Ребро свиняче':'Ребра з димком, мʼясо відходить від кістки.',
+ 'Смокер/Бекон':'Домашній бекон холодного копчення.',
+ 'Смокер/Рвана свинина':'Pulled pork — томиться годинами до волокон.',
+ 'Смокер/Рвана яловичина':'Волокниста яловичина з глибоким димним смаком.',
+ 'Смокер/Бріскет яловичий':'Грудинка з корою — головна страва техаського барбекю.',
+ 'Смокер/Підчеревина':'Соковита, з ідеальним балансом мʼяса й сала.',
+ 'Гриль/Курка гриль':'Ціла курка на грилі, готова до столу.',
+ 'Гриль/Качка гриль':'Качка з рум\'яною шкіркою.',
+ 'Сулугуні':'Розплавлений на грилі — тягнеться і рум\'яниться.',
+ 'Халумі':'Сир, що не тане — смажиться до золотої скоринки.',
+ 'Кукурудза':'Солодка кукурудза, готова до гриля.',
+ 'Картопля з салом':'Картопля, шпигована салом — гарнір з димком.',
+ 'Гриби печериці':'Мариновані печериці для гриля.',
+ 'Матнакаш':'Вірменський хліб — ідеальний до мʼяса.',
+ 'Лаваш тонкий':'Тонкий лаваш, 3 листи.',
+ 'Соуси в асортименті':'Фірмові соуси — питайте на точці.'
+};
+const descOf=it=>DESC[it.grp+'/'+it.name]||DESC[it.name]||'';
+
 /* фото товарів: ключ — "Група/Назва" або просто "Назва" */
 const PHOTO={
  'Ошийок':'oshyyok','Мʼякоть':'myakot','Вирізка':'vyrizka',
@@ -362,18 +512,30 @@ const money=n=>n.toFixed(2).replace('.00','')+' ₴';
 const wLabel=g=>g>=1000?(g/1000).toFixed(g%1000?1:0)+' кг':g+' г';
 const ICON='<svg viewBox="0 0 24 24" fill="none" stroke="#F0E9DE" stroke-width="1.4"><path d="M4 15c0-4 3.5-8 8-8s8 4 8 8-3.5 4-8 4-8 0-8-4z"/><circle cx="9" cy="13" r="1.2"/></svg>';
 
-let cat='raw', cart=[], shop=0, order=null;
+let cat='raw', sub='', cart=[], shop=0, order=null, getMode='pickup';
 
 /* ---------- catalog ---------- */
 function renderCats(){
   document.getElementById('cats').innerHTML=CATS.map(c=>
     `<button class="cat" role="tab" aria-selected="${c.id===cat}" data-c="${c.id}">${c.t}</button>`).join('');
+  document.getElementById('sideCats').innerHTML=CATS.map(c=>
+    `<button class="side-cat" aria-selected="${c.id===cat}" data-c="${c.id}">${c.t}</button>`).join('');
 }
 function renderCatalog(){
   const q=document.getElementById('q').value.trim().toLowerCase();
-  const list=ITEMS.filter(i=>q? (i.name+' '+i.grp).toLowerCase().includes(q) : i.cat===cat);
+  const searching=!!q;
+  const all=ITEMS.filter(i=>searching? (i.name+' '+i.grp).toLowerCase().includes(q) : i.cat===cat);
   const box=document.getElementById('catalog');
-  if(!list.length){box.innerHTML='<p class="empty">Нічого не знайшли. Спробуйте іншу назву.</p>';return}
+  const subBox=document.getElementById('subs');
+  if(!all.length){box.innerHTML='<p class="empty">Нічого не знайшли. Спробуйте іншу назву.</p>';subBox.innerHTML='';return}
+
+  const allGroups=[...new Set(all.map(i=>i.grp))];
+  if(!searching&&allGroups.length>1){
+    subBox.innerHTML=`<button class="sub" data-g="" aria-selected="${!sub}">Все</button>`+
+      allGroups.map(g=>`<button class="sub" data-g="${g}" aria-selected="${sub===g}">${g}</button>`).join('');
+  } else subBox.innerHTML='';
+
+  const list=(!searching&&sub)?all.filter(i=>i.grp===sub):all;
   const groups=[...new Set(list.map(i=>i.grp))];
   box.innerHTML=groups.map(g=>{
     const c=CATS.find(c=>c.id===list.find(i=>i.grp===g).cat);
@@ -383,14 +545,25 @@ function renderCatalog(){
         <div class="ph">${photoOf(i)?`<img src="${photoOf(i)}" alt="${i.name}" loading="lazy">`:ICON}${c.fry?'<span class="badge">сире</span>':(c.id==='ready'?'<span class="badge fire">готове</span>':'')}</div>
         <div class="c-b">
           <span class="nm">${i.name}</span>
-          <span class="un">${i.unit==='порція'?'порція':'за 100 г'}</span>
-          <div class="c-f"><span class="pr">${money(i.price)}</span>
-          <button class="add" data-i="${i.id}" aria-label="Додати ${i.name}">+</button></div>
+          <span class="pr-top">${money(i.price)}</span>
+          ${descOf(i)?`<span class="ds">${descOf(i)}</span>`:''}
+          <span class="un">${i.unit==='порція'?'порція':'за 100 г'}${c.fry?' · мариноване':''}</span>
+          <div class="c-f">
+            <button class="add" data-i="${i.id}" aria-label="Додати ${i.name}">+ Додати</button>
+          </div>
         </div>
       </article>`).join('')}</div></section>`;
   }).join('');
 }
-document.getElementById('cats').onclick=e=>{const b=e.target.closest('.cat');if(!b)return;cat=b.dataset.c;document.getElementById('q').value='';renderCats();renderCatalog()};
+function pickCat(id){cat=id;sub='';document.getElementById('q').value='';renderCats();renderCatalog()}
+document.getElementById('cats').onclick=e=>{const b=e.target.closest('.cat');if(b)pickCat(b.dataset.c)};
+document.getElementById('sideCats').onclick=e=>{const b=e.target.closest('.side-cat');if(b)pickCat(b.dataset.c)};
+document.getElementById('subs').onclick=e=>{const b=e.target.closest('.sub');if(!b)return;sub=b.dataset.g;renderCatalog()};
+document.querySelector('.mode-bar').onclick=e=>{
+  const b=e.target.closest('[data-gm]'); if(!b) return;
+  getMode=b.dataset.gm;
+  document.querySelectorAll('[data-gm]').forEach(x=>x.setAttribute('aria-pressed',x===b));
+};
 document.getElementById('q').oninput=renderCatalog;
 document.getElementById('catalog').onclick=e=>{const b=e.target.closest('.add');if(b)openItem(b.dataset.i)};
 document.getElementById('pts').innerHTML=SHOPS.map(s=>
@@ -407,7 +580,10 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
 document.getElementById('shopBtn').onclick=()=>{
   open(`<div class="grab"></div><div class="sh-h"><h3>Оберіть точку</h3><button class="x" onclick="close_()">✕</button></div>
   ${SHOPS.map((s,i)=>`<button class="pay" aria-pressed="${i===shop}" data-s="${i}"><span class="dot"></span>${s[0]}</button>`).join('')}`);
-  sIn.onclick=e=>{const b=e.target.closest('[data-s]');if(!b)return;shop=+b.dataset.s;document.getElementById('shopName').textContent=SHOPS[shop][0];close()};
+  sIn.onclick=e=>{const b=e.target.closest('[data-s]');if(!b)return;shop=+b.dataset.s;
+    document.getElementById('shopName').textContent=SHOPS[shop][0];
+    const ish=document.getElementById('infoShop'); if(ish) ish.textContent=SHOPS[shop][0];
+    close()};
 };
 
 /* ---------- item sheet ---------- */
@@ -510,7 +686,7 @@ function paintLines(){
 
 /* ---------- checkout ---------- */
 function openCheckout(){
-  let mode='pickup',fry=false,pay='online';
+  let mode=getMode,fry=false,pay=getMode==='delivery'?'cash':'online';
   const fg=fryGrams();
   const draw=()=>{
     const fryCost=fry?fg/1000*FRY_RATE:0, total=goodsTotal()+fryCost;
