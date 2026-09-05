@@ -28,7 +28,7 @@
   --ok:#7BA84F;
 }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0}
+html,body{margin:0;padding:0;overflow-x:hidden}
 body{
   background:var(--char);
   color:var(--bone);
@@ -60,9 +60,10 @@ a{color:inherit}
 .chev{color:var(--smoke);font-size:11px}
 
 /* hero */
-.hero{padding:30px 0 26px;border-bottom:1px solid var(--line);position:relative;isolation:isolate;
-  overflow:hidden}
-.hero .smk{position:absolute;inset:-1px 0 0;z-index:-3;overflow:hidden;pointer-events:none}
+.hero{padding:30px 0 26px;border-bottom:1px solid var(--line);position:relative;isolation:isolate}
+.hero .smk,.hero .mk-bg,.hero::after{
+  left:50%;right:auto;width:100vw;margin-left:-50vw}
+.hero .smk{position:absolute;top:-1px;bottom:0;z-index:-3;overflow:hidden;pointer-events:none}
 .hero .smk i{position:absolute;top:-8%;left:0;width:220%;height:116%;display:block;
   background:url('smoke-layer.jpg') left center/auto 100% repeat-x;
   will-change:transform}
@@ -78,11 +79,12 @@ a{color:inherit}
   50%{transform:scaleX(-1) translate3d(-18%,2%,0) scale(1.02)}
   100%{transform:scaleX(-1) translate3d(-40%,0,0) scale(1.06)}
 }
-.hero .mk-bg{position:absolute;z-index:-2;right:2%;top:50%;height:86%;aspect-ratio:1;
+.hero .mk-bg{position:absolute;z-index:-2;top:50%;height:86%;aspect-ratio:1;
   transform:translateY(-50%);background:url('logo-mark.png') center/contain no-repeat;
-  opacity:.34;pointer-events:none;animation:pulse 9s ease-in-out infinite}
+  opacity:.34;pointer-events:none;animation:pulse 9s ease-in-out infinite;
+  width:100vw;background-position:right 4vw center}
 @keyframes pulse{0%,100%{opacity:.3}50%{opacity:.42}}
-.hero::after{content:'';position:absolute;inset:-1px 0 0;z-index:-1;pointer-events:none;
+.hero::after{content:'';position:absolute;top:-1px;bottom:0;z-index:-1;pointer-events:none;
   background:
     linear-gradient(to right,var(--char) 4%,rgba(20,16,16,.78) 42%,rgba(20,16,16,.1) 100%),
     linear-gradient(to bottom,rgba(20,16,16,.3),transparent 36%,rgba(20,16,16,.92))}
