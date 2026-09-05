@@ -141,9 +141,13 @@ a{color:inherit}
   .tools{position:static;padding-top:14px}
   .cats{display:none}
   .side-cats{display:flex;flex-direction:column;gap:2px}
-  .side-cat{text-align:left;padding:9px 12px;border-radius:9px;font-size:14px;color:var(--smoke);transition:.14s}
+  .side-cat{position:relative;overflow:hidden;text-align:left;padding:10px 12px 10px 15px;
+    border-radius:9px;font-family:'Oswald',sans-serif;font-size:16px;font-weight:400;
+    letter-spacing:.02em;text-transform:uppercase;color:#C9C0B9;transition:.14s}
   .side-cat:hover{color:var(--bone);background:var(--coal)}
-  .side-cat[aria-selected=true]{background:var(--coal);color:var(--ember-hot);font-weight:500}
+  .side-cat[aria-selected=true]{background:rgba(196,52,42,.16);color:var(--bone);font-weight:500}
+  .side-cat[aria-selected=true]::before{content:'';position:absolute;left:0;top:7px;bottom:7px;
+    width:3px;border-radius:0 3px 3px 0;background:var(--ember-hot)}
   .info{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:15px}
   .info-row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
   .info-row:last-of-type{border:none}
