@@ -147,7 +147,8 @@ a{color:inherit}
   .info{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:15px}
   .info-row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
   .info-row:last-of-type{border:none}
-  .info-row .ic{font-size:15px;line-height:1.4;flex:0 0 auto}
+  .info-row .ic{width:19px;height:19px;flex:0 0 auto;color:var(--ember-hot);margin-top:2px}
+  .info-row .ic svg{width:100%;height:100%;display:block}
   .info-row small{display:block;font-size:11px;color:var(--smoke)}
   .info-row b{display:block;font-size:13px;font-weight:500;line-height:1.4}
   .ig-sm{margin-top:10px;width:100%;justify-content:center;padding:9px 12px;font-size:13px}
@@ -261,7 +262,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .mb-btn{border:1px solid var(--line-2);border-radius:11px;padding:11px 12px;text-align:left;
   line-height:1.3;transition:.14s;background:var(--coal)}
 .mb-btn[aria-pressed=true]{border-color:var(--ember);background:rgba(196,52,42,.12)}
-.mb-ic{display:block;font-size:16px;margin-bottom:3px}
+.mb-ic{display:block;width:20px;height:20px;margin-bottom:6px;color:var(--smoke)}
+.mb-ic svg{width:100%;height:100%;display:block}
+.mb-btn[aria-pressed=true] .mb-ic{color:var(--ember-hot)}
 .mb-t{display:block;font-size:14px;font-weight:500}
 .mb-s{display:block;font-size:11.5px;color:var(--smoke)}
 .mb-btn[aria-pressed=true] .mb-t{color:var(--ember-hot)}
@@ -349,12 +352,12 @@ body:has(.inst) .bar{bottom:66px}
 
   <div class="mode-bar">
     <button class="mb-btn" data-gm="pickup" aria-pressed="true">
-      <span class="mb-ic">🏪</span>
+      <span class="mb-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5V20h16V9.5"/><path d="M3 9.5 5 4h14l2 5.5a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M10 20v-5h4v5"/></svg></span>
       <span class="mb-t">Самовивіз</span>
       <span class="mb-s">з точки на вибір</span>
     </button>
     <button class="mb-btn" data-gm="delivery" aria-pressed="false">
-      <span class="mb-ic">🚚</span>
+      <span class="mb-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h10v9H3z"/><path d="M13 10h4l3 3.2V16h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg></span>
       <span class="mb-t">Доставка</span>
       <span class="mb-s">вартість уточнить оператор</span>
     </button>
@@ -383,15 +386,15 @@ body:has(.inst) .bar{bottom:66px}
       <div class="info">
         <p class="side-h">Інформація</p>
         <div class="info-row">
-          <span class="ic">📍</span>
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg></span>
           <div><small>Точка видачі</small><b id="infoShop">Пр-т Героїв Харкова 256</b></div>
         </div>
         <div class="info-row">
-          <span class="ic">🔥</span>
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s4.2 3.3 4.2 7.2c0 1.6-.9 2.7-2 2.7-1.4 0-1.9-1.2-1.7-2.6C10.6 12 9 13.9 9 16.1 9 19 10.9 21 12.6 21 15.6 21 18 18.4 18 15c0-5.2-6-12-6-12z"/><path d="M9.4 21C7.3 20.4 6 18.5 6 16.2c0-1.4.4-2.6 1.1-3.7"/></svg></span>
           <div><small>Смаження</small><b>50 ₴ за кг сирого мʼяса</b></div>
         </div>
         <div class="info-row">
-          <span class="ic">🚚</span>
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h10v9H3z"/><path d="M13 10h4l3 3.2V16h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg></span>
           <div><small>Отримання</small><b>Самовивіз і доставка</b></div>
         </div>
         <a class="ig ig-sm" href="https://instagram.com/meat.baron_" target="_blank" rel="noopener">
