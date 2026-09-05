@@ -248,6 +248,18 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
   font-size:12.5px;color:var(--smoke);white-space:nowrap;transition:.14s;background:var(--coal)}
 .sub[aria-selected=true]{background:rgba(196,52,42,.14);border-color:var(--ember);color:var(--ember-hot)}
 
+/* перегляд фото */
+.lb{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:20px;
+  background:rgba(8,6,6,.92);opacity:0;pointer-events:none;transition:opacity .26s}
+.lb.on{opacity:1;pointer-events:auto}
+.lb img{max-width:min(90vw,520px);max-height:82vh;width:auto;border-radius:14px;display:block;
+  will-change:transform}
+.lb-x{position:absolute;top:calc(14px + env(safe-area-inset-top));right:16px;width:36px;height:36px;
+  border-radius:50%;background:rgba(240,233,222,.14);color:var(--bone);display:grid;place-items:center;font-size:16px}
+.ph{cursor:zoom-in;padding:0;border:none;font:inherit;color:inherit}
+.ph:disabled{cursor:default}
+.ph .badge{pointer-events:none}
+
 :focus-visible{outline:2px solid var(--ember-hot);outline-offset:2px}
 .up-scroll{max-height:52vh;overflow-y:auto;margin:0 -4px 14px;padding:0 4px;
   display:grid;gap:8px;align-content:start;
@@ -372,6 +384,11 @@ body:has(.inst) .bar{bottom:66px}
     <span id="barL">Кошик</span>
     <span id="barR">0 ₴</span>
   </button>
+</div>
+
+<div class="lb" id="lb" role="dialog" aria-label="Фото товару">
+  <img alt="">
+  <button class="lb-x" aria-label="Закрити">✕</button>
 </div>
 
 <div class="veil" id="veil"></div>
@@ -542,7 +559,7 @@ function renderCatalog(){
     return `<section class="grp"><div class="grp-h"><h2>${g}</h2><em>${c.u}</em></div>
     <div class="grid">${list.filter(i=>i.grp===g).map(i=>`
       <article class="card">
-        <div class="ph">${photoOf(i)?`<img src="${photoOf(i)}" alt="${i.name}" loading="lazy">`:ICON}${c.fry?'<span class="badge">сире</span>':(c.id==='ready'?'<span class="badge fire">готове</span>':'')}</div>
+        <button class="ph" ${photoOf(i)?`data-ph="${photoOf(i)}" aria-label="Показати фото: ${i.name}"`:'disabled'}>${photoOf(i)?`<img src="${photoOf(i)}" alt="${i.name}" loading="lazy">`:ICON}</button>
         <div class="c-b">
           <span class="nm">${i.name}</span>
           <span class="pr-top">${money(i.price)}</span>
@@ -565,7 +582,35 @@ document.querySelector('.mode-bar').onclick=e=>{
   document.querySelectorAll('[data-gm]').forEach(x=>x.setAttribute('aria-pressed',x===b));
 };
 document.getElementById('q').oninput=renderCatalog;
-document.getElementById('catalog').onclick=e=>{const b=e.target.closest('.add');if(b)openItem(b.dataset.i)};
+document.getElementById('catalog').onclick=e=>{
+  const b=e.target.closest('.add'); if(b){openItem(b.dataset.i);return}
+  const p=e.target.closest('[data-ph]'); if(p) openPhoto(p);
+};
+
+/* ---------- перегляд фото ---------- */
+function openPhoto(node){
+  const v=document.getElementById('lb');
+  const im=v.querySelector('img');
+  const r=node.getBoundingClientRect();
+  const target=Math.min(innerWidth*.9,520);
+  im.src=node.dataset.ph;
+  im.alt=node.getAttribute('aria-label')||'';
+  im.style.transition='none';
+  im.style.transform=`translate(${r.left+r.width/2-innerWidth/2}px,${r.top+r.height/2-innerHeight/2}px) scale(${r.width/target})`;
+  v.classList.add('on');
+  document.body.style.overflow='hidden';
+  requestAnimationFrame(()=>{
+    im.style.transition='transform .34s cubic-bezier(.22,.9,.3,1)';
+    im.style.transform='none';
+  });
+}
+function closePhoto(){
+  const v=document.getElementById('lb');
+  v.classList.remove('on');
+  document.body.style.overflow='';
+}
+document.getElementById('lb').onclick=closePhoto;
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closePhoto()});
 document.getElementById('pts').innerHTML=SHOPS.map(s=>
   `<div class="pt"><b>${s[0]}</b>${s[1]?`<a href="tel:${s[1]}">${s[1].replace('+38','')}</a>`:'<a>—</a>'}</div>`).join('');
 
