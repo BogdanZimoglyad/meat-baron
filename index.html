@@ -248,17 +248,25 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
   font-size:12.5px;color:var(--smoke);white-space:nowrap;transition:.14s;background:var(--coal)}
 .sub[aria-selected=true]{background:rgba(196,52,42,.14);border-color:var(--ember);color:var(--ember-hot)}
 
-/* перегляд фото */
-.lb{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:20px;
-  background:rgba(8,6,6,.92);opacity:0;pointer-events:none;transition:opacity .26s}
+/* картка товару */
+.lb{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:18px;
+  background:rgba(8,6,6,.9);opacity:0;pointer-events:none;transition:opacity .26s}
 .lb.on{opacity:1;pointer-events:auto}
-.lb img{max-width:min(90vw,520px);max-height:82vh;width:auto;border-radius:14px;display:block;
-  will-change:transform}
-.lb-x{position:absolute;top:calc(14px + env(safe-area-inset-top));right:16px;width:36px;height:36px;
-  border-radius:50%;background:rgba(240,233,222,.14);color:var(--bone);display:grid;place-items:center;font-size:16px}
+.lb-card{width:min(92vw,430px);max-height:88vh;overflow-y:auto;background:var(--coal);
+  border:1px solid var(--line-2);border-radius:16px;will-change:transform;transform-origin:center}
+.lb-card::-webkit-scrollbar{width:0}
+.lb-ph{position:relative;background:var(--coal-2)}
+.lb-ph img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+.lb-x{position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;
+  background:var(--ember);color:#fff;display:grid;place-items:center;font-size:15px;
+  box-shadow:0 4px 14px rgba(0,0,0,.4)}
+.lb-b{padding:16px 16px 18px}
+.lb-b h3{font-size:21px;line-height:1.15;text-transform:uppercase}
+.lb-pr{margin:6px 0 0;font-family:'Oswald';font-size:20px;font-weight:500;color:var(--ember-hot)}
+.lb-ds{margin:8px 0 0;font-size:13.5px;color:var(--smoke);line-height:1.55}
+.lb-add{margin-top:16px}
 .ph{cursor:zoom-in;padding:0;border:none;font:inherit;color:inherit}
 .ph:disabled{cursor:default}
-.ph .badge{pointer-events:none}
 
 :focus-visible{outline:2px solid var(--ember-hot);outline-offset:2px}
 .up-scroll{max-height:52vh;overflow-y:auto;margin:0 -4px 14px;padding:0 4px;
@@ -386,9 +394,8 @@ body:has(.inst) .bar{bottom:66px}
   </button>
 </div>
 
-<div class="lb" id="lb" role="dialog" aria-label="Фото товару">
-  <img alt="">
-  <button class="lb-x" aria-label="Закрити">✕</button>
+<div class="lb" id="lb" role="dialog" aria-label="Товар">
+  <div class="lb-card"></div>
 </div>
 
 <div class="veil" id="veil"></div>
@@ -559,7 +566,7 @@ function renderCatalog(){
     return `<section class="grp"><div class="grp-h"><h2>${g}</h2><em>${c.u}</em></div>
     <div class="grid">${list.filter(i=>i.grp===g).map(i=>`
       <article class="card">
-        <button class="ph" ${photoOf(i)?`data-ph="${photoOf(i)}" aria-label="Показати фото: ${i.name}"`:'disabled'}>${photoOf(i)?`<img src="${photoOf(i)}" alt="${i.name}" loading="lazy">`:ICON}</button>
+        <button class="ph" ${photoOf(i)?`data-ph="${photoOf(i)}" data-id="${i.id}" aria-label="Показати ${i.name}"`:'disabled'}>${photoOf(i)?`<img src="${photoOf(i)}" alt="${i.name}" loading="lazy">`:ICON}</button>
         <div class="c-b">
           <span class="nm">${i.name}</span>
           <span class="pr-top">${money(i.price)}</span>
@@ -587,29 +594,44 @@ document.getElementById('catalog').onclick=e=>{
   const p=e.target.closest('[data-ph]'); if(p) openPhoto(p);
 };
 
-/* ---------- перегляд фото ---------- */
+/* ---------- картка товару з фото ---------- */
 function openPhoto(node){
+  const it=ITEMS.find(i=>i.id===node.dataset.id);
+  if(!it) return;
+  const c=CATS.find(c=>c.id===it.cat);
   const v=document.getElementById('lb');
-  const im=v.querySelector('img');
+  const card=v.querySelector('.lb-card');
+  card.innerHTML=`
+    <div class="lb-ph">
+      <img src="${photoOf(it)}" alt="${it.name}">
+      <button class="lb-x" aria-label="Закрити">✕</button>
+    </div>
+    <div class="lb-b">
+      <h3>${it.name}</h3>
+      <p class="lb-pr">${money(it.price)}${it.unit==='порція'?'':' / 100 г'}</p>
+      ${descOf(it)?`<p class="lb-ds">${descOf(it)}</p>`:''}
+      <button class="cta lb-add" data-add="${it.id}">Додати в кошик</button>
+    </div>`;
   const r=node.getBoundingClientRect();
-  const target=Math.min(innerWidth*.9,520);
-  im.src=node.dataset.ph;
-  im.alt=node.getAttribute('aria-label')||'';
-  im.style.transition='none';
-  im.style.transform=`translate(${r.left+r.width/2-innerWidth/2}px,${r.top+r.height/2-innerHeight/2}px) scale(${r.width/target})`;
+  card.style.transition='none';
+  card.style.opacity='0';
+  card.style.transform=`translate(${r.left+r.width/2-innerWidth/2}px,${r.top+r.height/2-innerHeight/2}px) scale(.34)`;
   v.classList.add('on');
   document.body.style.overflow='hidden';
   requestAnimationFrame(()=>{
-    im.style.transition='transform .34s cubic-bezier(.22,.9,.3,1)';
-    im.style.transform='none';
+    card.style.transition='transform .36s cubic-bezier(.22,.9,.3,1),opacity .22s';
+    card.style.opacity='1';
+    card.style.transform='none';
   });
+  card.querySelector('.lb-x').onclick=closePhoto;
+  card.querySelector('.lb-add').onclick=()=>{closePhoto();openItem(it.id)};
 }
 function closePhoto(){
   const v=document.getElementById('lb');
   v.classList.remove('on');
   document.body.style.overflow='';
 }
-document.getElementById('lb').onclick=closePhoto;
+document.getElementById('lb').onclick=e=>{if(e.target.id==='lb')closePhoto()};
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePhoto()});
 document.getElementById('pts').innerHTML=SHOPS.map(s=>
   `<div class="pt"><b>${s[0]}</b>${s[1]?`<a href="tel:${s[1]}">${s[1].replace('+38','')}</a>`:'<a>—</a>'}</div>`).join('');
