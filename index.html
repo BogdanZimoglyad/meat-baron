@@ -718,20 +718,13 @@ document.getElementById('pts').innerHTML=SHOPS.map(s=>
 
 /* ---------- sheet ---------- */
 const veil=document.getElementById('veil'),sheet=document.getElementById('sheet'),sIn=document.getElementById('sheetIn');
-let locks=0;
-function lockScroll(){
-  if(locks++) return;
-  document.documentElement.style.overflow='hidden';
-  document.body.style.overflow='hidden';
-  document.body.style.overscrollBehavior='none';
+function syncScrollLock(){
+  const anyOpen=sheet.classList.contains('on')||document.getElementById('lb').classList.contains('on');
+  document.documentElement.style.overflow=anyOpen?'hidden':'';
+  document.body.style.overflow=anyOpen?'hidden':'';
+  document.body.style.overscrollBehavior=anyOpen?'none':'';
 }
-function unlockScroll(){
-  if(--locks>0) return;
-  if(locks<0) locks=0;
-  document.documentElement.style.overflow='';
-  document.body.style.overflow='';
-  document.body.style.overscrollBehavior='';
-}
+const lockScroll=syncScrollLock, unlockScroll=syncScrollLock;
 function open(html){sIn.innerHTML=html;veil.classList.add('on');sheet.classList.add('on');lockScroll()}
 function close(){veil.classList.remove('on');sheet.classList.remove('on');unlockScroll()}
 veil.onclick=close;
@@ -1027,7 +1020,7 @@ function openStatus(){
 const _close=close; close=()=>{clearInterval(poll);_close()};
 window.close_=close;
 
-renderCats();renderCatalog();
+renderCats();renderCatalog();syncScrollLock();
 
 /* ---------- PWA ---------- */
 if('serviceWorker' in navigator){
