@@ -344,6 +344,18 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .ps-t b{display:block;font-weight:500;font-size:14px}
 .ps-a{flex:0 0 auto;font-size:12.5px;color:var(--ember-hot)}
 
+/* заглушка замість фото */
+.ph-ph{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden;
+  background:
+    radial-gradient(120% 100% at 30% 15%,rgba(196,52,42,.22),transparent 62%),
+    radial-gradient(100% 90% at 78% 85%,rgba(154,144,138,.16),transparent 60%),
+    var(--coal-2)}
+.ph-ph::before{content:'';position:absolute;inset:-20%;
+  background:url('smoke-bg.jpg') center/cover no-repeat;opacity:.3;mix-blend-mode:screen}
+.ph-g{position:relative;color:var(--ember-hot);opacity:.68;max-width:56%;max-height:56%}
+.hero-img .ph-ph,.up-ph .ph-ph,.ln-th .ph-ph{position:absolute}
+.hero-img,.up-ph,.ln-th{position:relative}
+
 :focus-visible{outline:2px solid var(--ember-hot);outline-offset:2px}
 .up-scroll{max-height:52vh;overflow-y:auto;margin:0 -4px 14px;padding:0 4px;
   display:grid;gap:8px;align-content:start;
@@ -621,6 +633,47 @@ const API=''; // '' = той самий домен. Для локального 
 let poll=null;
 const money=n=>n.toFixed(2).replace('.00','')+' ₴';
 const wLabel=g=>g>=1000?(g/1000).toFixed(g%1000?1:0)+' кг':g+' г';
+/* заглушки: іконка за типом продукту + дим і силует бика */
+const GLYPH={
+  meat:'<path d="M17.5 6.5c2 2 2 5.5-.5 8s-6 2.5-8 .5-2-5.5.5-8 6-2.5 8-.5z"/><path d="M9.5 15c-1-1-1-2.8.3-4S13 9.6 14 10.6"/><circle cx="18.6" cy="5.4" r="2.1"/>',
+  rib:'<path d="M4 7c4-1.6 10-1.6 15 .6"/><path d="M4 11c4-1.6 10-1.6 15 .6"/><path d="M4 15c4-1.6 10-1.6 15 .6"/><path d="M4 6v10"/>',
+  sausage:'<path d="M6.6 17.4c-2-2-2-5.6.6-8.2s6.2-2.6 8.2-.6 2 5.6-.6 8.2-6.2 2.6-8.2.6z"/><path d="M9 15.2c1.4 1.4 4 1 5.8-.8s2.2-4.4.8-5.8"/>',
+  chicken:'<path d="M13.5 4a5 5 0 0 1 4.3 7.6L9.4 20 6 16.6l8.4-8.4A5 5 0 0 1 13.5 4z"/><path d="M6 16.6 4 20l3.4-.6"/>',
+  steak:'<path d="M5 9.5C5 6.5 8 5 12 5s7 1.5 7 4.5c0 3.4-2.4 9.5-7 9.5S5 12.9 5 9.5z"/><path d="M9.5 10.5c1-1.4 3.5-1.4 4.6 0"/>',
+  fish:'<path d="M3 12c3-4 7-6 11-6s7 2 7 6-3 6-7 6-8-2-11-6z"/><circle cx="16.5" cy="10.5" r="1"/>',
+  potato:'<path d="M6.5 8.5C8 6 12 5 15 6.5s4.5 5 3 8-6 4-9 2.5-4-5.5-2.5-8.5z"/><circle cx="10" cy="11" r="1"/><circle cx="13.5" cy="14" r="1"/>',
+  cheese:'<path d="M4 11 13 5.5 20 9v7H4z"/><circle cx="9" cy="12.5" r="1.1"/><circle cx="15" cy="13.5" r="1.1"/>',
+  bread:'<path d="M4 13c0-3 3.6-5.5 8-5.5s8 2.5 8 5.5v3.5H4z"/><path d="M8.5 8.6C9 6.6 10.4 5.5 12 5.5s3 1.1 3.5 3.1"/>',
+  sauce:'<path d="M10 4h4v2.4l2.2 2.6c.5.6.8 1.4.8 2.2V19a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-7.8c0-.8.3-1.6.8-2.2L10 6.4z"/><path d="M8 13h8"/>',
+  corn:'<path d="M12 4c2.6 0 4.5 2.6 4.5 6.5S14.6 20 12 20s-4.5-5.6-4.5-9.5S9.4 4 12 4z"/><path d="M12 5.5v13"/><path d="M9.4 8h5.2M9.2 11h5.6M9.4 14h5.2"/>',
+  mushroom:'<path d="M4.5 11.5a7.5 7.5 0 0 1 15 0z"/><path d="M10 11.5v5.8a1.7 1.7 0 0 0 3.4 0v-5.8"/>',
+  fries:'<path d="M7.5 10 6 20h12l-1.5-10z"/><path d="M9 10 8.4 5M12 10V4.4M15 10l.6-5"/>',
+  set:'<path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/>'
+};
+function glyphOf(it){
+  const n=(it.grp+' '+it.name).toLowerCase();
+  if(/фрі|крокет|хеш|кільц|палички|батат/.test(n)) return 'fries';
+  if(/сет/.test(n)) return 'set';
+  if(/матнакаш|лаваш/.test(n)) return 'bread';
+  if(/соус/.test(n)) return 'sauce';
+  if(/сир|сулугун|халум/.test(n)) return 'cheese';
+  if(/кукурудз/.test(n)) return 'corn';
+  if(/гриб|печериц/.test(n)) return 'mushroom';
+  if(/картопл/.test(n)) return 'potato';
+  if(/ковбас|чевапчічі|люля|косичка/.test(n)) return 'sausage';
+  if(/ребр|реберц/.test(n)) return 'rib';
+  if(/стейк|бріскет|вирізк|міньйон|рібай|нью/.test(n)) return 'steak';
+  if(/курк|куряч|гомілк|крил|філе|індич|індик|качк/.test(n)) return 'chicken';
+  return 'meat';
+}
+function ph(it,big){
+  const g=GLYPH[glyphOf(it)];
+  const s=big?96:64;
+  return `<span class="ph-ph">
+    <svg class="ph-g" viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor"
+      stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${g}</svg>
+  </span>`;
+}
 const ICON='<svg viewBox="0 0 24 24" fill="none" stroke="#F0E9DE" stroke-width="1.4"><path d="M4 15c0-4 3.5-8 8-8s8 4 8 8-3.5 4-8 4-8 0-8-4z"/><circle cx="9" cy="13" r="1.2"/></svg>';
 
 let cat='raw', sub='', cart=[], shop=0, order=null, getMode='pickup';
@@ -655,7 +708,7 @@ function renderCatalog(){
     return `<section class="grp"><div class="grp-h"><h2>${g}</h2><em>${c.u}</em></div>
     <div class="grid">${list.filter(i=>i.grp===g).map(i=>`
       <article class="card">
-        <button class="ph" ${photoOf(i)?`data-ph="${photoOf(i)}" data-id="${i.id}" aria-label="Показати ${i.name}"`:'disabled'}>${photoOf(i)?`<img src="${photoOf(i)}" alt="${i.name}" loading="lazy">`:ICON}</button>
+        <button class="ph" ${photoOf(i)?`data-ph="${photoOf(i)}" data-id="${i.id}" aria-label="Показати ${i.name}"`:'disabled'}>${photoOf(i)?`<img src="${photoOf(i)}" alt="${i.name}" loading="lazy">`:ph(i)}</button>
         <div class="c-b">
           <span class="nm">${i.name}</span>
           <span class="pr-top">${money(i.price)}</span>
@@ -802,7 +855,7 @@ function openItem(id){
   if(isCount(it)){addToCart(it,1); maybeUpsell(it); return}
   let g=Math.max(1000,it.minG);
   open(`<div class="grab-zone"><div class="grab"></div></div>
-  <div class="hero-img">${photoOf(it)?`<img src="${photoOf(it)}" alt="${it.name}">`:ICON}</div>
+  <div class="hero-img">${photoOf(it)?`<img src="${photoOf(it)}" alt="${it.name}">`:ph(it,1)}</div>
   <div class="sh-h"><h3>${it.name}</h3><button class="x" onclick="close_()">✕</button></div>
   <p class="hint" style="margin-top:-6px">${it.cat==='ready'?'Готовий продукт. Ціна за 100 г.':(it.cat==='extra'?'Ціна за 100 г — '+money(it.price)+'.':'Мариноване мʼясо. Ціна за 100 г — '+money(it.price)+'.')}</p>
   <span class="lbl">Оберіть вагу</span>
@@ -842,7 +895,7 @@ function maybeUpsell(it){
     <p class="up-grp">${g}</p>
     ${pool.filter(i=>i.grp===g).map(i=>`
     <button class="up" data-u="${i.id}">
-      <div class="up-ph">${photoOf(i)?`<img src="${photoOf(i)}" alt="" loading="lazy">`:ICON}</div>
+      <div class="up-ph">${photoOf(i)?`<img src="${photoOf(i)}" alt="" loading="lazy">`:ph(i)}</div>
       <div class="up-b"><span class="nm">${i.name}</span>
       <span class="pr">${money(i.price)}${i.unit==='шт'?' / шт':' / 100 г'}${i.unit==='пак'?' · упак. 1 кг':''}</span></div>
       <span class="up-add">+</span>
@@ -904,7 +957,7 @@ function openCart(){
 function paintLines(){
   const el=sIn.querySelector('#lines');if(!el)return;
   el.innerHTML=cart.map((l,i)=>`<div class="ln">
-    <div class="ln-th">${photoOf(l)?`<img src="${photoOf(l)}" alt="">`:ICON}</div>
+    <div class="ln-th">${photoOf(l)?`<img src="${photoOf(l)}" alt="">`:ph(l)}</div>
     <div class="ln-b"><div class="nm">${l.name}</div><div class="un">${lineQty(l)}</div></div>
     <div class="ln-r">
       <div class="qty"><button class="qbtn" data-m="${i}" aria-label="Менше">−</button><button class="qbtn" data-p="${i}" aria-label="Більше">+</button></div>
