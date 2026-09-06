@@ -242,6 +242,11 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 
 /* cart lines */
 .ln{display:flex;gap:11px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)}
+.ln-r{display:flex;align-items:center;gap:10px;margin-left:auto}
+.ln-x{width:28px;height:28px;border-radius:50%;flex:0 0 auto;color:var(--smoke);
+  display:grid;place-items:center;transition:.14s}
+.ln-x svg{width:15px;height:15px}
+.ln-x:hover{color:var(--ember-hot);background:rgba(196,52,42,.12)}
 .ln-th{width:44px;height:44px;border-radius:8px;background:var(--coal-2);flex:0 0 auto;display:grid;place-items:center;overflow:hidden}
 .ln-th img{width:100%;height:100%;object-fit:cover;display:block}
 .ln-th svg{width:20px;height:20px;opacity:.3}
@@ -250,7 +255,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .ln-b .un{font-size:11.5px;color:var(--smoke)}
 .qty{display:flex;align-items:center;gap:9px}
 .qbtn{width:26px;height:26px;border-radius:50%;border:1px solid var(--line-2);color:var(--smoke);display:grid;place-items:center;font-size:15px;line-height:1}
-.ln-p{font-family:'Oswald';font-size:15px;min-width:64px;text-align:right}
+.ln-p{font-family:'Oswald';font-size:15px;min-width:58px;text-align:right}
 
 /* checkout */
 .seg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px}
@@ -876,12 +881,20 @@ function paintLines(){
   el.innerHTML=cart.map((l,i)=>`<div class="ln">
     <div class="ln-th">${photoOf(l)?`<img src="${photoOf(l)}" alt="">`:ICON}</div>
     <div class="ln-b"><div class="nm">${l.name}</div><div class="un">${l.unit==='порція'?l.g+' × порція':wLabel(l.g)}</div></div>
-    <div class="qty"><button class="qbtn" data-m="${i}">−</button><button class="qbtn" data-p="${i}">+</button></div>
-    <div class="ln-p">${money(lineSum(l))}</div></div>`).join('');
+    <div class="ln-r">
+      <div class="qty"><button class="qbtn" data-m="${i}" aria-label="Менше">−</button><button class="qbtn" data-p="${i}" aria-label="Більше">+</button></div>
+      <div class="ln-p">${money(lineSum(l))}</div>
+    </div>
+    <button class="ln-x" data-x="${i}" aria-label="Прибрати ${l.name}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button></div>`).join('');
   el.onclick=e=>{
+    const x=e.target.closest('[data-x]');
     const m=e.target.closest('[data-m]'),p=e.target.closest('[data-p]');
-    if(m){const i=+m.dataset.m,l=cart[i];l.g-=l.unit==='порція'?1:100;if(l.g<(l.unit==='порція'?1:MIN_G))cart.splice(i,1)}
-    if(p){const l=cart[+p.dataset.p];l.g+=l.unit==='порція'?1:100}
+    if(x){cart.splice(+x.dataset.x,1)}
+    else if(m){const i=+m.dataset.m,l=cart[i];l.g-=l.unit==='порція'?1:100;if(l.g<(l.unit==='порція'?1:MIN_G))cart.splice(i,1)}
+    else if(p){const l=cart[+p.dataset.p];l.g+=l.unit==='порція'?1:100}
+    else return;
     paintBar(); cart.length?openCart():close();
   };
 }
