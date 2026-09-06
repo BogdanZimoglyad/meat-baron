@@ -392,6 +392,19 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .cart-hint{margin:8px 0 0;font-size:12px;color:var(--smoke);line-height:1.5}
 .cart-note{resize:none;line-height:1.5;font-size:16px}
 
+/* вибір дати й часу */
+.days{display:flex;gap:7px;overflow-x:auto;padding:0 0 12px;scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.days::-webkit-scrollbar{display:none}
+.day{flex:0 0 auto;border:1px solid var(--line-2);border-radius:999px;padding:8px 14px;
+  font-size:13px;color:var(--smoke);white-space:nowrap;transition:.14s;background:var(--coal)}
+.day[aria-pressed=true]{background:var(--ember);border-color:var(--ember);color:#fff;font-weight:500}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px;margin-bottom:4px}
+.slot{border:1px solid var(--line-2);border-radius:10px;padding:11px 6px;font-size:13.5px;
+  color:var(--smoke);transition:.14s;background:var(--coal)}
+.slot[aria-pressed=true]{background:rgba(196,52,42,.14);border-color:var(--ember);color:var(--ember-hot);font-weight:500}
+.asap{margin-bottom:2px}
+
 :focus-visible{outline:2px solid var(--ember-hot);outline-offset:2px}
 .up-scroll{max-height:52vh;max-height:52dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;margin:0 -4px 14px;padding:0 4px;
   display:grid;gap:8px;align-content:start;
@@ -492,6 +505,10 @@ body:has(.inst) .bar{bottom:66px}
           <div><small>Смаження</small><b>50 ₴ за кг сирого мʼяса</b></div>
         </div>
         <div class="info-row">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/></svg></span>
+          <div><small>Графік</small><b>Щодня 8:00–20:00<br><span style="font-weight:400;color:var(--smoke)">мангал з 10:00</span></b></div>
+        </div>
+        <div class="info-row">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h10v9H3z"/><path d="M13 10h4l3 3.2V16h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg></span>
           <div><small>Отримання</small><b>Самовивіз і доставка</b></div>
         </div>
@@ -575,6 +592,12 @@ const P=[
  ['extra','Хліб і соуси','Матнакаш',35,1],['extra','Хліб і соуси','Лаваш тонкий',35,1],['extra','Хліб і соуси','Соуси в асортименті',35,1]
 ];
 const FRY_RATE=50, MIN_G=200;
+/* графік і час видачі */
+const SHOP_OPEN=8, SHOP_CLOSE=20;      // магазин працює 8:00–20:00
+const GRILL_FROM=10;                    // мангал з 10:00
+const LEAD_PICKUP=60, LEAD_DELIVERY=90; // хвилин на підготовку
+const SLOT_STEP=60;                     // крок слота — 1 година
+const DAYS_AHEAD=7;
 /* рядок: [категорія, група, назва, ціна, одиниця?, мін.вага?]
    одиниця: undefined — вага (ціна за 100 г); 'шт' — фікс. ціна за штуку;
             'пак' — упаковка 1 кг, ціна вказана за 100 г */
@@ -1143,6 +1166,85 @@ function bindPhone(el){
   el.addEventListener('focus',()=>{if(!el.value)el.value='+380 '});
 }
 
+/* ---------- дата і час видачі ---------- */
+const DAY_NAMES=['Нд','Пн','Вт','Ср','Чт','Пт','Сб'];
+const MON=['січня','лютого','березня','квітня','травня','червня',
+           'липня','серпня','вересня','жовтня','листопада','грудня'];
+let pickWhen=null;            // null = «якнайшвидше»
+
+function dayKey(d){return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()}
+function dayLabel(d){
+  const t=new Date(), tm=new Date(); tm.setDate(t.getDate()+1);
+  if(dayKey(d)===dayKey(t)) return 'Сьогодні';
+  if(dayKey(d)===dayKey(tm)) return 'Завтра';
+  return DAY_NAMES[d.getDay()]+', '+d.getDate()+' '+MON[d.getMonth()];
+}
+/* найраніший можливий час з урахуванням підготовки */
+function earliest(mode){
+  const lead=mode==='delivery'?LEAD_DELIVERY:LEAD_PICKUP;
+  const t=new Date(Date.now()+lead*60000);
+  t.setMinutes(t.getMinutes()>0?60:0,0,0);   // округлюємо вгору до години
+  return t;
+}
+/* слоти на конкретний день */
+function slotsFor(d,mode){
+  const out=[], e=earliest(mode);
+  const sameDay=dayKey(d)===dayKey(new Date());
+  let h=Math.max(GRILL_FROM, sameDay? e.getHours():GRILL_FROM);
+  for(; h<SHOP_CLOSE; h+=SLOT_STEP/60){
+    const from=new Date(d); from.setHours(h,0,0,0);
+    if(sameDay && from<e) continue;
+    const to=Math.min(h+1,SHOP_CLOSE);
+    out.push({h,label:String(h).padStart(2,'0')+':00–'+String(to).padStart(2,'0')+':00'});
+  }
+  return out;
+}
+function whenLabel(mode){
+  if(!pickWhen) return 'Якнайшвидше · орієнтовно з '+
+    String(earliest(mode).getHours()).padStart(2,'0')+':00';
+  const d=new Date(pickWhen.day);
+  return dayLabel(d)+' · '+pickWhen.label;
+}
+/* якщо обраний слот став неможливим (змінили спосіб отримання) — скидаємо */
+function validateWhen(mode){
+  if(!pickWhen) return;
+  const d=new Date(pickWhen.day);
+  const ok=slotsFor(d,mode).some(s=>s.h===pickWhen.h);
+  if(!ok) pickWhen=null;
+}
+function pickTimeSheet(mode,back){
+  const days=[];
+  for(let i=0;i<DAYS_AHEAD;i++){
+    const d=new Date(); d.setDate(d.getDate()+i); d.setHours(0,0,0,0);
+    if(slotsFor(d,mode).length) days.push(d);
+  }
+  let sel=pickWhen? days.findIndex(d=>dayKey(d)===dayKey(new Date(pickWhen.day))) : 0;
+  if(sel<0) sel=0;
+  const draw=()=>{
+    const d=days[sel], list=slotsFor(d,mode);
+    sIn.innerHTML=`<div class="grab-zone"><div class="grab"></div></div>
+    <div class="sh-h"><h3>Коли забрати</h3><button class="x" onclick="close_()">✕</button></div>
+    <button class="pay asap" data-asap="1" aria-pressed="${!pickWhen}">
+      <span class="dot"></span>Якнайшвидше — орієнтовно з ${String(earliest(mode).getHours()).padStart(2,'0')}:00</button>
+    <span class="lbl">Або оберіть день і час</span>
+    <div class="days">${days.map((x,i)=>`<button class="day" data-d="${i}" aria-pressed="${i===sel}">${dayLabel(x)}</button>`).join('')}</div>
+    <div class="slots">${list.map(s=>{
+      const on=pickWhen&&pickWhen.h===s.h&&dayKey(new Date(pickWhen.day))===dayKey(d);
+      return `<button class="slot" data-h="${s.h}" aria-pressed="${!!on}">${s.label}</button>`}).join('')}</div>
+    <p class="hint">Готуємо ${mode==='delivery'?'і доставляємо ':''}від ${Math.round((mode==='delivery'?LEAD_DELIVERY:LEAD_PICKUP)/60*10)/10} год. Мангал працює з ${GRILL_FROM}:00 до ${SHOP_CLOSE}:00.</p>
+    <button class="cta" id="whenOk">Готово</button>`;
+    sIn.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{sel=+b.dataset.d;draw()});
+    sIn.querySelector('[data-asap]').onclick=()=>{pickWhen=null;draw()};
+    sIn.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>{
+      const h=+b.dataset.h, sl=list.find(x=>x.h===h);
+      pickWhen={day:days[sel].getTime(),h,label:sl.label};
+      draw();
+    });
+    sIn.querySelector('#whenOk').onclick=()=>{ back? back() : close() };
+  };
+  open('');draw();
+}
+
 function openCheckout(){
   let mode=getMode,fry=false,pay=getMode==='delivery'?'cash':'online';
   const fg=fryGrams();
@@ -1163,6 +1265,11 @@ function openCheckout(){
              <b style="font-weight:500">${SHOPS[shop][0]}</b></div>`)
       : `<input class="fld" id="addr" placeholder="Вулиця, будинок, квартира">
          <p class="hint">Вартість доставки уточнить оператор по телефону — служба доставки партнерська.</p>`}
+
+    <button class="box pick-shop" id="pickWhen">
+      <span class="ps-t"><small>Час отримання</small><b>${whenLabel(mode)}</b></span>
+      <span class="ps-a">Обрати</span>
+    </button>
 
     ${fg>=MIN_G?`<div class="box">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
@@ -1186,6 +1293,7 @@ function openCheckout(){
     <div class="box" style="margin-top:16px">
       <div class="sum"><span>Товари</span><span>${money(goodsTotal())}</span></div>
       ${fry?`<div class="sum"><span>Смаження · ${wLabel(fg)}</span><span>${money(fryCost)}</span></div>`:''}
+      <div class="sum"><span>Час</span><span>${whenLabel(mode)}</span></div>
       ${mode==='delivery'?`<div class="sum"><span>Доставка</span><span>уточнить оператор</span></div>`:''}
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:10px;border-top:1px solid var(--line)">
         <span style="font-size:13px">Разом</span><b style="font-family:Oswald;font-size:23px">${money(total)}</b></div>
@@ -1195,9 +1303,11 @@ function openCheckout(){
 
     const ps=sIn.querySelector('#pickShop');
     if(ps) ps.onclick=()=>pickShopSheet(draw);
+    const pw=sIn.querySelector('#pickWhen');
+    if(pw) pw.onclick=()=>pickTimeSheet(mode,draw);
     bindPhone(sIn.querySelector('#tel'));
     sIn.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
-      mode=b.dataset.mode; if(mode==='delivery'&&pay==='online')pay='cash'; draw()});
+      mode=b.dataset.mode; if(mode==='delivery'&&pay==='online')pay='cash'; validateWhen(mode); draw()});
     sIn.querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>{pay=b.dataset.pay;draw()});
     const sw=sIn.querySelector('#sw'); if(sw) sw.onclick=()=>{fry=!fry;draw()};
     sIn.querySelector('#send').onclick=async ()=>{
@@ -1211,7 +1321,7 @@ function openCheckout(){
         e.textContent=nm.length<2?'Вкажіть імʼя.':'Вкажіть коректний номер телефону.';
         e.style.display='block';return}
       if(mode==='delivery'&&addr.length<5){const e=sIn.querySelector('#err');e.textContent='Вкажіть адресу доставки.';e.style.display='block';return}
-      const payload={shop,shopName:SHOPS[shop][0],mode,addr,fry,fg,pay,total,nm,tel,note:orderNote,lines:cart.map(l=>({...l,sum:lineSum(l)}))};
+      const payload={shop,shopName:SHOPS[shop][0],mode,addr,fry,fg,pay,total,nm,tel,note:orderNote,when:whenLabel(mode),lines:cart.map(l=>({...l,sum:lineSum(l)}))};
       btn.disabled=true;btn.textContent='Відправляємо…';
       try{
         const r=await fetch(API+'/api/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -1238,7 +1348,8 @@ function openStatus(){
     sIn.innerHTML=`<div class="grab-zone"><div class="grab"></div></div>
     <div class="done-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round"><path d="M4 12.5l5.5 5.5L20 7"/></svg></div>
     <h3 style="text-align:center;font-size:23px;text-transform:uppercase">Замовлення прийнято</h3>
-    <p style="text-align:center;color:var(--smoke);font-size:13px;margin:5px 0 18px">№ ${o.no} · ${o.shop}</p>
+    <p style="text-align:center;color:var(--smoke);font-size:13px;margin:5px 0 4px">№ ${o.no} · ${o.shop}</p>
+    <p style="text-align:center;color:var(--ember-hot);font-size:13.5px;margin:0 0 18px">${o.when||''}</p>
     ${o.offline?`<div class="warn">Не вдалося звʼязатися з точкою автоматично. Зателефонуйте, будь ласка: ${SHOPS[shop][1]||SHOPS[0][1]}</div>`:''}
 
     <div class="box steps">${steps.map((s,i)=>`
