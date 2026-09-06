@@ -329,6 +329,14 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .ph{cursor:zoom-in;padding:0;border:none;font:inherit;color:inherit}
 .ph:disabled{cursor:default}
 
+.pick-shop{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  width:100%;text-align:left;transition:.14s}
+.pick-shop:hover{border-color:var(--line-2)}
+.ps-t{min-width:0}
+.ps-t small{display:block;font-size:11px;color:var(--smoke)}
+.ps-t b{display:block;font-weight:500;font-size:14px}
+.ps-a{flex:0 0 auto;font-size:12.5px;color:var(--ember-hot)}
+
 :focus-visible{outline:2px solid var(--ember-hot);outline-offset:2px}
 .up-scroll{max-height:52vh;overflow-y:auto;margin:0 -4px 14px;padding:0 4px;
   display:grid;gap:8px;align-content:start;
@@ -767,14 +775,18 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
 })();
 
 /* ---------- shop picker ---------- */
-document.getElementById('shopBtn').onclick=()=>{
+function pickShopSheet(back){
   open(`<div class="grab-zone"><div class="grab"></div></div><div class="sh-h"><h3>Оберіть точку</h3><button class="x" onclick="close_()">✕</button></div>
   ${SHOPS.map((s,i)=>`<button class="pay" aria-pressed="${i===shop}" data-s="${i}"><span class="dot"></span>${s[0]}</button>`).join('')}`);
-  sIn.onclick=e=>{const b=e.target.closest('[data-s]');if(!b)return;shop=+b.dataset.s;
+  sIn.onclick=e=>{const b=e.target.closest('[data-s]');if(!b)return;
+    shop=+b.dataset.s;
     document.getElementById('shopName').textContent=SHOPS[shop][0];
     const ish=document.getElementById('infoShop'); if(ish) ish.textContent=SHOPS[shop][0];
-    close()};
-};
+    sIn.onclick=null;
+    if(back) back(); else close();
+  };
+}
+document.getElementById('shopBtn').onclick=()=>pickShopSheet(null);
 
 /* ---------- item sheet ---------- */
 function openItem(id){
@@ -886,7 +898,10 @@ function openCheckout(){
     <div class="seg"><button class="sg" data-mode="pickup" aria-pressed="${mode==='pickup'}">Самовивіз</button>
     <button class="sg" data-mode="delivery" aria-pressed="${mode==='delivery'}">Доставка</button></div>
     ${mode==='pickup'
-      ? `<div class="box"><div style="font-size:11px;color:var(--smoke)">Точка видачі</div><b style="font-weight:500">${SHOPS[shop][0]}</b></div>`
+      ? `<button class="box pick-shop" id="pickShop">
+           <span class="ps-t"><small>Точка видачі</small><b>${SHOPS[shop][0]}</b></span>
+           <span class="ps-a">Змінити</span>
+         </button>`
       : `<input class="fld" id="addr" placeholder="Вулиця, будинок, квартира">
          <p class="hint">Вартість доставки уточнить оператор по телефону — служба доставки партнерська.</p>`}
 
@@ -919,6 +934,8 @@ function openCheckout(){
     </div>
     <button class="cta" id="send">Підтвердити замовлення</button>`);
 
+    const ps=sIn.querySelector('#pickShop');
+    if(ps) ps.onclick=()=>pickShopSheet(draw);
     sIn.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
       mode=b.dataset.mode; if(mode==='delivery'&&pay==='online')pay='cash'; draw()});
     sIn.querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>{pay=b.dataset.pay;draw()});
