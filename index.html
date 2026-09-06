@@ -28,7 +28,13 @@
   --ok:#7BA84F;
 }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0;overflow-x:hidden}
+html{background:var(--char)}
+html,body{margin:0;padding:0;overflow-x:hidden;min-height:100%}
+html::before{
+  content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:url('smoke-bg.jpg') center/cover no-repeat;
+  opacity:.3;
+}
 body{
   background:var(--char);
   color:var(--bone);
@@ -148,7 +154,14 @@ a{color:inherit}
 .side-h{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--smoke);margin:0 0 10px}
 @media(min-width:900px){
   .wrap{max-width:1180px}
-  .layout{display:grid;grid-template-columns:190px minmax(0,1fr) 240px;gap:26px;align-items:start}
+  .layout{display:grid;grid-template-columns:190px minmax(0,1fr) 240px;
+    grid-template-rows:auto 1fr;gap:14px 26px;align-items:start}
+  .side-l{grid-column:1;grid-row:1 / span 2}
+  .mid{grid-column:2;grid-row:1 / span 2}
+  .mode-bar{grid-column:3;grid-row:1;grid-template-columns:1fr;gap:7px;margin:0}
+  .side-r{grid-column:3;grid-row:2}
+  .mb-btn{padding:10px 12px}
+  .mb-ic{margin-bottom:4px}
   .side{display:block;position:sticky;top:76px}
   .tools{position:static;padding-top:14px}
   .cats{display:none}
@@ -368,20 +381,20 @@ body:has(.inst) .bar{bottom:66px}
     <p>Свіже мариноване мʼясо, ковбаски власного виробництва та мʼясо зі смокеру. Заберете сирим — або посмажимо на мангалі.</p>
   </section>
 
-  <div class="mode-bar">
-    <button class="mb-btn" data-gm="pickup" aria-pressed="true">
-      <span class="mb-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5V20h16V9.5"/><path d="M3 9.5 5 4h14l2 5.5a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M10 20v-5h4v5"/></svg></span>
-      <span class="mb-t">Самовивіз</span>
-      <span class="mb-s">з точки на вибір</span>
-    </button>
-    <button class="mb-btn" data-gm="delivery" aria-pressed="false">
-      <span class="mb-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h10v9H3z"/><path d="M13 10h4l3 3.2V16h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg></span>
-      <span class="mb-t">Доставка</span>
-      <span class="mb-s">вартість уточнить оператор</span>
-    </button>
-  </div>
-
   <div class="layout">
+
+    <div class="mode-bar">
+      <button class="mb-btn" data-gm="pickup" aria-pressed="true">
+        <span class="mb-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5V20h16V9.5"/><path d="M3 9.5 5 4h14l2 5.5a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M10 20v-5h4v5"/></svg></span>
+        <span class="mb-t">Самовивіз</span>
+        <span class="mb-s">з точки на вибір</span>
+      </button>
+      <button class="mb-btn" data-gm="delivery" aria-pressed="false">
+        <span class="mb-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h10v9H3z"/><path d="M13 10h4l3 3.2V16h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg></span>
+        <span class="mb-t">Доставка</span>
+        <span class="mb-s">вартість уточнить оператор</span>
+      </button>
+    </div>
 
     <aside class="side side-l">
       <p class="side-h">Категорії</p>
