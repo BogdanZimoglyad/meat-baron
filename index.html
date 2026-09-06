@@ -899,6 +899,31 @@ function paintLines(){
 }
 
 /* ---------- checkout ---------- */
+/* ---------- телефон ---------- */
+function normPhone(v){
+  let d=String(v).replace(/\D/g,'');
+  if(d.startsWith('380')) d=d.slice(3);
+  else if(d.startsWith('80')) d=d.slice(2);
+  else if(d.startsWith('0')) d=d.slice(1);
+  return d.slice(0,9);
+}
+function fmtPhone(v){
+  const d=normPhone(v);
+  if(!d) return '';
+  let s='+380 '+d.slice(0,2);
+  if(d.length>2) s+=' '+d.slice(2,5);
+  if(d.length>5) s+=' '+d.slice(5,7);
+  if(d.length>7) s+=' '+d.slice(7,9);
+  return s;
+}
+function bindPhone(el){
+  if(!el) return;
+  const apply=()=>{el.value=fmtPhone(el.value)};
+  el.addEventListener('input',apply);
+  el.addEventListener('blur',apply);
+  el.addEventListener('focus',()=>{if(!el.value)el.value='+380 '});
+}
+
 function openCheckout(){
   let mode=getMode,fry=false,pay=getMode==='delivery'?'cash':'online';
   const fg=fryGrams();
@@ -948,15 +973,21 @@ function openCheckout(){
 
     const ps=sIn.querySelector('#pickShop');
     if(ps) ps.onclick=()=>pickShopSheet(draw);
+    bindPhone(sIn.querySelector('#tel'));
     sIn.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
       mode=b.dataset.mode; if(mode==='delivery'&&pay==='online')pay='cash'; draw()});
     sIn.querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>{pay=b.dataset.pay;draw()});
     const sw=sIn.querySelector('#sw'); if(sw) sw.onclick=()=>{fry=!fry;draw()};
     sIn.querySelector('#send').onclick=async ()=>{
       const btn=sIn.querySelector('#send');
-      const nm=sIn.querySelector('#nm').value.trim(), tel=sIn.querySelector('#tel').value.trim();
+      const nm=sIn.querySelector('#nm').value.trim(), telRaw=sIn.querySelector('#tel').value.trim();
+      const telDigits=normPhone(telRaw);
+      const tel=telDigits.length===9?'+380'+telDigits:telRaw;
       const addr=sIn.querySelector('#addr')?sIn.querySelector('#addr').value.trim():'';
-      if(nm.length<2||tel.replace(/\D/g,'').length<9){sIn.querySelector('#err').style.display='block';return}
+      if(nm.length<2||telDigits.length<9){
+        const e=sIn.querySelector('#err');
+        e.textContent=nm.length<2?'Вкажіть імʼя.':'Вкажіть коректний номер телефону.';
+        e.style.display='block';return}
       if(mode==='delivery'&&addr.length<5){const e=sIn.querySelector('#err');e.textContent='Вкажіть адресу доставки.';e.style.display='block';return}
       const payload={shop,mode,addr,fry,fg,pay,total,nm,tel,lines:cart.map(l=>({...l,sum:lineSum(l)}))};
       btn.disabled=true;btn.textContent='Відправляємо…';
