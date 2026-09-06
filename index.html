@@ -359,6 +359,20 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .grp-note{margin:-4px 2px 12px;font-size:13px;color:var(--smoke);line-height:1.55;max-width:60ch;
   padding-left:11px;border-left:2px solid rgba(196,52,42,.5)}
 
+/* введення ваги */
+.wbox{display:inline-flex;align-items:baseline;gap:3px;flex:0 0 auto;
+  background:var(--coal-2);border:1px solid var(--line);border-radius:9px;padding:6px 9px}
+.wbox input{width:56px;background:none;border:none;outline:none;text-align:right;
+  font-family:'Oswald',sans-serif;font-size:16px;font-weight:500;padding:0;
+  -moz-appearance:textfield;appearance:textfield}
+.wbox input::-webkit-outer-spin-button,.wbox input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.wbox i{font-style:normal;font-size:12px;color:var(--smoke)}
+.wbox:focus-within{border-color:var(--ember)}
+.un-edit{display:inline-flex;align-items:center;gap:5px;padding:2px 0;color:var(--smoke);
+  font-size:11.5px;transition:.14s}
+.un-edit svg{width:12px;height:12px;opacity:.75}
+.un-edit:hover{color:var(--ember-hot)}
+
 :focus-visible{outline:2px solid var(--ember-hot);outline-offset:2px}
 .up-scroll{max-height:52vh;overflow-y:auto;margin:0 -4px 14px;padding:0 4px;
   display:grid;gap:8px;align-content:start;
@@ -827,7 +841,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
 /* ---------- тягнемо шторку вниз ---------- */
 (function(){
   let y0=0, dy=0, dragging=false, may=false;
-  const noDrag=el=>el.closest('input,select,textarea,.up-scroll,.wgrid,.seg,#lines,.pay');
+  const noDrag=el=>el.closest('input,select,textarea,.up-scroll,.wgrid,.seg,#lines,.pay,.wbox,.rowline');
   const start=e=>{
     const t=e.touches?e.touches[0]:e;
     if(noDrag(e.target)) return;
@@ -881,26 +895,47 @@ function pickShopSheet(back){
 document.getElementById('shopBtn').onclick=()=>pickShopSheet(null);
 
 /* ---------- item sheet ---------- */
-function openItem(id){
+function openItem(id, editIdx){
   const it=ITEMS.find(i=>i.id===id);
-  if(isCount(it)){addToCart(it,1); maybeUpsell(it); return}
-  let g=Math.max(1000,it.minG);
+  const editing=Number.isInteger(editIdx);
+  if(isCount(it)&&!editing){addToCart(it,1); maybeUpsell(it); return}
+  const MAXG=6000;
+  let g=editing? cart[editIdx].g : Math.max(1000,it.minG);
+  const quick=[300,500,1000,1500].map(v=>Math.max(v,it.minG)).filter((v,i,a)=>a.indexOf(v)===i);
   open(`<div class="grab-zone"><div class="grab"></div></div>
   <div class="hero-img">${photoOf(it)?`<img src="${photoOf(it)}" alt="${it.name}">`:ph(it,1)}</div>
   <div class="sh-h"><h3>${it.name}</h3><button class="x" onclick="close_()">✕</button></div>
   <p class="hint" style="margin-top:-6px">${it.cat==='ready'?'Готовий продукт. Ціна за 100 г.':(it.cat==='extra'?'Ціна за 100 г — '+money(it.price)+'.':'Мариноване мʼясо. Ціна за 100 г — '+money(it.price)+'.')}</p>
   <span class="lbl">Оберіть вагу</span>
-  <div class="wgrid">${[300,500,1000,1500].map(v=>Math.max(v,it.minG)).filter((v,i,a)=>a.indexOf(v)===i).map(v=>`<button class="w" data-g="${v}" aria-pressed="${v===g}">${wLabel(v)}</button>`).join('')}</div>
-  <div class="rowline"><input type="range" id="rg" min="${it.minG}" max="4000" step="100" value="${g}"><b id="wv" style="font-family:Oswald;min-width:62px;text-align:right">${wLabel(g)}</b></div>
+  <div class="wgrid">${quick.map(v=>`<button class="w" data-g="${v}" aria-pressed="${v===g}">${wLabel(v)}</button>`).join('')}</div>
+  <div class="rowline">
+    <input type="range" id="rg" min="${it.minG}" max="${MAXG}" step="50" value="${g}" aria-label="Вага">
+    <span class="wbox"><input id="wv" type="number" inputmode="numeric" min="${it.minG}" max="${MAXG}" step="10" value="${g}" aria-label="Вага у грамах"><i>г</i></span>
+  </div>
   <div class="tot"><span style="color:var(--smoke);font-size:13px">Разом</span><b id="tv">${money(it.price*g/100)}</b></div>
-  <button class="cta" id="addBtn">Додати в кошик</button>
-  <p class="hint">Мінімальна вага — ${it.minG} г. ${it.cat!=='ready'?'Смаження можна обрати при оформленні.':''}</p>`);
+  <button class="cta" id="addBtn">${editing?'Зберегти':'Додати в кошик'}</button>
+  <p class="hint">Мінімальна вага — ${it.minG} г, можна ввести свою. ${it.cat!=='ready'&&it.cat!=='grill'?'Смаження можна обрати при оформленні.':''}</p>`);
   const rg=sIn.querySelector('#rg'),wv=sIn.querySelector('#wv'),tv=sIn.querySelector('#tv');
-  const paint=()=>{wv.textContent=wLabel(g);tv.textContent=money(it.price*g/100);
-    sIn.querySelectorAll('.w').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.g===g))};
-  sIn.querySelectorAll('.w').forEach(b=>b.onclick=()=>{g=+b.dataset.g;rg.value=g;paint()});
+  const paint=(syncField)=>{
+    tv.textContent=money(it.price*g/100);
+    rg.value=Math.min(g,MAXG);
+    if(syncField!==false) wv.value=g;
+    sIn.querySelectorAll('.w').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.g===g));
+  };
+  sIn.querySelectorAll('.w').forEach(b=>b.onclick=()=>{g=+b.dataset.g;paint()});
   rg.oninput=()=>{g=+rg.value;paint()};
-  sIn.querySelector('#addBtn').onclick=()=>{addToCart(it,g); if(!maybeUpsell(it)) close()};
+  wv.oninput=()=>{
+    const v=parseInt(wv.value,10);
+    if(!Number.isFinite(v)) return;
+    g=Math.min(Math.max(v,it.minG),MAXG);
+    paint(false);
+  };
+  wv.onblur=()=>{paint()};
+  wv.onfocus=()=>wv.select();
+  sIn.querySelector('#addBtn').onclick=()=>{
+    if(editing){cart[editIdx].g=g;paintBar();openCart();return}
+    addToCart(it,g); if(!maybeUpsell(it)) close();
+  };
 }
 function addToCart(it,g){
   const ex=cart.find(l=>l.id===it.id);
@@ -989,7 +1024,9 @@ function paintLines(){
   const el=sIn.querySelector('#lines');if(!el)return;
   el.innerHTML=cart.map((l,i)=>`<div class="ln">
     <div class="ln-th">${photoOf(l)?`<img src="${photoOf(l)}" alt="">`:ph(l)}</div>
-    <div class="ln-b"><div class="nm">${l.name}</div><div class="un">${lineQty(l)}</div></div>
+    <div class="ln-b"><div class="nm">${l.name}</div>
+      ${isCount(l)?`<div class="un">${lineQty(l)}</div>`
+        :`<button class="un un-edit" data-e="${i}">${lineQty(l)} <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z"/></svg></button>`}</div>
     <div class="ln-r">
       <div class="qty"><button class="qbtn" data-m="${i}" aria-label="Менше">−</button><button class="qbtn" data-p="${i}" aria-label="Більше">+</button></div>
       <div class="ln-p">${money(lineSum(l))}</div>
@@ -998,6 +1035,8 @@ function paintLines(){
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button></div>`).join('');
   el.onclick=e=>{
+    const ed=e.target.closest('[data-e]');
+    if(ed){const i=+ed.dataset.e;openItem(cart[i].id,i);return}
     const x=e.target.closest('[data-x]');
     const m=e.target.closest('[data-m]'),p=e.target.closest('[data-p]');
     if(x){cart.splice(+x.dataset.x,1)}
