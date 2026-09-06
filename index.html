@@ -66,6 +66,8 @@ a{color:inherit}
 .shop{flex:1;min-width:0;text-align:left;display:flex;align-items:center;gap:10px;
   padding:6px 8px;margin:-6px -8px;border-radius:9px;transition:.14s}
 .shop:hover{background:var(--coal)}
+.shop.single{pointer-events:none;padding:6px 0;margin:0}
+.shop.single+.chev,.shop.single .chev{display:none}
 .shop-t{flex:1;min-width:0}
 .shop small{display:block;color:var(--smoke);font-size:11px;line-height:1.3}
 .shop b{display:block;font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -200,7 +202,8 @@ a{color:inherit}
 .about h2{font-size:22px;text-transform:uppercase;margin-bottom:10px}
 .about p{color:var(--smoke);font-size:14px;margin:0 0 14px;max-width:52ch}
 .ig{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line-2);border-radius:10px;padding:10px 16px;font-size:14px;text-decoration:none}
-.pts{margin-top:22px;display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.pts-h{margin:22px 0 8px;font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--smoke)}
+.pts{margin-top:0;display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .pt{background:rgba(30,24,23,.92);padding:12px 14px;display:flex;justify-content:space-between;gap:12px;align-items:center}
 .pt b{font-weight:500;font-size:13.5px}
 .pt a{color:var(--smoke);font-size:12.5px;text-decoration:none;white-space:nowrap}
@@ -417,7 +420,7 @@ body:has(.inst) .bar{bottom:66px}
     <button class="shop" id="shopBtn">
       <span class="shop-t">
         <small>Точка видачі</small>
-        <b id="shopName">Пр-т Героїв Харкова 256</b>
+        <b id="shopName"></b>
       </span>
       <span class="chev">▼</span>
     </button>
@@ -469,7 +472,7 @@ body:has(.inst) .bar{bottom:66px}
         <p class="side-h">Інформація</p>
         <div class="info-row">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg></span>
-          <div><small>Точка видачі</small><b id="infoShop">Пр-т Героїв Харкова 256</b></div>
+          <div><small>Точка видачі</small><b id="infoShop"></b></div>
         </div>
         <div class="info-row">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s4.2 3.3 4.2 7.2c0 1.6-.9 2.7-2 2.7-1.4 0-1.9-1.2-1.7-2.6C10.6 12 9 13.9 9 16.1 9 19 10.9 21 12.6 21 15.6 21 18 18.4 18 15c0-5.2-6-12-6-12z"/><path d="M9.4 21C7.3 20.4 6 18.5 6 16.2c0-1.4.4-2.6 1.1-3.7"/></svg></span>
@@ -495,6 +498,7 @@ body:has(.inst) .bar{bottom:66px}
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
       @meat.baron_
     </a>
+    <p class="pts-h" id="ptsH"></p>
     <div class="pts" id="pts"></div>
   </section>
 </main>
@@ -670,12 +674,15 @@ const photoOf=it=>{
   const k=PHOTO[it.grp+'/'+it.name]||PHOTO[it.name];
   return k?`photo/${k}.jpg`:null;
 };
-const SHOPS=[
- ['Пр-т Героїв Харкова 256','+380638771309'],['вул. Людвіга Свободи 50','+380664210037'],
- ['пр-т Тракторобудівників 142а','+380631498096'],['вул. Шевченка 142а','+380663210037'],
- ['м-н Захисників України 7/8','+380632452073'],['вул. Різдвяна 16/22','+380505261861'],
- ['пр-т Аерокосмічний 316е',''],['вул. Холодногірська 3','']
+/* усі точки мережі. третій елемент — чи приймає замовлення онлайн.
+   на час тесту працюють Шевченка 142а і Людвіга Свободи 50: щоб увімкнути решту — постав 1 */
+const SHOPS_ALL=[
+ ['Пр-т Героїв Харкова 256','+380638771309',0],['вул. Людвіга Свободи 50','+380664210037',1],
+ ['пр-т Тракторобудівників 142а','+380631498096',0],['вул. Шевченка 142а','+380663210037',1],
+ ['м-н Захисників України 7/8','+380632452073',0],['вул. Різдвяна 16/22','+380505261861',0],
+ ['пр-т Аерокосмічний 316е','',0],['вул. Холодногірська 3','',0]
 ];
+const SHOPS=SHOPS_ALL.filter(s=>s[2]);
 const API=''; // '' = той самий домен. Для локального тесту: 'http://localhost:3000'
 let poll=null;
 const money=n=>n.toFixed(2).replace('.00','')+' ₴';
@@ -824,6 +831,7 @@ function closePhoto(){
 }
 document.getElementById('lb').onclick=e=>{if(e.target.id==='lb')closePhoto()};
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePhoto()});
+document.getElementById('ptsH').textContent = SHOPS.length>1 ? 'Наші точки' : 'Замовлення приймає точка';
 document.getElementById('pts').innerHTML=SHOPS.map(s=>
   `<div class="pt"><b>${s[0]}</b>${s[1]?`<a href="tel:${s[1]}">${s[1].replace('+38','')}</a>`:'<a>—</a>'}</div>`).join('');
 
@@ -904,7 +912,12 @@ function pickShopSheet(back){
     if(back) back(); else close();
   };
 }
-document.getElementById('shopBtn').onclick=()=>pickShopSheet(null);
+if(SHOPS.length>1){
+  document.getElementById('shopBtn').onclick=()=>pickShopSheet(null);
+}else{
+  const sb=document.getElementById('shopBtn');
+  sb.classList.add('single'); sb.disabled=true;
+}
 
 /* ---------- item sheet ---------- */
 function openItem(id, editIdx){
@@ -1099,10 +1112,13 @@ function openCheckout(){
     <div class="seg"><button class="sg" data-mode="pickup" aria-pressed="${mode==='pickup'}">Самовивіз</button>
     <button class="sg" data-mode="delivery" aria-pressed="${mode==='delivery'}">Доставка</button></div>
     ${mode==='pickup'
-      ? `<button class="box pick-shop" id="pickShop">
-           <span class="ps-t"><small>Точка видачі</small><b>${SHOPS[shop][0]}</b></span>
-           <span class="ps-a">Змінити</span>
-         </button>`
+      ? (SHOPS.length>1
+          ? `<button class="box pick-shop" id="pickShop">
+               <span class="ps-t"><small>Точка видачі</small><b>${SHOPS[shop][0]}</b></span>
+               <span class="ps-a">Змінити</span>
+             </button>`
+          : `<div class="box"><div style="font-size:11px;color:var(--smoke)">Точка видачі</div>
+             <b style="font-weight:500">${SHOPS[shop][0]}</b></div>`)
       : `<input class="fld" id="addr" placeholder="Вулиця, будинок, квартира">
          <p class="hint">Вартість доставки уточнить оператор по телефону — служба доставки партнерська.</p>`}
 
@@ -1153,7 +1169,7 @@ function openCheckout(){
         e.textContent=nm.length<2?'Вкажіть імʼя.':'Вкажіть коректний номер телефону.';
         e.style.display='block';return}
       if(mode==='delivery'&&addr.length<5){const e=sIn.querySelector('#err');e.textContent='Вкажіть адресу доставки.';e.style.display='block';return}
-      const payload={shop,mode,addr,fry,fg,pay,total,nm,tel,lines:cart.map(l=>({...l,sum:lineSum(l)}))};
+      const payload={shop,shopName:SHOPS[shop][0],mode,addr,fry,fg,pay,total,nm,tel,lines:cart.map(l=>({...l,sum:lineSum(l)}))};
       btn.disabled=true;btn.textContent='Відправляємо…';
       try{
         const r=await fetch(API+'/api/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -1215,6 +1231,8 @@ function openStatus(){
 const _close=close; close=()=>{clearInterval(poll);_close()};
 window.close_=close;
 
+document.getElementById('shopName').textContent=SHOPS[shop][0];
+(function(){const e=document.getElementById('infoShop'); if(e) e.textContent=SHOPS[shop][0];})();
 renderCats();renderCatalog();syncScrollLock();
 
 /* ---------- PWA ---------- */

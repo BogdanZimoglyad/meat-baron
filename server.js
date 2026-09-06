@@ -38,15 +38,18 @@ try { db = JSON.parse(fs.readFileSync(DB, 'utf8')); } catch (e) {}
 const save = () => fs.writeFileSync(DB, JSON.stringify(db, null, 2));
 
 /* ---------- точки ---------- */
+/* На час тесту працюють дві точки.
+   Щоб підключити решту — розкоментуй потрібні рядки
+   і перепривʼяжи чати командою /bind. */
 const SHOPS = [
-  'Пр-т Героїв Харкова 256',
   'вул. Людвіга Свободи 50',
-  'пр-т Тракторобудівників 142а',
-  'вул. Шевченка 142а',
-  'м-н Захисників України 7/8',
-  'вул. Різдвяна 16/22',
-  'пр-т Аерокосмічний 316е',
-  'вул. Холодногірська 3'
+  'вул. Шевченка 142а'
+  // 'Пр-т Героїв Харкова 256',
+  // 'пр-т Тракторобудівників 142а',
+  // 'м-н Захисників України 7/8',
+  // 'вул. Різдвяна 16/22',
+  // 'пр-т Аерокосмічний 316е',
+  // 'вул. Холодногірська 3'
 ];
 
 const STATUSES = ['new', 'accepted', 'cooking', 'ready', 'done'];
@@ -135,7 +138,12 @@ app.post('/api/order', async (req, res) => {
     return res.status(400).json({ error: 'Некоректні дані замовлення' });
   }
 
-  const shopIndex = Number.isInteger(b.shop) ? b.shop : 0;
+  let shopIndex = Number.isInteger(b.shop) ? b.shop : 0;
+  if (b.shopName) {
+    const byName = SHOPS.indexOf(b.shopName);
+    if (byName > -1) shopIndex = byName;      // назва точніша за індекс
+  }
+  if (shopIndex < 0 || shopIndex >= SHOPS.length) shopIndex = 0;
   const chatId = db.shops[shopIndex];
   if (!chatId) {
     return res.status(503).json({ error: 'Точка ще не підключена до Telegram' });
