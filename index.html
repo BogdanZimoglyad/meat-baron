@@ -111,7 +111,8 @@ a{color:inherit}
 .tag{border:1px solid var(--line-2);border-radius:999px;padding:5px 12px;font-size:12px;color:var(--bone)}
 
 /* search + nav */
-.tools{position:sticky;top:59px;z-index:30;background:var(--char);padding:12px 0 0}
+.tools{position:sticky;top:59px;z-index:30;padding:12px 0 0;
+  background:linear-gradient(var(--char) 74%,rgba(20,16,16,0))}
 .search{display:flex;align-items:center;gap:9px;background:var(--coal);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
 .search input{border:none;background:none;outline:none;flex:1;min-width:0}
 .search input::placeholder{color:var(--smoke)}
@@ -213,7 +214,9 @@ a{color:inherit}
 .sheet{position:fixed;left:0;right:0;bottom:0;z-index:61;background:var(--char);border-radius:18px 18px 0 0;border-top:1px solid var(--line-2);max-height:92vh;overflow-y:auto;transform:translateY(101%);transition:transform .26s cubic-bezier(.3,.9,.3,1)}
 .sheet.on{transform:none}
 .sheet-in{max-width:620px;margin:0 auto;padding:8px 16px calc(20px + env(safe-area-inset-bottom))}
-.grab{width:38px;height:4px;border-radius:2px;background:var(--line-2);margin:6px auto 14px}
+.grab{width:44px;height:5px;border-radius:3px;background:var(--line-2);margin:8px auto 14px;
+  cursor:grab;touch-action:none}
+.sheet{touch-action:pan-y}
 .sh-h{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
 .sh-h h3{font-size:22px;text-transform:uppercase;line-height:1.1}
 .x{width:30px;height:30px;border-radius:50%;background:var(--coal-2);color:var(--smoke);display:grid;place-items:center;flex:0 0 auto;font-size:16px}
@@ -601,10 +604,12 @@ let cat='raw', sub='', cart=[], shop=0, order=null, getMode='pickup';
 
 /* ---------- catalog ---------- */
 function renderCats(){
+  const q=document.getElementById('q')?document.getElementById('q').value.trim():'';
+  const active=q?null:cat;
   document.getElementById('cats').innerHTML=CATS.map(c=>
-    `<button class="cat" role="tab" aria-selected="${c.id===cat}" data-c="${c.id}">${c.t}</button>`).join('');
+    `<button class="cat" role="tab" aria-selected="${c.id===active}" data-c="${c.id}">${c.t}</button>`).join('');
   document.getElementById('sideCats').innerHTML=CATS.map(c=>
-    `<button class="side-cat" aria-selected="${c.id===cat}" data-c="${c.id}">${c.t}</button>`).join('');
+    `<button class="side-cat" aria-selected="${c.id===active}" data-c="${c.id}">${c.t}</button>`).join('');
 }
 function renderCatalog(){
   const q=document.getElementById('q').value.trim().toLowerCase();
@@ -649,7 +654,7 @@ document.querySelector('.mode-bar').onclick=e=>{
   getMode=b.dataset.gm;
   document.querySelectorAll('[data-gm]').forEach(x=>x.setAttribute('aria-pressed',x===b));
 };
-document.getElementById('q').oninput=renderCatalog;
+document.getElementById('q').oninput=()=>{renderCats();renderCatalog()};
 document.getElementById('catalog').onclick=e=>{
   const b=e.target.closest('.add'); if(b){openItem(b.dataset.i);return}
   const p=e.target.closest('[data-ph]'); if(p) openPhoto(p);
@@ -678,7 +683,7 @@ function openPhoto(node){
   card.style.opacity='0';
   card.style.transform=`translate(${r.left+r.width/2-innerWidth/2}px,${r.top+r.height/2-innerHeight/2}px) scale(.34)`;
   v.classList.add('on');
-  document.body.style.overflow='hidden';
+  lockScroll();
   requestAnimationFrame(()=>{
     card.style.transition='transform .36s cubic-bezier(.22,.9,.3,1),opacity .22s';
     card.style.opacity='1';
@@ -690,7 +695,7 @@ function openPhoto(node){
 function closePhoto(){
   const v=document.getElementById('lb');
   v.classList.remove('on');
-  document.body.style.overflow='';
+  unlockScroll();
 }
 document.getElementById('lb').onclick=e=>{if(e.target.id==='lb')closePhoto()};
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePhoto()});
@@ -699,10 +704,64 @@ document.getElementById('pts').innerHTML=SHOPS.map(s=>
 
 /* ---------- sheet ---------- */
 const veil=document.getElementById('veil'),sheet=document.getElementById('sheet'),sIn=document.getElementById('sheetIn');
-function open(html){sIn.innerHTML=html;veil.classList.add('on');sheet.classList.add('on');document.body.style.overflow='hidden'}
-function close(){veil.classList.remove('on');sheet.classList.remove('on');document.body.style.overflow=''}
+let lockY=0, locks=0;
+function lockScroll(){
+  if(locks++) return;
+  lockY=window.scrollY;
+  document.body.style.position='fixed';
+  document.body.style.top=`-${lockY}px`;
+  document.body.style.left='0';
+  document.body.style.right='0';
+  document.body.style.width='100%';
+}
+function unlockScroll(){
+  if(--locks>0) return;
+  if(locks<0) locks=0;
+  document.body.style.position='';
+  document.body.style.top='';
+  document.body.style.left='';
+  document.body.style.right='';
+  document.body.style.width='';
+  window.scrollTo(0,lockY);
+}
+function open(html){sIn.innerHTML=html;veil.classList.add('on');sheet.classList.add('on');lockScroll()}
+function close(){veil.classList.remove('on');sheet.classList.remove('on');unlockScroll()}
 veil.onclick=close;
 document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+
+/* ---------- тягнемо шторку вниз ---------- */
+(function(){
+  let y0=0, dy=0, dragging=false;
+  const start=e=>{
+    const t=e.touches?e.touches[0]:e;
+    if(!e.target.closest('.grab')&&!(e.target.closest('.sh-h')&&sIn.scrollTop<=0)) return;
+    if(sheet.scrollTop>0) return;
+    dragging=true; y0=t.clientY; dy=0;
+    sheet.style.transition='none';
+  };
+  const move=e=>{
+    if(!dragging) return;
+    const t=e.touches?e.touches[0]:e;
+    dy=Math.max(0,t.clientY-y0);
+    sheet.style.transform=`translateY(${dy}px)`;
+    veil.style.opacity=String(Math.max(0,1-dy/380));
+    if(e.cancelable) e.preventDefault();
+  };
+  const end=()=>{
+    if(!dragging) return;
+    dragging=false;
+    sheet.style.transition='';
+    sheet.style.transform='';
+    veil.style.opacity='';
+    if(dy>110) close();
+  };
+  sheet.addEventListener('touchstart',start,{passive:true});
+  sheet.addEventListener('touchmove',move,{passive:false});
+  sheet.addEventListener('touchend',end);
+  sheet.addEventListener('mousedown',start);
+  window.addEventListener('mousemove',move);
+  window.addEventListener('mouseup',end);
+})();
 
 /* ---------- shop picker ---------- */
 document.getElementById('shopBtn').onclick=()=>{
