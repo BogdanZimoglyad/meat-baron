@@ -901,7 +901,10 @@ function openItem(id, editIdx){
   if(isCount(it)&&!editing){addToCart(it,1); maybeUpsell(it); return}
   const MAXG=6000;
   let g=editing? cart[editIdx].g : Math.max(1000,it.minG);
-  const quick=[300,500,1000,1500].map(v=>Math.max(v,it.minG)).filter((v,i,a)=>a.indexOf(v)===i);
+  if(!editing&&it.minG>1000) g=it.minG;
+  const step=it.minG>=1000?500:(it.minG>=500?250:200);
+  const quick=[0,1,2,3].map(k=>it.minG+k*step)
+    .map(v=>v<1000?Math.round(v/50)*50:Math.round(v/100)*100);
   open(`<div class="grab-zone"><div class="grab"></div></div>
   <div class="hero-img">${photoOf(it)?`<img src="${photoOf(it)}" alt="${it.name}">`:ph(it,1)}</div>
   <div class="sh-h"><h3>${it.name}</h3><button class="x" onclick="close_()">✕</button></div>
