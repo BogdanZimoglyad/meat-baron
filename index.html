@@ -452,6 +452,14 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .ready-note b{display:block;font-weight:600;font-size:14.5px;color:var(--bone)}
 .ready-note span span,.ready-note>span{line-height:1.4}
 .ready-note>span span{font-size:12.5px;color:var(--smoke)}
+.pt-l{min-width:0}
+.pt-map{display:inline-flex;align-items:center;gap:4px;margin-top:3px;font-size:11.5px;
+  color:var(--ember-hot);text-decoration:none}
+.pt-map svg{width:12px;height:12px}
+.pt-map:hover{text-decoration:underline}
+.pt-tel{color:var(--smoke);font-size:12.5px;text-decoration:none;white-space:nowrap;flex:0 0 auto}
+.info-map{display:inline-block;margin-top:4px;font-size:11.5px;color:var(--ember-hot);text-decoration:none}
+.info-map:hover{text-decoration:underline}
 .ord-link{margin:14px 0 0;font-size:12px;color:var(--smoke);line-height:1.6;text-align:center}
 .lnk-copy{font-size:12.5px;color:var(--ember-hot);text-decoration:underline;padding:4px}
 
@@ -550,7 +558,8 @@ body:has(.inst) .bar{bottom:66px}
         <p class="side-h">Інформація</p>
         <div class="info-row">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg></span>
-          <div><small>Точка видачі</small><b id="infoShop"></b></div>
+          <div><small>Точка видачі</small><b id="infoShop"></b>
+            <a class="info-map" id="infoMap" href="#" target="_blank" rel="noopener">Прокласти маршрут</a></div>
         </div>
         <div class="info-row">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s4.2 3.3 4.2 7.2c0 1.6-.9 2.7-2 2.7-1.4 0-1.9-1.2-1.7-2.6C10.6 12 9 13.9 9 16.1 9 19 10.9 21 12.6 21 15.6 21 18 18.4 18 15c0-5.2-6-12-6-12z"/><path d="M9.4 21C7.3 20.4 6 18.5 6 16.2c0-1.4.4-2.6 1.1-3.7"/></svg></span>
@@ -763,14 +772,28 @@ const photoOf=it=>{
   return k?`photo/${k}.jpg`:null;
 };
 /* усі точки мережі. третій елемент — чи приймає замовлення онлайн.
-   на час тесту працюють Шевченка 142а і Людвіга Свободи 50: щоб увімкнути решту — постав 1 */
+   на час тесту працюють Шевченка 142а і Людвіга Свободи 52: щоб увімкнути решту — постав 1 */
 const SHOPS_ALL=[
- ['Пр-т Героїв Харкова 256','+380638771309',0],['вул. Людвіга Свободи 50','+380664210037',1],
+ ['Пр-т Героїв Харкова 256','+380638771309',0],['пр-т Людвіга Свободи 52','+380664210037',1],
  ['пр-т Тракторобудівників 142а','+380631498096',0],['вул. Шевченка 142а','+380663210037',1],
  ['м-н Захисників України 7/8','+380632452073',0],['вул. Різдвяна 16/22','+380505261861',0],
  ['пр-т Аерокосмічний 316е','',0],['вул. Холодногірська 3','',0]
 ];
 const SHOPS=SHOPS_ALL.filter(s=>s[2]);
+/* повні адреси для карт */
+const MAP_ADDR={
+ 'Пр-т Героїв Харкова 256':'проспект Героїв Харкова, 256, Харків',
+ 'пр-т Людвіга Свободи 52':'проспект Людвіга Свободи, 52, Харків',
+ 'пр-т Тракторобудівників 142а':'проспект Тракторобудівників, 142А, Харків',
+ 'вул. Шевченка 142а':'вулиця Шевченка, 142-А, Харків',
+ 'м-н Захисників України 7/8':'майдан Захисників України, 7/8, Харків',
+ 'вул. Різдвяна 16/22':'вулиця Різдвяна, 16/22, Харків',
+ 'пр-т Аерокосмічний 316е':'проспект Аерокосмічний, 316Е, Харків',
+ 'вул. Холодногірська 3':'вулиця Холодногірська, 3, Харків'
+};
+const mapQuery=name=>encodeURIComponent(MAP_ADDR[name]||(name+', Харків'));
+const mapLink=name=>'https://www.google.com/maps/search/?api=1&query='+mapQuery(name);
+const routeLink=name=>'https://www.google.com/maps/dir/?api=1&destination='+mapQuery(name);
 const API='https://meat-baron-production.up.railway.app'; // сервер прийому замовлень
 /* запит із таймаутом — щоб на поганому звʼязку не висло назавжди */
 async function req(url,opts,ms){
@@ -928,7 +951,14 @@ document.getElementById('lb').onclick=e=>{if(e.target.id==='lb')closePhoto()};
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePhoto()});
 document.getElementById('ptsH').textContent = SHOPS.length>1 ? 'Наші точки' : 'Замовлення приймає точка';
 document.getElementById('pts').innerHTML=SHOPS.map(s=>
-  `<div class="pt"><b>${s[0]}</b>${s[1]?`<a href="tel:${s[1]}">${s[1].replace('+38','')}</a>`:'<a>—</a>'}</div>`).join('');
+  `<div class="pt">
+     <div class="pt-l"><b>${s[0]}</b>
+       <a class="pt-map" href="${mapLink(s[0])}" target="_blank" rel="noopener">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>
+         На карті</a>
+     </div>
+     ${s[1]?`<a class="pt-tel" href="tel:${s[1]}">${s[1].replace('+38','')}</a>`:''}
+   </div>`).join('');
 
 /* ---------- sheet ---------- */
 const veil=document.getElementById('veil'),sheet=document.getElementById('sheet'),sIn=document.getElementById('sheetIn');
@@ -1003,6 +1033,7 @@ function pickShopSheet(back){
     shop=+b.dataset.s;
     document.getElementById('shopName').textContent=SHOPS[shop][0];
     const ish=document.getElementById('infoShop'); if(ish) ish.textContent=SHOPS[shop][0];
+    const im=document.getElementById('infoMap'); if(im) im.href=routeLink(SHOPS[shop][0]);
     sIn.onclick=null;
     if(back) back(); else close();
   };
@@ -1481,8 +1512,11 @@ function openStatus(startStatus){
       <button class="lnk-copy" id="copyLink">Скопіювати посилання</button></p>
     <div class="two">
       <a class="cta ghost" style="text-align:center;text-decoration:none;display:block" href="tel:${SHOPS[shop][1]||''}">Зателефонувати</a>
-      <button class="cta ghost" onclick="close_()">Готово</button>
-    </div>`;
+      ${o.mode==='pickup'
+        ? `<a class="cta ghost" style="text-align:center;text-decoration:none;display:block" href="${routeLink(o.shop)}" target="_blank" rel="noopener">Прокласти маршрут</a>`
+        : `<button class="cta ghost" onclick="close_()">Готово</button>`}
+    </div>
+    ${o.mode==='pickup'?`<button class="cta ghost" onclick="close_()">Готово</button>`:''}`;
     const cp=sIn.querySelector('#copyLink');
     if(cp) cp.onclick=async()=>{
       const url=location.origin+location.pathname+'?order='+o.no;
@@ -1504,7 +1538,10 @@ const _close=close; close=()=>{clearInterval(poll);_close()};
 window.close_=close;
 
 document.getElementById('shopName').textContent=SHOPS[shop][0];
-(function(){const e=document.getElementById('infoShop'); if(e) e.textContent=SHOPS[shop][0];})();
+(function(){
+  const e=document.getElementById('infoShop'); if(e) e.textContent=SHOPS[shop][0];
+  const m=document.getElementById('infoMap'); if(m) m.href=routeLink(SHOPS[shop][0]);
+})();
 renderCats();renderCatalog();syncScrollLock();
 
 /* ---------- активне замовлення ---------- */
