@@ -35,7 +35,15 @@ app.use(express.static(path.join(__dirname, 'public')));
 const DB = path.join(__dirname, 'data.json');
 let db = { orders: {}, shops: {}, counter: 1000 };
 try { db = JSON.parse(fs.readFileSync(DB, 'utf8')); } catch (e) {}
-const save = () => fs.writeFileSync(DB, JSON.stringify(db, null, 2));
+const save = () => { try { fs.writeFileSync(DB, JSON.stringify(db, null, 2)); } catch (e) {} };
+
+/* Прив'язки чатів беремо зі змінних оточення CHAT_1, CHAT_2, …
+   Диск на хостингу очищується при кожному перезапуску, а змінні — ні.
+   Тому після /bind збережіть виданий ID у змінних проєкту. */
+for (let i = 1; i <= 20; i++) {
+  const v = process.env['CHAT_' + i];
+  if (v) db.shops[i - 1] = Number(v);
+}
 
 /* ---------- точки ---------- */
 /* На час тесту працюють дві точки.
@@ -69,6 +77,8 @@ const NEXT_BTN = {
 };
 
 const money = n => (Math.round(n * 100) / 100).toFixed(2).replace('.00', '') + ' ₴';
+const esc = t => String(t == null ? '' : t)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const wLabel = g => (g >= 1000 ? (g / 1000).toFixed(g % 1000 ? 1 : 0) + ' кг' : g + ' г');
 
 /* ---------- прив'язка чату до точки ---------- */
@@ -92,7 +102,11 @@ bot.onText(/\/bind (\d+)/, (msg, m) => {
   if (n < 1 || n > SHOPS.length) return bot.sendMessage(msg.chat.id, 'Немає такої точки. /points');
   db.shops[n - 1] = msg.chat.id;
   save();
-  bot.sendMessage(msg.chat.id, `Готово. Цей чат отримує замовлення точки:\n${SHOPS[n - 1]}`);
+  bot.sendMessage(msg.chat.id,
+    `Готово. Цей чат отримує замовлення точки:\n${SHOPS[n - 1]}\n\n` +
+    `Щоб прив'язка не злетіла після перезапуску сервера, додайте у змінні проєкту:\n` +
+    `<code>CHAT_${n} = ${msg.chat.id}</code>`,
+    { parse_mode: 'HTML' });
 });
 
 bot.onText(/\/whoami/, msg => {
@@ -104,32 +118,34 @@ bot.onText(/\/whoami/, msg => {
 
 /* ---------- текст замовлення ---------- */
 function orderText(o) {
-  const lines = o.lines.map(l =>
-    `• ${l.name} — ${l.unit === 'порція' ? l.g + ' шт' : wLabel(l.g)} — ${money(l.sum)}`
-  ).join('\n');
+  const lines = o.lines.map(l => {
+    const qty = l.unit === 'шт' ? l.g + ' шт'
+              : l.unit === 'пак' ? l.g + ' × 1 кг'
+              : wLabel(l.g);
+    return `• ${esc(l.name)} — ${qty} — ${money(l.sum)}`;
+  }).join('\n');
 
   const fry = o.fry
     ? `\n🔥 СМАЖИТИ: ${wLabel(o.fg)} — ${money(o.fg / 1000 * 50)}\n   (ужарка 30–35%)`
     : '';
 
   const delivery = o.mode === 'delivery'
-    ? `\n🚚 ДОСТАВКА: ${o.addr || '—'}\n   ⚠️ передзвонити, уточнити вартість доставки`
-    : `\n🏪 САМОВИВІЗ: ${o.shopName}`;
+    ? `\n🚚 ДОСТАВКА: ${esc(o.addr) || '—'}\n   ⚠️ передзвонити, уточнити вартість доставки`
+    : `\n🏪 САМОВИВІЗ: ${esc(o.shopName)}`;
 
   const pay = { online: '💳 Оплачено онлайн', cash: '💵 Готівкою', card: '💳 Карткою на місці' }[o.pay] || o.pay;
-  const when = o.when ? `\n🕒 <b>${o.when}</b>` : '';
+  const when = o.when ? `\n🕒 <b>${esc(o.when)}</b>` : '';
 
   return `<b>Замовлення № ${o.no}</b> — ${LABEL[o.status]}\n` +
     `${delivery}${when}\n${pay}\n\n${lines}${fry}\n\n` +
     `<b>Разом: ${money(o.total)}</b>\n` +
     `<i>Сума орієнтовна — залежить від фактичної ваги</i>\n\n` +
-    `👤 ${o.nm}\n📞 ${o.tel}` +
-    (o.note ? `\n\n💬 <b>Коментар:</b> ${o.note}` : '');
+    `👤 ${esc(o.nm)}\n📞 ${esc(o.tel)}` +
+    (o.note ? `\n\n💬 <b>Коментар:</b> ${esc(o.note)}` : '');
 }
 
 function keyboard(o) {
   const btns = NEXT_BTN[o.status].map(([st, txt]) => ([{ text: txt, callback_data: `s:${o.no}:${st}` }]));
-  if (o.status !== 'done') btns.push([{ text: '📞 Подзвонити клієнту', url: `tel:${o.tel.replace(/\s/g, '')}` }]);
   return { inline_keyboard: btns };
 }
 
@@ -148,7 +164,10 @@ app.post('/api/order', async (req, res) => {
   if (shopIndex < 0 || shopIndex >= SHOPS.length) shopIndex = 0;
   const chatId = db.shops[shopIndex];
   if (!chatId) {
-    return res.status(503).json({ error: 'Точка ще не підключена до Telegram' });
+    return res.status(503).json({
+      error: 'Точка ще не підключена до Telegram',
+      hint: `Надішліть боту /bind ${shopIndex + 1} у потрібному чаті`
+    });
   }
 
   const no = ++db.counter;
@@ -183,8 +202,9 @@ app.post('/api/order', async (req, res) => {
     save();
     res.json({ ok: true, no, status: o.status });
   } catch (e) {
-    console.error('Telegram error:', e.message);
-    res.status(500).json({ error: 'Не вдалося передати замовлення на точку' });
+    const detail = (e.response && e.response.body && e.response.body.description) || e.message;
+    console.error('Telegram error:', detail);
+    res.status(500).json({ error: 'Не вдалося передати замовлення на точку', detail });
   }
 });
 
@@ -231,5 +251,13 @@ function sendSms(o) {
   console.log('[SMS →', o.tel + ']', text);
   // TODO: fetch('https://api.turbosms.ua/message/send.json', {...})
 }
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    ok: true,
+    shops: SHOPS.map((name, i) => ({ i: i + 1, name, connected: !!db.shops[i] })),
+    orders: Object.keys(db.orders).length
+  });
+});
 
 app.listen(PORT, () => console.log('Сервер працює на порту', PORT));
