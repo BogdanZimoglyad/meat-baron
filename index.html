@@ -468,6 +468,25 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .sr-map svg{width:17px;height:17px}
 .sr-map span{font-size:10.5px}
 .sr-map:hover{color:var(--ember-hot);background:rgba(196,52,42,.08)}
+/* мої замовлення */
+.hist-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+  border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;font-size:13px;
+  color:var(--bone);transition:.14s;margin-top:10px}
+.hist-btn svg{width:16px;height:16px;color:var(--ember-hot)}
+.hist-btn:hover{border-color:var(--ember);background:rgba(196,52,42,.08)}
+.hist-wide{margin-top:16px;padding:13px;font-size:14px}
+.ho{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:12px 13px;margin-bottom:9px}
+.ho-h{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:7px}
+.ho-h b{font-weight:500;font-size:14px}
+.ho-st{font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(196,52,42,.16);color:var(--ember-hot)}
+.ho-st.done{background:rgba(123,168,79,.16);color:var(--ok)}
+.ho-d{font-size:11.5px;color:var(--smoke);margin-left:auto}
+.ho-l{font-size:12.5px;color:var(--smoke);line-height:1.55}
+.ho-f{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;
+  padding-top:10px;border-top:1px solid var(--line)}
+.ho-sum{font-family:'Oswald';font-size:16px}
+.ho-again{background:var(--ember);color:#fff;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;transition:.14s}
+.ho-again:active{transform:scale(.96)}
 .pt-l{min-width:0}
 .pt-map{display:inline-flex;align-items:center;gap:4px;margin-top:3px;font-size:11.5px;
   color:var(--ember-hot);text-decoration:none}
@@ -589,6 +608,10 @@ body:has(.inst) .bar{bottom:66px}
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h10v9H3z"/><path d="M13 10h4l3 3.2V16h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg></span>
           <div><small>Отримання</small><b>Самовивіз і доставка</b></div>
         </div>
+        <button class="hist-btn" id="histBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/></svg>
+          Мої замовлення
+        </button>
         <a class="ig ig-sm" href="https://instagram.com/meat.baron_" target="_blank" rel="noopener">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
           @meat.baron_
@@ -607,6 +630,10 @@ body:has(.inst) .bar{bottom:66px}
     </a>
     <p class="pts-h" id="ptsH"></p>
     <div class="pts" id="pts"></div>
+    <button class="hist-btn hist-wide" id="histBtn2">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/></svg>
+      Мої замовлення
+    </button>
   </section>
 </main>
 
@@ -1578,6 +1605,7 @@ document.getElementById('shopName').textContent=SHOPS[shop][0];
   const m=document.getElementById('infoMap'); if(m) m.href=routeLink(SHOPS[shop][0]);
 })();
 renderCats();renderCatalog();syncScrollLock();
+['histBtn','histBtn2'].forEach(id=>{const b=document.getElementById(id); if(b) b.onclick=()=>openHistory()});
 
 /* ---------- активне замовлення ---------- */
 const LAST_KEY='mb-last-order';
@@ -1633,6 +1661,87 @@ async function openOrder(no){
     <a class="cta ghost" style="text-align:center;text-decoration:none;display:block"
        href="tel:${SHOPS[shop][1]||''}">Зателефонувати</a>
     <button class="cta" onclick="close_()">Зрозуміло</button>`);
+  }
+}
+
+/* ---------- мої замовлення ---------- */
+const TEL_KEY='mb-tel';
+function savedTel(){try{return localStorage.getItem(TEL_KEY)||''}catch(e){return ''}}
+function rememberTel(t){try{localStorage.setItem(TEL_KEY,t)}catch(e){}}
+
+function fmtDate(ts){
+  const d=new Date(ts), t=new Date(), y=new Date(); y.setDate(t.getDate()-1);
+  const hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  if(dayKey(d)===dayKey(t)) return 'сьогодні, '+hm;
+  if(dayKey(d)===dayKey(y)) return 'вчора, '+hm;
+  return d.getDate()+' '+MON[d.getMonth()]+', '+hm;
+}
+
+function openHistory(){
+  const tel=savedTel();
+  open(`<div class="grab-zone"><div class="grab"></div></div>
+  <div class="sh-h"><h3>Мої замовлення</h3><button class="x" onclick="close_()">✕</button></div>
+  <p class="hint" style="margin-top:-4px">Вкажіть номер, з якого робили замовлення.</p>
+  <input class="fld" id="hTel" placeholder="+380 __ ___ __ __" inputmode="tel" autocomplete="tel" value="${tel}">
+  <p class="err" id="hErr">Вкажіть коректний номер телефону.</p>
+  <button class="cta" id="hGo">Показати</button>
+  <div id="hList"></div>`);
+  bindPhone(sIn.querySelector('#hTel'));
+  const go=async()=>{
+    const el=sIn.querySelector('#hTel'), err=sIn.querySelector('#hErr'), box=sIn.querySelector('#hList');
+    const d=normPhone(el.value);
+    if(d.length<9){err.style.display='block';return}
+    err.style.display='none';
+    rememberTel(el.value);
+    box.innerHTML='<p class="hint" style="text-align:center;padding:14px 0">Шукаємо…</p>';
+    try{
+      const r=await req(API+'/api/history/'+d,null,10000);
+      const j=await r.json();
+      if(!j.orders||!j.orders.length){
+        box.innerHTML='<p class="hint" style="text-align:center;padding:18px 0">За цим номером замовлень не знайдено.</p>';
+        return;
+      }
+      box.innerHTML='<span class="lbl">Останні замовлення</span>'+j.orders.map(o=>`
+        <div class="ho">
+          <div class="ho-h">
+            <b>№ ${o.no}</b>
+            <span class="ho-st${o.status==='done'?' done':''}">${o.label||''}</span>
+            <span class="ho-d">${fmtDate(o.createdAt)}</span>
+          </div>
+          <div class="ho-l">${o.lines.map(l=>l.name+' · '+(l.unit==='шт'?l.g+' шт':l.unit==='пак'?l.g+' × 1 кг':wLabel(l.g))).join('<br>')}</div>
+          <div class="ho-f">
+            <span class="ho-sum">${money(o.total)}</span>
+            <button class="ho-again" data-again='${encodeURIComponent(JSON.stringify(o.lines))}'>Повторити</button>
+          </div>
+        </div>`).join('');
+      box.querySelectorAll('[data-again]').forEach(b=>b.onclick=()=>repeatOrder(JSON.parse(decodeURIComponent(b.dataset.again))));
+    }catch(e){
+      box.innerHTML='<p class="hint" style="text-align:center;padding:18px 0">Не вдалося завантажити. Спробуйте пізніше.</p>';
+    }
+  };
+  sIn.querySelector('#hGo').onclick=go;
+  sIn.querySelector('#hTel').addEventListener('keydown',e=>{if(e.key==='Enter')go()});
+  if(normPhone(tel).length===9) go();
+}
+
+function repeatOrder(lines){
+  let added=0, skipped=[];
+  lines.forEach(l=>{
+    const it=ITEMS.find(i=>i.id===l.id)||ITEMS.find(i=>i.name===l.name&&i.grp===l.grp);
+    if(!it){skipped.push(l.name);return}
+    const g=isCount(it)? Math.max(1,l.g) : Math.max(it.minG,l.g);
+    const ex=cart.find(c=>c.id===it.id);
+    if(ex) ex.g+=g;
+    else cart.push({id:it.id,name:it.name,grp:it.grp,price:it.price,unit:it.unit,cat:it.cat,minG:it.minG,g});
+    added++;
+  });
+  paintBar();
+  upsellShown=true;          // не набридаємо допродажем при повторі
+  openCart();
+  if(skipped.length){
+    const n=sIn.querySelector('#lines');
+    if(n) n.insertAdjacentHTML('beforebegin',
+      `<p class="cart-hint" style="color:var(--ember-hot)">Немає в наявності: ${skipped.join(', ')}</p>`);
   }
 }
 

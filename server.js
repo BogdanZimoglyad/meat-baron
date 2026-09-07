@@ -82,6 +82,13 @@ const NEXT_BTN = {
 };
 
 const money = n => (Math.round(n * 100) / 100).toFixed(2).replace('.00', '') + ' ₴';
+const normTel = t => {
+  let d = String(t || '').replace(/\D/g, '');
+  if (d.startsWith('380')) d = d.slice(3);
+  else if (d.startsWith('80')) d = d.slice(2);
+  else if (d.startsWith('0')) d = d.slice(1);
+  return d.slice(0, 9);
+};
 const esc = t => String(t == null ? '' : t)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const wLabel = g => (g >= 1000 ? (g / 1000).toFixed(g % 1000 ? 1 : 0) + ' кг' : g + ' г');
@@ -188,6 +195,7 @@ app.post('/api/order', async (req, res) => {
     pay: b.pay || 'cash',
     nm: b.nm,
     tel: b.tel,
+    telKey: normTel(b.tel),
     note: (b.note || '').slice(0, 400),
     when: (b.when || '').slice(0, 80),
     lines: b.lines,
@@ -218,6 +226,31 @@ app.get('/api/order/:no', (req, res) => {
   const o = db.orders[req.params.no];
   if (!o) return res.status(404).json({ error: 'Замовлення не знайдено' });
   res.json({ no: o.no, status: o.status, label: LABEL[o.status], total: o.total, mode: o.mode });
+});
+
+/* ---------- історія замовлень за номером ---------- */
+app.get('/api/history/:tel', (req, res) => {
+  const key = normTel(req.params.tel);
+  if (key.length < 9) return res.status(400).json({ error: 'Некоректний номер' });
+
+  const list = Object.values(db.orders)
+    .filter(o => (o.telKey || normTel(o.tel)) === key)
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 10)
+    .map(o => ({
+      no: o.no,
+      status: o.status,
+      label: LABEL[o.status],
+      createdAt: o.createdAt,
+      shopName: o.shopName,
+      mode: o.mode,
+      fry: o.fry,
+      total: o.total,
+      lines: o.lines,
+      nm: o.nm
+    }));
+
+  res.json({ ok: true, count: list.length, orders: list });
 });
 
 /* ---------- зміна статусу оператором ---------- */
