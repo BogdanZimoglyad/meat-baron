@@ -853,7 +853,9 @@ async function req(url,opts,ms){
   finally{ clearTimeout(t) }
 }
 let poll=null;
-const money=n=>n.toFixed(2).replace('.00','')+' ₴';
+/* округлення до копійки, стійке до похибок дробових чисел */
+const kop=n=>Math.round((n+Number.EPSILON)*100)/100;
+const money=n=>kop(n).toFixed(2).replace(/\.00$/,'')+' ₴';
 const wLabel=g=>g>=1000?(g/1000).toFixed(g%1000?1:0)+' кг':g+' г';
 /* заглушки: іконка за типом продукту + дим і силует бика */
 const GLYPH={
@@ -1207,9 +1209,9 @@ const minOf=l=>{
   return (it&&it.minG)||MIN_G;
 };
 function lineSum(l){
-  if(l.unit==='шт')  return l.price*l.g;                 // фікс. ціна за штуку
-  if(l.unit==='пак') return l.price*PACK_G/100*l.g;      // ціна за 100 г × 1 кг × к-сть
-  return l.price*l.g/100;                                // за вагою
+  if(l.unit==='шт')  return kop(l.price*l.g);                 // фікс. ціна за штуку
+  if(l.unit==='пак') return kop(l.price*PACK_G/100*l.g);      // ціна за 100 г × 1 кг × к-сть
+  return kop(l.price*l.g/100);                                // за вагою
 }
 function unitNote(it){
   if(it.unit==='шт')  return 'за штуку';
@@ -1221,7 +1223,7 @@ function lineQty(l){
   if(l.unit==='пак') return l.g+' × 1 кг';
   return wLabel(l.g);
 }
-function goodsTotal(){return cart.reduce((s,l)=>s+lineSum(l),0)}
+function goodsTotal(){return kop(cart.reduce((s,l)=>s+lineSum(l),0))}
 function fryGrams(){return cart.filter(l=>l.cat==='raw'||l.cat==='saus').reduce((s,l)=>s+l.g,0)}
 function paintBar(){
   const bar=document.getElementById('bar');
@@ -1246,7 +1248,7 @@ function openCart(){
     return;
   }
   const fg=fryGrams();
-  const fryCost=fg>=MIN_G? fg/1000*FRY_RATE : 0;
+  const fryCost=fg>=MIN_G? kop(fg/1000*FRY_RATE) : 0;
   open(`<div class="grab-zone"><div class="grab"></div></div><div class="sh-h"><h3>Кошик</h3><button class="x" onclick="close_()">✕</button></div>
   <div id="lines"></div>
 
@@ -1448,7 +1450,7 @@ function openCheckout(){
   let mode=getMode,fry=false,pay=getMode==='delivery'?'cash':'online';
   const fg=fryGrams();
   const draw=()=>{
-    const fryCost=fry?fg/1000*FRY_RATE:0, total=goodsTotal()+fryCost;
+    const fryCost=fry?kop(fg/1000*FRY_RATE):0, total=kop(goodsTotal()+fryCost);
     open(`<div class="grab-zone"><div class="grab"></div></div><div class="sh-h"><h3>Оформлення</h3><button class="x" onclick="close_()">✕</button></div>
 
     <span class="lbl">Спосіб отримання</span>
@@ -1572,7 +1574,7 @@ function openStatus(startStatus){
 
     <div class="box">
       ${o.lines.map(l=>`<div class="sum"><span>${l.name} · ${lineQty(l)}</span><span>${money(l.sum)}</span></div>`).join('')}
-      ${o.fry?`<div class="sum"><span>Смаження · ${wLabel(o.fg)}</span><span>${money(o.fg/1000*FRY_RATE)}</span></div>`:''}
+      ${o.fry?`<div class="sum"><span>Смаження · ${wLabel(o.fg)}</span><span>${money(kop(o.fg/1000*FRY_RATE))}</span></div>`:''}
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:10px;border-top:1px solid var(--line)">
         <span style="font-size:13px">Разом</span><b style="font-family:Oswald;font-size:21px">${money(o.total)}</b></div>
       <p class="hint">${o.mode==='delivery'?'Оператор зателефонує і уточнить вартість доставки. ':''}Остаточна сума може відрізнятись залежно від фактичної ваги.</p>

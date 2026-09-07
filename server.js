@@ -81,7 +81,9 @@ const NEXT_BTN = {
   done: []
 };
 
-const money = n => (Math.round(n * 100) / 100).toFixed(2).replace('.00', '') + ' ₴';
+const FRY_RATE = 50;                              // ₴ за кг смаження
+const kop = n => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+const money = n => kop(n).toFixed(2).replace(/\.00$/, '') + ' ₴';
 const normTel = t => {
   let d = String(t || '').replace(/\D/g, '');
   if (d.startsWith('380')) d = d.slice(3);
@@ -138,7 +140,7 @@ function orderText(o) {
   }).join('\n');
 
   const fry = o.fry
-    ? `\n🔥 СМАЖИТИ: ${wLabel(o.fg)} — ${money(o.fg / 1000 * 50)}\n   (ужарка 30–35%)`
+    ? `\n🔥 СМАЖИТИ: ${wLabel(o.fg)} — ${money(o.fg / 1000 * FRY_RATE)}\n   (ужарка 30–35%)`
     : '';
 
   const delivery = o.mode === 'delivery'
