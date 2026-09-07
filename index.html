@@ -757,6 +757,13 @@ const SHOPS_ALL=[
 ];
 const SHOPS=SHOPS_ALL.filter(s=>s[2]);
 const API='https://meat-baron-production.up.railway.app'; // сервер прийому замовлень
+/* запит із таймаутом — щоб на поганому звʼязку не висло назавжди */
+async function req(url,opts,ms){
+  const ctl=new AbortController();
+  const t=setTimeout(()=>ctl.abort(),ms||12000);
+  try{ return await fetch(url,{...(opts||{}),signal:ctl.signal}) }
+  finally{ clearTimeout(t) }
+}
 let poll=null;
 const money=n=>n.toFixed(2).replace('.00','')+' ₴';
 const wLabel=g=>g>=1000?(g/1000).toFixed(g%1000?1:0)+' кг':g+' г';
@@ -1407,7 +1414,7 @@ function openCheckout(){
       const payload={shop,shopName:SHOPS[shop][0],mode,addr,fry,fg,pay,total,nm,tel,note:orderNote,when:whenLabel(mode),lines:cart.map(l=>({...l,sum:lineSum(l)}))};
       btn.disabled=true;btn.textContent='Відправляємо…';
       try{
-        const r=await fetch(API+'/api/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const r=await req(API+'/api/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)},15000);
         const d=await r.json();
         if(!r.ok) throw new Error(d.error||'Помилка');
         order={...payload,no:d.no,shop:SHOPS[shop][0]};
@@ -1468,7 +1475,7 @@ function openStatus(startStatus){
   clearInterval(poll);
   if(o.no!=='—'){
     poll=setInterval(async()=>{
-      try{const r=await fetch(API+'/api/order/'+o.no);const d=await r.json();
+      try{const r=await req(API+'/api/order/'+o.no,null,8000);const d=await r.json();
         if(d.status){draw(d.status); if(d.status==='done'){clearInterval(poll);clearLast()} showActiveBar()}
       }catch(e){}
     },15000);
@@ -1501,7 +1508,7 @@ async function showActiveBar(){
   if(!v||!el) return;
   let st='accepted';
   try{
-    const r=await fetch(API+'/api/order/'+v.no);
+    const r=await req(API+'/api/order/'+v.no,null,8000);
     const d=await r.json();
     if(d.status) st=d.status;
   }catch(e){}
@@ -1516,7 +1523,7 @@ async function showActiveBar(){
 }
 async function openOrder(no){
   try{
-    const r=await fetch(API+'/api/order/'+no);
+    const r=await req(API+'/api/order/'+no,null,10000);
     const d=await r.json();
     if(!d.no) throw 0;
     const v=readLast()||{};
@@ -1560,7 +1567,7 @@ showActiveBar();
 let installEvt=null;
 window.addEventListener('beforeinstallprompt',e=>{
   e.preventDefault(); installEvt=e;
-  if(localStorage.getItem('mb-install-off'))return;
+  try{if(localStorage.getItem('mb-install-off'))return}catch(err){}
   const b=document.createElement('div');
   b.className='inst';
   b.innerHTML=`<div class="inst-b">
@@ -1568,7 +1575,7 @@ window.addEventListener('beforeinstallprompt',e=>{
     <button class="inst-y">Додати</button><button class="inst-n" aria-label="Закрити">✕</button></div>`;
   document.body.appendChild(b);
   b.querySelector('.inst-y').onclick=async()=>{b.remove();installEvt.prompt();installEvt=null};
-  b.querySelector('.inst-n').onclick=()=>{b.remove();localStorage.setItem('mb-install-off','1')};
+  b.querySelector('.inst-n').onclick=()=>{b.remove();try{localStorage.setItem('mb-install-off','1')}catch(err){}};
 });
 </script>
 </body>
