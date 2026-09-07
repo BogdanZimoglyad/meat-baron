@@ -1479,11 +1479,7 @@ window.close_=close;
 
 document.getElementById('shopName').textContent=SHOPS[shop][0];
 (function(){const e=document.getElementById('infoShop'); if(e) e.textContent=SHOPS[shop][0];})();
-renderCats();renderCatalog();syncScrollLock();showActiveBar();
-(function(){
-  const q=new URLSearchParams(location.search).get('order');
-  if(q) openOrder(q);
-})();
+renderCats();renderCatalog();syncScrollLock();
 
 /* ---------- активне замовлення ---------- */
 const LAST_KEY='mb-last-order';
@@ -1546,6 +1542,13 @@ if('serviceWorker' in navigator){
     }).catch(()=>{});
   });
 }
+/* стартуємо після того, як усе оголошено */
+showActiveBar();
+(function(){
+  const q=new URLSearchParams(location.search).get('order');
+  if(q) openOrder(q);
+})();
+
 let installEvt=null;
 window.addEventListener('beforeinstallprompt',e=>{
   e.preventDefault(); installEvt=e;
