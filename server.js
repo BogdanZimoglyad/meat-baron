@@ -28,7 +28,7 @@ if (!BOT_TOKEN) {
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '64kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* ---------- зберігання ---------- */
@@ -161,12 +161,50 @@ function keyboard(o) {
   return { inline_keyboard: btns };
 }
 
+/* ---------- захист від напливу замовлень ---------- */
+const hits = new Map();                       // ip → [часи запитів]
+const RATE_WINDOW = 10 * 60 * 1000;           // вікно 10 хвилин
+const RATE_MAX = 5;                           // не більше 5 замовлень з однієї адреси
+function tooOften(ip) {
+  const now = Date.now();
+  const list = (hits.get(ip) || []).filter(t => now - t < RATE_WINDOW);
+  list.push(now);
+  hits.set(ip, list);
+  if (hits.size > 5000) hits.clear();         // щоб не росло безмежно
+  return list.length > RATE_MAX;
+}
+
 /* ---------- приймання замовлення з сайту ---------- */
 app.post('/api/order', async (req, res) => {
   const b = req.body || {};
-  if (!b.nm || !b.tel || !Array.isArray(b.lines) || !b.lines.length) {
-    return res.status(400).json({ error: 'Некоректні дані замовлення' });
+
+  const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+           || req.socket.remoteAddress || 'unknown';
+  if (tooOften(ip)) {
+    return res.status(429).json({ error: 'Забагато замовлень поспіль. Зачекайте кілька хвилин.' });
   }
+
+  const nm = String(b.nm || '').trim().slice(0, 60);
+  const telKey = normTel(b.tel);
+  if (nm.length < 2 || telKey.length !== 9) {
+    return res.status(400).json({ error: 'Вкажіть імʼя та коректний номер телефону' });
+  }
+  if (!Array.isArray(b.lines) || !b.lines.length || b.lines.length > 40) {
+    return res.status(400).json({ error: 'Некоректний склад замовлення' });
+  }
+  const total = Number(b.total);
+  if (!Number.isFinite(total) || total <= 0 || total > 200000) {
+    return res.status(400).json({ error: 'Некоректна сума замовлення' });
+  }
+  // чистимо позиції від зайвого
+  const lines = b.lines.slice(0, 40).map(l => ({
+    name: String(l.name || '').slice(0, 80),
+    unit: ['шт', 'пак', 'вага'].includes(l.unit) ? l.unit : 'вага',
+    g: Math.max(0, Math.min(Number(l.g) || 0, 20000)),
+    id: String(l.id || '').slice(0, 12),
+    grp: String(l.grp || '').slice(0, 40),
+    sum: Math.max(0, Number(l.sum) || 0)
+  }));
 
   let shopIndex = Number.isInteger(b.shop) ? b.shop : 0;
   if (b.shopName) {
@@ -189,17 +227,17 @@ app.post('/api/order', async (req, res) => {
     shop: shopIndex,
     shopName: SHOPS[shopIndex],
     mode: b.mode === 'delivery' ? 'delivery' : 'pickup',
-    addr: b.addr || '',
+    addr: String(b.addr || '').slice(0, 200),
     fry: !!b.fry,
-    fg: b.fg || 0,
-    pay: b.pay || 'cash',
-    nm: b.nm,
-    tel: b.tel,
-    telKey: normTel(b.tel),
-    note: (b.note || '').slice(0, 400),
-    when: (b.when || '').slice(0, 80),
-    lines: b.lines,
-    total: b.total,
+    fg: Math.max(0, Math.min(Number(b.fg) || 0, 40000)),
+    pay: ['online','cash','card'].includes(b.pay) ? b.pay : 'cash',
+    nm,
+    tel: '+380' + telKey,
+    telKey,
+    note: String(b.note || '').slice(0, 400),
+    when: String(b.when || '').slice(0, 80),
+    lines,
+    total,
     createdAt: Date.now()
   };
   db.orders[no] = o;
@@ -233,8 +271,12 @@ app.get('/api/history/:tel', (req, res) => {
   const key = normTel(req.params.tel);
   if (key.length < 9) return res.status(400).json({ error: 'Некоректний номер' });
 
+  /* Навмисно не віддаємо імʼя та адресу — щоб за чужим номером
+     не можна було дізнатися особисті дані. Лише склад для повтору. */
+  const MAX_AGE = 60 * 24 * 3600 * 1000;   // 60 днів
   const list = Object.values(db.orders)
     .filter(o => (o.telKey || normTel(o.tel)) === key)
+    .filter(o => Date.now() - (o.createdAt || 0) < MAX_AGE)
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 10)
     .map(o => ({
@@ -246,8 +288,7 @@ app.get('/api/history/:tel', (req, res) => {
       mode: o.mode,
       fry: o.fry,
       total: o.total,
-      lines: o.lines,
-      nm: o.nm
+      lines: Array.isArray(o.lines) ? o.lines : []
     }));
 
   res.json({ ok: true, count: list.length, orders: list });

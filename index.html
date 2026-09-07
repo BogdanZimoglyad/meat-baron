@@ -1527,7 +1527,14 @@ function openCheckout(){
         if(!r.ok) throw new Error(d.error||'Помилка');
         order={...payload,no:d.no,shop:SHOPS[shop][0]};
       }catch(err){
-        order={...payload,no:'—',shop:SHOPS[shop][0],offline:err.message};
+        const msg=String(err&&err.message||'');
+        if(/Забагато/.test(msg)){
+          btn.disabled=false; btn.textContent='Підтвердити замовлення';
+          const e=sIn.querySelector('#err');
+          if(e){e.textContent=msg;e.style.display='block'}
+          return;
+        }
+        order={...payload,no:'—',shop:SHOPS[shop][0],offline:msg};
       }
       cart=[];upsellShown=false;orderNote='';paintBar();
       if(order.no!=='—'){order.lines=payload.lines;saveLast(order)}
@@ -1708,10 +1715,10 @@ function openHistory(){
             <span class="ho-st${o.status==='done'?' done':''}">${o.label||''}</span>
             <span class="ho-d">${fmtDate(o.createdAt)}</span>
           </div>
-          <div class="ho-l">${o.lines.map(l=>l.name+' · '+(l.unit==='шт'?l.g+' шт':l.unit==='пак'?l.g+' × 1 кг':wLabel(l.g))).join('<br>')}</div>
+          <div class="ho-l">${(o.lines||[]).map(l=>l.name+' · '+(l.unit==='шт'?l.g+' шт':l.unit==='пак'?l.g+' × 1 кг':wLabel(l.g))).join('<br>')}</div>
           <div class="ho-f">
             <span class="ho-sum">${money(o.total)}</span>
-            <button class="ho-again" data-again='${encodeURIComponent(JSON.stringify(o.lines))}'>Повторити</button>
+            <button class="ho-again" ${(o.lines||[]).length?'':'disabled'} data-again='${encodeURIComponent(JSON.stringify(o.lines||[]))}'>Повторити</button>
           </div>
         </div>`).join('');
       box.querySelectorAll('[data-again]').forEach(b=>b.onclick=()=>repeatOrder(JSON.parse(decodeURIComponent(b.dataset.again))));
