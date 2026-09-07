@@ -32,6 +32,7 @@
 html{background:var(--char)}
 html,body{margin:0;padding:0;overflow-x:hidden;min-height:100%}
 html{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+body{overflow-wrap:anywhere;word-break:normal}
 html::before{
   content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
   background:url('smoke-bg.jpg') center/cover no-repeat;
@@ -257,7 +258,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .ln-th{width:44px;height:44px;border-radius:8px;background:var(--coal-2);flex:0 0 auto;display:grid;place-items:center;overflow:hidden}
 .ln-th img{width:100%;height:100%;object-fit:cover;display:block}
 .ln-th svg{width:20px;height:20px;opacity:.3}
-.ln-b{flex:1;min-width:0}
+.ln-b{flex:1;min-width:0;overflow:hidden}
 .ln-b .nm{font-size:13.5px;font-weight:500}
 .ln-b .un{font-size:11.5px;color:var(--smoke)}
 .qty{display:flex;align-items:center;gap:9px}
@@ -563,12 +564,12 @@ body:has(.inst) .bar{bottom:66px}
       <button class="mb-btn" data-gm="pickup" aria-pressed="true">
         <span class="mb-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5V20h16V9.5"/><path d="M3 9.5 5 4h14l2 5.5a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M10 20v-5h4v5"/></svg></span>
         <span class="mb-t">Самовивіз</span>
-        <span class="mb-s">з точки на вибір</span>
+        <span class="mb-s">з обраної точки</span>
       </button>
       <button class="mb-btn" data-gm="delivery" aria-pressed="false">
         <span class="mb-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h10v9H3z"/><path d="M13 10h4l3 3.2V16h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg></span>
         <span class="mb-t">Доставка</span>
-        <span class="mb-s">вартість уточнить оператор</span>
+        <span class="mb-s">вартість уточнимо</span>
       </button>
     </div>
 
@@ -1212,7 +1213,7 @@ function lineSum(l){
 }
 function unitNote(it){
   if(it.unit==='шт')  return 'за штуку';
-  if(it.unit==='пак') return `за 100 г · упаковка 1 кг = ${money(it.price*PACK_G/100)}`;
+  if(it.unit==='пак') return `упаковка 1 кг — ${money(it.price*PACK_G/100)}`;
   return 'за 100 г';
 }
 function lineQty(l){
