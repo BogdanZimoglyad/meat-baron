@@ -452,6 +452,22 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .ready-note b{display:block;font-weight:600;font-size:14.5px;color:var(--bone)}
 .ready-note span span,.ready-note>span{line-height:1.4}
 .ready-note>span span{font-size:12.5px;color:var(--smoke)}
+/* вибір точки */
+.shop-list{display:flex;flex-direction:column;gap:8px;margin-bottom:4px}
+.shop-row{display:flex;align-items:stretch;gap:8px;border:1px solid var(--line-2);
+  border-radius:11px;overflow:hidden;background:var(--coal);transition:.14s}
+.shop-row.on{border-color:var(--ember);background:rgba(196,52,42,.1)}
+.shop-pick{flex:1;min-width:0;display:flex;align-items:center;gap:10px;text-align:left;padding:12px 4px 12px 13px}
+.sr-t{min-width:0;line-height:1.35}
+.sr-t b{display:block;font-weight:500;font-size:14px}
+.sr-t span{display:block;font-size:12px;color:var(--smoke)}
+.shop-row.on .dot{border-color:var(--ember)}
+.shop-row.on .dot::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--ember)}
+.sr-map{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  padding:0 14px;color:var(--smoke);text-decoration:none;border-left:1px solid var(--line);transition:.14s}
+.sr-map svg{width:17px;height:17px}
+.sr-map span{font-size:10.5px}
+.sr-map:hover{color:var(--ember-hot);background:rgba(196,52,42,.08)}
 .pt-l{min-width:0}
 .pt-map{display:inline-flex;align-items:center;gap:4px;margin-top:3px;font-size:11.5px;
   color:var(--ember-hot);text-decoration:none}
@@ -1033,8 +1049,21 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
 
 /* ---------- shop picker ---------- */
 function pickShopSheet(back){
-  open(`<div class="grab-zone"><div class="grab"></div></div><div class="sh-h"><h3>Оберіть точку</h3><button class="x" onclick="close_()">✕</button></div>
-  ${SHOPS.map((s,i)=>`<button class="pay" aria-pressed="${i===shop}" data-s="${i}"><span class="dot"></span>${s[0]}</button>`).join('')}`);
+  open(`<div class="grab-zone"><div class="grab"></div></div>
+  <div class="sh-h"><h3>Оберіть точку</h3><button class="x" onclick="close_()">✕</button></div>
+  <div class="shop-list">
+  ${SHOPS.map((s,i)=>`
+    <div class="shop-row${i===shop?' on':''}">
+      <button class="shop-pick" data-s="${i}">
+        <span class="dot"></span>
+        <span class="sr-t"><b>${s[0]}</b>${s[1]?`<span>${s[1].replace('+38','')}</span>`:''}</span>
+      </button>
+      <a class="sr-map" href="${mapLink(s[0])}" target="_blank" rel="noopener" aria-label="Показати ${s[0]} на карті">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>
+        <span>Карта</span>
+      </a>
+    </div>`).join('')}
+  </div>`);
   sIn.onclick=e=>{const b=e.target.closest('[data-s]');if(!b)return;
     shop=+b.dataset.s;
     document.getElementById('shopName').textContent=SHOPS[shop][0];
