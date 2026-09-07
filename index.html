@@ -393,17 +393,30 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .cart-note{resize:none;line-height:1.5;font-size:16px}
 
 /* вибір дати й часу */
-.days{display:flex;gap:7px;overflow-x:auto;padding:0 0 12px;scrollbar-width:none;
-  -webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
-.days::-webkit-scrollbar{display:none}
-.day{flex:0 0 auto;border:1px solid var(--line-2);border-radius:999px;padding:8px 14px;
-  font-size:13px;color:var(--smoke);white-space:nowrap;transition:.14s;background:var(--coal)}
-.day[aria-pressed=true]{background:var(--ember);border-color:var(--ember);color:#fff;font-weight:500}
-.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px;margin-bottom:4px}
-.slot{border:1px solid var(--line-2);border-radius:10px;padding:11px 6px;font-size:13.5px;
-  color:var(--smoke);transition:.14s;background:var(--coal)}
-.slot[aria-pressed=true]{background:rgba(196,52,42,.14);border-color:var(--ember);color:var(--ember-hot);font-weight:500}
-.asap{margin-bottom:2px}
+.asap-btn{display:flex;align-items:center;gap:11px;width:100%;text-align:left;
+  border:1px solid var(--line-2);background:var(--coal);border-radius:12px;padding:12px;transition:.14s}
+.asap-btn[aria-pressed=true]{border-color:var(--ember);background:rgba(196,52,42,.12)}
+.bolt{width:32px;height:32px;border-radius:50%;background:var(--coal-2);color:var(--smoke);
+  display:grid;place-items:center;flex:0 0 auto;transition:.14s}
+.bolt svg{width:17px;height:17px}
+.asap-btn[aria-pressed=true] .bolt{background:var(--ember);color:#fff}
+.asap-t{flex:1;min-width:0;line-height:1.35}
+.asap-t b{display:block;font-weight:500;font-size:14px}
+.asap-t span{display:block;font-size:12px;color:var(--smoke)}
+.asap-tick{flex:0 0 auto;color:var(--ember-hot);font-size:15px;opacity:0;transition:.14s}
+.asap-btn[aria-pressed=true] .asap-tick{opacity:1}
+
+.wheel{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:4px}
+.wcol{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:6px;
+  height:196px;overflow-y:auto;scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  -webkit-mask-image:linear-gradient(transparent,#000 14px,#000 calc(100% - 14px),transparent);
+  mask-image:linear-gradient(transparent,#000 14px,#000 calc(100% - 14px),transparent)}
+.wcol::-webkit-scrollbar{display:none}
+.wi{display:block;width:100%;padding:11px 6px;border-radius:9px;font-size:13.5px;
+  color:var(--smoke);text-align:center;transition:.12s;white-space:nowrap}
+.wi:hover{color:var(--bone)}
+.wi[aria-pressed=true]{background:var(--ember);color:#fff;font-weight:600}
 
 :focus-visible{outline:2px solid var(--ember-hot);outline-offset:2px}
 .up-scroll{max-height:52vh;max-height:52dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;margin:0 -4px 14px;padding:0 4px;
@@ -897,7 +910,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
 /* ---------- тягнемо шторку вниз ---------- */
 (function(){
   let y0=0, dy=0, dragging=false, may=false;
-  const noDrag=el=>el.closest('input,select,textarea,.up-scroll,.wgrid,.seg,#lines,.pay,.wbox,.rowline,.cart-note');
+  const noDrag=el=>el.closest('input,select,textarea,.up-scroll,.wgrid,.seg,#lines,.pay,.wbox,.rowline,.cart-note,.wcol,.wheel');
   const start=e=>{
     const t=e.touches?e.touches[0]:e;
     if(noDrag(e.target)) return;
@@ -1233,19 +1246,31 @@ function pickTimeSheet(mode,back){
   }
   let sel=pickWhen? days.findIndex(d=>dayKey(d)===dayKey(new Date(pickWhen.day))) : 0;
   if(sel<0) sel=0;
+  const lead=Math.round((mode==='delivery'?LEAD_DELIVERY:LEAD_PICKUP)/60*10)/10;
+
   const draw=()=>{
     const d=days[sel], list=slotsFor(d,mode);
     sIn.innerHTML=`<div class="grab-zone"><div class="grab"></div></div>
     <div class="sh-h"><h3>Коли забрати</h3><button class="x" onclick="close_()">✕</button></div>
-    <button class="pay asap" data-asap="1" aria-pressed="${!pickWhen}">
-      <span class="dot"></span>Якнайшвидше — орієнтовно з ${String(earliest(mode).getHours()).padStart(2,'0')}:00</button>
+
+    <button class="asap-btn" data-asap="1" aria-pressed="${!pickWhen}">
+      <span class="bolt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M13 3 5.5 13.5H11l-1 7.5L18.5 10H13z"/></svg></span>
+      <span class="asap-t"><b>Якнайшвидше</b><span>орієнтовно з ${String(earliest(mode).getHours()).padStart(2,'0')}:00</span></span>
+      <span class="asap-tick">✓</span>
+    </button>
+
     <span class="lbl">Або оберіть день і час</span>
-    <div class="days">${days.map((x,i)=>`<button class="day" data-d="${i}" aria-pressed="${i===sel}">${dayLabel(x)}</button>`).join('')}</div>
-    <div class="slots">${list.map(s=>{
-      const on=pickWhen&&pickWhen.h===s.h&&dayKey(new Date(pickWhen.day))===dayKey(d);
-      return `<button class="slot" data-h="${s.h}" aria-pressed="${!!on}">${s.label}</button>`}).join('')}</div>
-    <p class="hint">Готуємо ${mode==='delivery'?'і доставляємо ':''}від ${Math.round((mode==='delivery'?LEAD_DELIVERY:LEAD_PICKUP)/60*10)/10} год. Мангал працює з ${GRILL_FROM}:00 до ${SHOP_CLOSE}:00.</p>
+    <div class="wheel">
+      <div class="wcol" id="wDays">${days.map((x,i)=>
+        `<button class="wi" data-d="${i}" aria-pressed="${i===sel}">${dayLabel(x)}</button>`).join('')}</div>
+      <div class="wcol" id="wSlots">${list.map(sl=>{
+        const on=pickWhen&&pickWhen.h===sl.h&&dayKey(new Date(pickWhen.day))===dayKey(d);
+        return `<button class="wi" data-h="${sl.h}" aria-pressed="${!!on}">${sl.label}</button>`}).join('')}</div>
+    </div>
+
+    <p class="hint">Готуємо ${mode==='delivery'?'і доставляємо ':''}від ${lead} год. Мангал працює з ${GRILL_FROM}:00 до ${SHOP_CLOSE}:00.</p>
     <button class="cta" id="whenOk">Готово</button>`;
+
     sIn.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{sel=+b.dataset.d;draw()});
     sIn.querySelector('[data-asap]').onclick=()=>{pickWhen=null;draw()};
     sIn.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>{
@@ -1254,6 +1279,14 @@ function pickTimeSheet(mode,back){
       draw();
     });
     sIn.querySelector('#whenOk').onclick=()=>{ back? back() : close() };
+    // підкручуємо стовпці до обраного
+    requestAnimationFrame(()=>{
+      ['#wDays','#wSlots'].forEach(id=>{
+        const col=sIn.querySelector(id); if(!col) return;
+        const on=col.querySelector('[aria-pressed=true]');
+        if(on) col.scrollTop=Math.max(0,on.offsetTop-col.clientHeight/2+on.offsetHeight/2);
+      });
+    });
   };
   open('');draw();
 }
