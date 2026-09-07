@@ -732,7 +732,7 @@ const SHOPS_ALL=[
  ['пр-т Аерокосмічний 316е','',0],['вул. Холодногірська 3','',0]
 ];
 const SHOPS=SHOPS_ALL.filter(s=>s[2]);
-const API=''; // '' = той самий домен. Для локального тесту: 'http://localhost:3000'
+const API='https://meat-baron-production.up.railway.app'; // сервер прийому замовлень
 let poll=null;
 const money=n=>n.toFixed(2).replace('.00','')+' ₴';
 const wLabel=g=>g>=1000?(g/1000).toFixed(g%1000?1:0)+' кг':g+' г';
