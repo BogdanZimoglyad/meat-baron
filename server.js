@@ -117,12 +117,14 @@ function orderText(o) {
     : `\n🏪 САМОВИВІЗ: ${o.shopName}`;
 
   const pay = { online: '💳 Оплачено онлайн', cash: '💵 Готівкою', card: '💳 Карткою на місці' }[o.pay] || o.pay;
+  const when = o.when ? `\n🕒 <b>${o.when}</b>` : '';
 
   return `<b>Замовлення № ${o.no}</b> — ${LABEL[o.status]}\n` +
-    `${delivery}\n${pay}\n\n${lines}${fry}\n\n` +
+    `${delivery}${when}\n${pay}\n\n${lines}${fry}\n\n` +
     `<b>Разом: ${money(o.total)}</b>\n` +
     `<i>Сума орієнтовна — залежить від фактичної ваги</i>\n\n` +
-    `👤 ${o.nm}\n📞 ${o.tel}`;
+    `👤 ${o.nm}\n📞 ${o.tel}` +
+    (o.note ? `\n\n💬 <b>Коментар:</b> ${o.note}` : '');
 }
 
 function keyboard(o) {
@@ -162,6 +164,8 @@ app.post('/api/order', async (req, res) => {
     pay: b.pay || 'cash',
     nm: b.nm,
     tel: b.tel,
+    note: (b.note || '').slice(0, 400),
+    when: (b.when || '').slice(0, 80),
     lines: b.lines,
     total: b.total,
     createdAt: Date.now()
