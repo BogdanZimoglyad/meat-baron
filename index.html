@@ -419,6 +419,27 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .wi:hover{color:var(--bone)}
 .wi[aria-pressed=true]{background:var(--ember);color:#fff;font-weight:600}
 
+/* активне замовлення */
+.active-bar{margin-top:14px}
+.active-bar[hidden]{display:none}
+.act-in{display:flex;align-items:center;gap:11px;width:100%;text-align:left;
+  background:rgba(196,52,42,.12);border:1px solid rgba(196,52,42,.4);border-radius:12px;
+  padding:12px 14px;transition:.14s}
+.act-in:hover{background:rgba(196,52,42,.18)}
+.act-dot{width:9px;height:9px;border-radius:50%;background:var(--ember-hot);flex:0 0 auto;
+  box-shadow:0 0 0 0 rgba(224,74,60,.6);animation:actpulse 2s ease-out infinite}
+@keyframes actpulse{
+  0%{box-shadow:0 0 0 0 rgba(224,74,60,.55)}
+  70%{box-shadow:0 0 0 9px rgba(224,74,60,0)}
+  100%{box-shadow:0 0 0 0 rgba(224,74,60,0)}
+}
+.act-t{flex:1;min-width:0;line-height:1.35}
+.act-t b{display:block;font-weight:500;font-size:14px}
+.act-t span{display:block;font-size:12px;color:var(--smoke);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.act-go{flex:0 0 auto;font-size:12.5px;color:var(--ember-hot)}
+.ord-link{margin:14px 0 0;font-size:12px;color:var(--smoke);line-height:1.6;text-align:center}
+.lnk-copy{font-size:12.5px;color:var(--ember-hot);text-decoration:underline;padding:4px}
+
 :focus-visible{outline:2px solid var(--ember-hot);outline-offset:2px}
 .up-scroll{max-height:52vh;max-height:52dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;margin:0 -4px 14px;padding:0 4px;
   display:grid;gap:8px;align-content:start;
@@ -475,6 +496,8 @@ body:has(.inst) .bar{bottom:66px}
     <h1><span>Найвигідніший шашлик</span>твого міста</h1>
     <p>Свіже мариноване мʼясо, ковбаски власного виробництва та мʼясо зі смокеру. Заберете сирим — або посмажимо на мангалі.</p>
   </section>
+
+  <div class="active-bar" id="active" hidden></div>
 
   <div class="layout">
 
@@ -1206,29 +1229,42 @@ function dayLabel(d){
   if(dayKey(d)===dayKey(tm)) return 'Завтра';
   return DAY_NAMES[d.getDay()]+', '+d.getDate()+' '+MON[d.getMonth()];
 }
-/* найраніший можливий час з урахуванням підготовки */
+/* найраніший можливий час з урахуванням підготовки і графіка роботи */
 function earliest(mode){
   const lead=mode==='delivery'?LEAD_DELIVERY:LEAD_PICKUP;
   const t=new Date(Date.now()+lead*60000);
-  t.setMinutes(t.getMinutes()>0?60:0,0,0);   // округлюємо вгору до години
+  t.setMinutes(0,0,0);   // слот — це година на видачу, тож округлюємо вниз
+  // до відкриття мангала — чекаємо на нього
+  if(t.getHours()<GRILL_FROM) t.setHours(GRILL_FROM,0,0,0);
+  // після останньої видачі — переносимо на завтра
+  if(t.getHours()>=SHOP_CLOSE){
+    t.setDate(t.getDate()+1);
+    t.setHours(GRILL_FROM,0,0,0);
+  }
   return t;
+}
+/* підпис для «якнайшвидше»: з датою, якщо це вже не сьогодні */
+function asapLabel(mode){
+  const e=earliest(mode);
+  const h=String(e.getHours()).padStart(2,'0')+':00';
+  return dayKey(e)===dayKey(new Date()) ? 'орієнтовно з '+h
+       : dayLabel(e).toLowerCase()+', орієнтовно з '+h;
 }
 /* слоти на конкретний день */
 function slotsFor(d,mode){
   const out=[], e=earliest(mode);
-  const sameDay=dayKey(d)===dayKey(new Date());
+  const sameDay=dayKey(d)===dayKey(e);
   let h=Math.max(GRILL_FROM, sameDay? e.getHours():GRILL_FROM);
   for(; h<SHOP_CLOSE; h+=SLOT_STEP/60){
     const from=new Date(d); from.setHours(h,0,0,0);
-    if(sameDay && from<e) continue;
+    if(from<e) continue;
     const to=Math.min(h+1,SHOP_CLOSE);
     out.push({h,label:String(h).padStart(2,'0')+':00–'+String(to).padStart(2,'0')+':00'});
   }
   return out;
 }
 function whenLabel(mode){
-  if(!pickWhen) return 'Якнайшвидше · орієнтовно з '+
-    String(earliest(mode).getHours()).padStart(2,'0')+':00';
+  if(!pickWhen) return 'Якнайшвидше · '+asapLabel(mode);
   const d=new Date(pickWhen.day);
   return dayLabel(d)+' · '+pickWhen.label;
 }
@@ -1256,7 +1292,7 @@ function pickTimeSheet(mode,back){
 
     <button class="asap-btn" data-asap="1" aria-pressed="${!pickWhen}">
       <span class="bolt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M13 3 5.5 13.5H11l-1 7.5L18.5 10H13z"/></svg></span>
-      <span class="asap-t"><b>Якнайшвидше</b><span>орієнтовно з ${String(earliest(mode).getHours()).padStart(2,'0')}:00</span></span>
+      <span class="asap-t"><b>Якнайшвидше</b><span>${asapLabel(mode)}</span></span>
       <span class="asap-tick">✓</span>
     </button>
 
@@ -1378,14 +1414,16 @@ function openCheckout(){
       }catch(err){
         order={...payload,no:'—',shop:SHOPS[shop][0],offline:err.message};
       }
-      cart=[];upsellShown=false;orderNote='';paintBar();openStatus();
+      cart=[];upsellShown=false;orderNote='';paintBar();
+      if(order.no!=='—'){order.lines=payload.lines;saveLast(order)}
+      openStatus();
     };
   };
   draw();
 }
 
 /* ---------- status ---------- */
-function openStatus(){
+function openStatus(startStatus){
   const o=order;
   const STK=['accepted','cooking','ready','done'];
   const draw=(status)=>{
@@ -1413,17 +1451,25 @@ function openStatus(){
       <p class="hint">${o.mode==='delivery'?'Оператор зателефонує і уточнить вартість доставки. ':''}Остаточна сума може відрізнятись залежно від фактичної ваги.</p>
     </div>
 
+    <p class="ord-link">Посилання на замовлення можна зберегти або переслати:<br>
+      <button class="lnk-copy" id="copyLink">Скопіювати посилання</button></p>
     <div class="two">
       <a class="cta ghost" style="text-align:center;text-decoration:none;display:block" href="tel:${SHOPS[shop][1]||''}">Зателефонувати</a>
       <button class="cta ghost" onclick="close_()">Готово</button>
     </div>`;
+    const cp=sIn.querySelector('#copyLink');
+    if(cp) cp.onclick=async()=>{
+      const url=location.origin+location.pathname+'?order='+o.no;
+      try{await navigator.clipboard.writeText(url);cp.textContent='Скопійовано ✓'}
+      catch(e){cp.textContent=url}
+    };
   };
-  open('');draw('accepted');
+  open('');draw(startStatus||'accepted');
   clearInterval(poll);
   if(o.no!=='—'){
     poll=setInterval(async()=>{
       try{const r=await fetch(API+'/api/order/'+o.no);const d=await r.json();
-        if(d.status){draw(d.status); if(d.status==='done')clearInterval(poll)}
+        if(d.status){draw(d.status); if(d.status==='done'){clearInterval(poll);clearLast()} showActiveBar()}
       }catch(e){}
     },15000);
   }
@@ -1433,7 +1479,58 @@ window.close_=close;
 
 document.getElementById('shopName').textContent=SHOPS[shop][0];
 (function(){const e=document.getElementById('infoShop'); if(e) e.textContent=SHOPS[shop][0];})();
-renderCats();renderCatalog();syncScrollLock();
+renderCats();renderCatalog();syncScrollLock();showActiveBar();
+(function(){
+  const q=new URLSearchParams(location.search).get('order');
+  if(q) openOrder(q);
+})();
+
+/* ---------- активне замовлення ---------- */
+const LAST_KEY='mb-last-order';
+function saveLast(o){
+  try{localStorage.setItem(LAST_KEY,JSON.stringify({no:o.no,shop:o.shop,total:o.total,when:o.when,at:Date.now()}))}catch(e){}
+}
+function clearLast(){try{localStorage.removeItem(LAST_KEY)}catch(e){}}
+function readLast(){
+  try{
+    const v=JSON.parse(localStorage.getItem(LAST_KEY)||'null');
+    if(!v||!v.no||v.no==='—') return null;
+    if(Date.now()-v.at > 36*3600*1000){clearLast();return null}   // старше 36 год — забуваємо
+    return v;
+  }catch(e){return null}
+}
+const ST_LABEL={accepted:'Прийнято',cooking:'Готується',ready:'Готове',done:'Видано'};
+async function showActiveBar(){
+  const v=readLast(); const el=document.getElementById('active');
+  if(!v||!el) return;
+  let st='accepted';
+  try{
+    const r=await fetch(API+'/api/order/'+v.no);
+    const d=await r.json();
+    if(d.status) st=d.status;
+  }catch(e){}
+  if(st==='done'){clearLast();el.hidden=true;return}
+  el.hidden=false;
+  el.innerHTML=`<button class="act-in" id="actOpen">
+    <span class="act-dot"></span>
+    <span class="act-t"><b>Замовлення № ${v.no} · ${ST_LABEL[st]||'Прийнято'}</b>
+    <span>${v.shop}${v.when?' · '+v.when:''}</span></span>
+    <span class="act-go">Стежити</span></button>`;
+  el.querySelector('#actOpen').onclick=()=>openOrder(v.no);
+}
+async function openOrder(no){
+  try{
+    const r=await fetch(API+'/api/order/'+no);
+    const d=await r.json();
+    if(!d.no) throw 0;
+    const v=readLast()||{};
+    order={no:d.no,shop:v.shop||SHOPS[shop][0],when:v.when||'',total:d.total,mode:d.mode||'pickup',
+           fry:false,fg:0,lines:v.lines||[]};
+    openStatus(d.status);
+  }catch(e){
+    alert('Не вдалося отримати статус замовлення. Спробуйте пізніше.');
+  }
+}
 
 /* ---------- PWA ---------- */
 if('serviceWorker' in navigator){
