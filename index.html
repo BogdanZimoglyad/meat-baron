@@ -1524,7 +1524,15 @@ async function openOrder(no){
            fry:false,fg:0,lines:v.lines||[]};
     openStatus(d.status);
   }catch(e){
-    alert('Не вдалося отримати статус замовлення. Спробуйте пізніше.');
+    clearLast();
+    const el=document.getElementById('active'); if(el) el.hidden=true;
+    open(`<div class="grab-zone"><div class="grab"></div></div>
+    <div class="sh-h"><h3>Замовлення не знайдено</h3><button class="x" onclick="close_()">✕</button></div>
+    <p class="hint" style="margin-top:-4px">Можливо, воно вже видане або минуло багато часу.
+    Якщо замовлення актуальне — зателефонуйте на точку.</p>
+    <a class="cta ghost" style="text-align:center;text-decoration:none;display:block"
+       href="tel:${SHOPS[shop][1]||''}">Зателефонувати</a>
+    <button class="cta" onclick="close_()">Зрозуміло</button>`);
   }
 }
 

@@ -32,7 +32,12 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* ---------- зберігання ---------- */
-const DB = path.join(__dirname, 'data.json');
+/* Дані зберігаємо на постійному диску, якщо він підключений.
+   На Railway: Settings → Volumes → Mount path /data, і змінна DATA_DIR=/data.
+   Без диска файл лежить поруч із кодом і зникає при кожному перезапуску. */
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+const DB = path.join(DATA_DIR, 'data.json');
+try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
 let db = { orders: {}, shops: {}, counter: 1000 };
 try { db = JSON.parse(fs.readFileSync(DB, 'utf8')); } catch (e) {}
 const save = () => { try { fs.writeFileSync(DB, JSON.stringify(db, null, 2)); } catch (e) {} };
@@ -256,7 +261,8 @@ app.get('/api/health', (req, res) => {
   res.json({
     ok: true,
     shops: SHOPS.map((name, i) => ({ i: i + 1, name, connected: !!db.shops[i] })),
-    orders: Object.keys(db.orders).length
+    orders: Object.keys(db.orders).length,
+    storage: process.env.DATA_DIR ? 'постійне (' + process.env.DATA_DIR + ')' : 'тимчасове — дані зникнуть при перезапуску'
   });
 });
 
