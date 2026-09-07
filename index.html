@@ -780,7 +780,9 @@ const SHOPS_ALL=[
  ['пр-т Аерокосмічний 316е','',0],['вул. Холодногірська 3','',0]
 ];
 const SHOPS=SHOPS_ALL.filter(s=>s[2]);
-/* повні адреси для карт */
+/* Точки на карті.
+   Координати точніші за адресу — Google інколи ставить мітку на сусідній будинок.
+   Щоб уточнити: Google Maps → правий клік на потрібній будівлі → скопіювати числа. */
 const MAP_ADDR={
  'Пр-т Героїв Харкова 256':'проспект Героїв Харкова, 256, Харків',
  'пр-т Людвіга Свободи 52':'проспект Людвіга Свободи, 52, Харків',
@@ -791,7 +793,11 @@ const MAP_ADDR={
  'пр-т Аерокосмічний 316е':'проспект Аерокосмічний, 316Е, Харків',
  'вул. Холодногірська 3':'вулиця Холодногірська, 3, Харків'
 };
-const mapQuery=name=>encodeURIComponent(MAP_ADDR[name]||(name+', Харків'));
+const MAP_GEO={
+ 'пр-т Людвіга Свободи 52':'50.05728625791128,36.20401787205163',
+ 'вул. Шевченка 142а':'50.002336539763355,36.27150015060547'
+};
+const mapQuery=name=>MAP_GEO[name]||encodeURIComponent(MAP_ADDR[name]||(name+', Харків'));
 const mapLink=name=>'https://www.google.com/maps/search/?api=1&query='+mapQuery(name);
 const routeLink=name=>'https://www.google.com/maps/dir/?api=1&destination='+mapQuery(name);
 const API='https://meat-baron-production.up.railway.app'; // сервер прийому замовлень
