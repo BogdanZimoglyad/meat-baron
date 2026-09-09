@@ -480,6 +480,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .sr-map svg{width:17px;height:17px}
 .sr-map span{font-size:10.5px}
 .sr-map:hover{color:var(--ember-hot);background:rgba(196,52,42,.08)}
+/* опис товару в картці — під ціною, повністю, без обрізання */
+.sh-desc{margin-top:6px;line-height:1.45}
 /* мої замовлення */
 .ho{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:12px 13px;margin-bottom:9px}
 .ho-h{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:7px}
@@ -764,7 +766,7 @@ const DESC={
  'Сулугуні':'Розплавлений на грилі — тягнеться і рум\'яниться.',
  'Халумі':'Сир, що не тане — смажиться до золотої скоринки.',
  'Кукурудза':'Солодка кукурудза, готова до гриля.',
- 'Картопля з салом':'Картопля, шпигована салом — гарнір з димком.',
+ 'Картопля з салом':'Картопля, шпигована салом — гарнір з димком. Приїжджає готовою. Продається на вагу: одна картоплина — приблизно 300 г.',
  'Гриби печериці':'Мариновані печериці для гриля.',
  'Перець':'Печений солодкий перець — димний смак, готовий до подачі.',
  'Смокер/Відбивна свиняча':'Товста корейка з димною скоринкою.',
@@ -1157,6 +1159,7 @@ function openItem(id, editIdx){
   <div class="hero-img">${photoOf(it)?`<img src="${photoOf(it)}" alt="${it.name}">`:ph(it,1)}</div>
   <div class="sh-h"><h3>${it.name}</h3><button class="x" onclick="close_()">✕</button></div>
   <p class="hint" style="margin-top:-6px">${it.cat==='ready'?'Готовий продукт. Ціна за 100 г.':(it.cat==='extra'?'Ціна за 100 г — '+money(it.price)+'.':'Мариноване мʼясо. Ціна за 100 г — '+money(it.price)+'.')}</p>
+  ${descOf(it)?`<p class="hint sh-desc">${descOf(it)}</p>`:''}
   <span class="lbl">Оберіть вагу</span>
   <div class="wgrid">${quick.map(v=>`<button class="w" data-g="${v}" aria-pressed="${v===g}">${wLabel(v)}</button>`).join('')}</div>
   <div class="rowline">
@@ -1165,7 +1168,7 @@ function openItem(id, editIdx){
   </div>
   <div class="tot"><span style="color:var(--smoke);font-size:13px">Разом</span><b id="tv">${money(it.price*g/100)}</b></div>
   <button class="cta" id="addBtn">${editing?'Зберегти':'Додати в кошик'}</button>
-  <p class="hint">Мінімальна вага — ${it.minG} г, можна ввести свою. ${it.cat!=='ready'&&it.cat!=='grill'?'Смаження можна обрати при оформленні.':''}</p>`);
+  <p class="hint">Мінімальна вага — ${it.minG} г, можна ввести свою. ${canFry(it)?'Смаження можна обрати при оформленні.':''}</p>`);
   const rg=sIn.querySelector('#rg'),wv=sIn.querySelector('#wv'),tv=sIn.querySelector('#tv');
   const paint=(syncField)=>{
     tv.textContent=money(it.price*g/100);
@@ -1263,12 +1266,14 @@ const NO_FRY=new Set(['ready','grill','side']);
 /* Готові позиції всередині вагових категорій. Ключ — «Група/Назва».
    Картопля з салом приїжджає вже готовою, її не смажать. */
 const READY_MADE=new Set(['Овочі/Картопля з салом']);
+/* Одне джерело правди: і підказка в картці товару, і підрахунок ваги */
+const canFry=it=>!NO_FRY.has(it.cat)
+              && !READY_MADE.has(it.grp+'/'+it.name)
+              && it.unit!=='шт';              // хліб і соуси
 function fryableG(l){
-  if(NO_FRY.has(l.cat)) return 0;
-  if(READY_MADE.has(l.grp+'/'+l.name)) return 0;
-  if(l.unit==='вага') return l.g;             // g — грами
-  if(l.unit==='пак')  return l.g*PACK_G;      // g — кількість упаковок по 1 кг
-  return 0;                                   // 'шт' — хліб, соуси
+  if(!canFry(l)) return 0;
+  if(l.unit==='пак') return l.g*PACK_G;       // g — кількість упаковок по 1 кг
+  return l.g;                                 // g — грами
 }
 function fryGrams(){return cart.reduce((s,l)=>s+fryableG(l),0)}
 /* Ужарка 30–35% стосується лише мʼяса — сир і овочі так не втрачають вагу */
