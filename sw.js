@@ -1,6 +1,6 @@
 /* Мʼясний Барон — service worker */
 
-const CACHE = 'mb-v2';
+const CACHE = 'mb-v3';
 const SHELL = [
   './',
   './index.html',
