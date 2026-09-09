@@ -1256,7 +1256,20 @@ function lineQty(l){
   return wLabel(l.g);
 }
 function goodsTotal(){return kop(cart.reduce((s,l)=>s+lineSum(l),0))}
-function fryGrams(){return cart.filter(l=>l.cat==='raw'||l.cat==='saus').reduce((s,l)=>s+l.g,0)}
+/* На мангал іде все вагове: сире мʼясо, ковбаски, сири, овочі.
+   Не смажимо те, що вже готове (смокер, кури гриль, фритюр),
+   а також поштучні позиції — хліб і соуси. */
+const NO_FRY=new Set(['ready','grill','side']);
+function fryableG(l){
+  if(NO_FRY.has(l.cat)) return 0;
+  if(l.unit==='вага') return l.g;             // g — грами
+  if(l.unit==='пак')  return l.g*PACK_G;      // g — кількість упаковок по 1 кг
+  return 0;                                   // 'шт' — хліб, соуси
+}
+function fryGrams(){return cart.reduce((s,l)=>s+fryableG(l),0)}
+/* Ужарка 30–35% стосується лише мʼяса — сир і овочі так не втрачають вагу */
+const MEAT=new Set(['raw','saus']);
+function meatGrams(){return cart.reduce((s,l)=>s+(MEAT.has(l.cat)?fryableG(l):0),0)}
 function paintBar(){
   const bar=document.getElementById('bar');
   bar.hidden=!cart.length;
@@ -1286,7 +1299,7 @@ function openCart(){
 
   ${fg>=MIN_G?`<div class="cart-fry">
     <div>
-      <b>Посмажити мʼясо</b>
+      <b>Посмажити на мангалі</b>
       <span>${FRY_RATE} ₴/кг · до смаження ${wLabel(fg)}</span>
     </div>
     <span class="cf-sum">+${money(fryCost)}</span>
@@ -1506,11 +1519,11 @@ function openCheckout(){
 
     ${fg>=MIN_G?`<div class="box">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
-        <div><b style="font-weight:500">Посмажити мʼясо</b>
+        <div><b style="font-weight:500">Посмажити на мангалі</b>
         <div style="font-size:12px;color:var(--smoke)">${FRY_RATE} ₴ за кг · до смаження ${wLabel(fg)}</div></div>
         <button class="sw" id="sw" role="switch" aria-checked="${fry}"><i></i></button>
       </div>
-      ${fry?`<div class="warn">При смаженні мʼясо втрачає 30–35% ваги. З ${wLabel(fg)} сирого вийде приблизно ${wLabel(Math.round(fg*.67/50)*50)}–${wLabel(Math.round(fg*.7/50)*50)} готового.</div>`:''}
+      ${fry&&meatGrams()?`<div class="warn">При смаженні мʼясо втрачає 30–35% ваги. З ${wLabel(meatGrams())} сирого вийде приблизно ${wLabel(Math.round(meatGrams()*.67/50)*50)}–${wLabel(Math.round(meatGrams()*.7/50)*50)} готового.</div>`:''}
     </div>`:''}
 
     <span class="lbl">Оплата</span>
