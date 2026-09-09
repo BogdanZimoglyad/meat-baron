@@ -794,26 +794,18 @@ const descOf=it=>DESC[it.grp+'/'+it.name]||DESC[it.name]||'';
 
 /* фото товарів: ключ — "Група/Назва" або просто "Назва" */
 const PHOTO={
- 'Ошийок':'oshyyok','Мʼякоть':'myakot','Вирізка':'vyrizka',
- 'Реберця':'rebertsya','Грудинка':'hrudynka',
- 'Стейк з ошийка':'steyk-oshyyok','Стейк на кістці':'steyk-kistka',
- 'Стейк з відбивної':'steyk-vidbyvna',
- 'Курка/Гомілка':'homilka','Курка/Крило':'krylo','Курка/Стейк':'steyk-kur',
- 'Курка/Філе':'file-kur','Курка/Люля кебаб':'lyulya-kur','Курка/Шашлик з індика':'shashlyk-indyk',
- 'Шашлик з телятини':'shashlyk-telyatyna','Стейк Рібай':'ribay',
- 'Стейк Нью-Йорк':'new-york','Філе-міньйон':'file-minyon',
- 'Ковбаски/Віденська':'kovb-videnska','Ковбаски/Мисливська':'kovb-myslyvska',
- 'Ковбаски/Свиняча':'kovb-svynyacha','Ковбаски/Куряча':'kovb-kuryacha',
- 'Ковбаски/Куряча з сиром':'kovb-kur-syr',
- 'Ковбаски/Індича':'kovb-indycha','Ковбаски/Ковбаски гриль асорті':'kovb-asorti',
- 'Чевапчічі/Класичні':'chevap-klas','Чевапчічі/З сиром':'chevap-syr',
- 'Чевапчічі/З грибами':'chevap-klas',
- 'Рулька свиняча':'rulka',
- 'Сулугуні':'sulhuni','Халумі':'halumi','Кукурудза':'kukurudza'
+ /* нові фото — вирізані png на прозорому фоні.
+    решта позицій поки без фото: показується заглушка-іконка.
+    щоб додати — новий рядок 'Група/Назва':'імʼя-файлу.png' */
+ 'Ошийок':'oshyyok.png',
+ 'Мʼякоть':'myakot.png',
+ 'Косичка bbq':'kosychka-bbq.png',
+ 'Баранина/Шашлик з мʼякоті':'baranyna-shashlyk.png',
+ 'Кури гриль/Курка гриль':'kurka-hryl.png'
 };
 const photoOf=it=>{
   const k=PHOTO[it.grp+'/'+it.name]||PHOTO[it.name];
-  return k?`photo/${k}.jpg`:null;
+  return k?`photo/${k}`:null;
 };
 /* усі точки мережі. третій елемент — чи приймає замовлення онлайн.
    на час тесту працюють Шевченка 142а і Людвіга Свободи 52: щоб увімкнути решту — постав 1 */
