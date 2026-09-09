@@ -1,19 +1,37 @@
 # Мʼясний Барон — сайт + Telegram-бот
 
-## Структура файлів на сервері
+## Структура
 ```
 meat-baron/
-├── server.js
+├── index.html      ← увесь сайт: верстка, каталог, кошик, оформлення
+├── sw.js           ← service worker (офлайн і кеш)
+├── manifest.json   ← PWA
+├── photo/          ← фото товарів
+├── server.js       ← API прийому замовлень + Telegram-бот
 ├── package.json
-└── public/
-    ├── index.html
-    ├── manifest.json
-    ├── sw.js
-    ├── icon-192.png
-    ├── icon-512.png
-    ├── icon-maskable-512.png
-    └── apple-touch-icon.png
+└── data/           ← база замовлень, у git не потрапляє
 ```
+
+Сайт лежить **у корені**. Другої копії немає — це навмисно.
+Раніше поруч була тека `public/` з окремим `index.html`, і дві версії
+розійшлися: GitHub Pages віддавав свіжу, а сервер — стару.
+
+## Два деплої, один код
+
+| Що | Звідки | Що робить |
+|---|---|---|
+| GitHub Pages | корінь гілки `main` | сайт для клієнтів |
+| Railway | той самий корінь через `server.js` | API, Telegram-бот, дзеркало сайту |
+
+`server.js` роздає корінь репозиторію і ховає службові файли
+(`server.js`, `package.json`, `data/`, `node_modules/`) — вони віддають 404.
+
+У браузері адреса API задана в `index.html`:
+```js
+const API='https://meat-baron-production.up.railway.app';
+```
+Абсолютна адреса потрібна, бо з GitHub Pages запит іде на інший домен.
+З самого Railway вона теж працює — це його ж домен.
 
 ## Запуск
 

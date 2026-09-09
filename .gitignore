@@ -1,0 +1,8 @@
+node_modules/
+
+# Замовлення клієнтів: імена, телефони, адреси. У git їм не місце.
+data/
+data.json
+
+.env
+.DS_Store

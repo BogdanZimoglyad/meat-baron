@@ -29,13 +29,30 @@ const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '64kb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+
+/* ---------- сайт ---------- */
+/* Сайт лежить у корені репозиторію — рівно ті самі файли, що віддає
+   GitHub Pages. Другої копії немає, тому версії не розходяться.
+   Службові файли назовні не пускаємо. */
+const PRIVATE = new Set([
+  'server.js', 'package.json', 'package-lock.json',
+  'readme.md', 'data', 'node_modules'
+]);
+app.use((req, res, next) => {
+  let p = req.path;
+  try { p = decodeURIComponent(p); } catch (e) {}
+  const first = p.split('/').filter(Boolean)[0];
+  if (first && PRIVATE.has(first.toLowerCase())) return res.status(404).end();
+  next();
+});
+app.use(express.static(__dirname, { dotfiles: 'ignore' }));
 
 /* ---------- зберігання ---------- */
 /* Дані зберігаємо на постійному диску, якщо він підключений.
    На Railway: Settings → Volumes → Mount path /data, і змінна DATA_DIR=/data.
-   Без диска файл лежить поруч із кодом і зникає при кожному перезапуску. */
-const DATA_DIR = process.env.DATA_DIR || __dirname;
+   Без диска файл лягає в теку data/ поруч із кодом — вона закрита від
+   браузера і не потрапляє в git, тож телефони клієнтів не витечуть. */
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const DB = path.join(DATA_DIR, 'data.json');
 try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
 let db = { orders: {}, shops: {}, counter: 1000 };
