@@ -1260,8 +1260,12 @@ function goodsTotal(){return kop(cart.reduce((s,l)=>s+lineSum(l),0))}
    Не смажимо те, що вже готове (смокер, кури гриль, фритюр),
    а також поштучні позиції — хліб і соуси. */
 const NO_FRY=new Set(['ready','grill','side']);
+/* Готові позиції всередині вагових категорій. Ключ — «Група/Назва».
+   Картопля з салом приїжджає вже готовою, її не смажать. */
+const READY_MADE=new Set(['Овочі/Картопля з салом']);
 function fryableG(l){
   if(NO_FRY.has(l.cat)) return 0;
+  if(READY_MADE.has(l.grp+'/'+l.name)) return 0;
   if(l.unit==='вага') return l.g;             // g — грами
   if(l.unit==='пак')  return l.g*PACK_G;      // g — кількість упаковок по 1 кг
   return 0;                                   // 'шт' — хліб, соуси
