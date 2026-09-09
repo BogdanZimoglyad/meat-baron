@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#141010">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Мʼясний Барон">
@@ -28,7 +29,15 @@
   --ok:#7BA84F;
 }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0}
+html{background:var(--char)}
+html,body{margin:0;padding:0;overflow-x:hidden;min-height:100%}
+html{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+body{overflow-wrap:anywhere;word-break:normal}
+html::before{
+  content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:url('smoke-bg.jpg') center/cover no-repeat;
+  opacity:.3;
+}
 body{
   background:var(--char);
   color:var(--bone);
@@ -37,42 +46,84 @@ body{
   line-height:1.6;
   -webkit-font-smoothing:antialiased;
   padding-bottom:96px;
+  position:relative;
+}
+body::before{
+  content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:url('smoke-bg.jpg') center/cover no-repeat;
+  opacity:.3;
 }
 h1,h2,h3,.disp{font-family:'Oswald',sans-serif;font-weight:500;letter-spacing:.01em;margin:0}
 button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+input,select,textarea{font-size:16px}
+button{-webkit-user-select:none;user-select:none}
 button{cursor:pointer;border:none;background:none}
 a{color:inherit}
 .wrap{max-width:620px;margin:0 auto;padding:0 16px}
 
 /* header */
-.top{position:sticky;top:0;z-index:40;background:rgba(20,16,16,.94);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.top{position:sticky;top:0;z-index:40;background:rgba(20,16,16,.94);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .top-in{display:flex;align-items:center;gap:12px;padding:10px 0}
 .mark{width:38px;height:38px;border-radius:50%;object-fit:cover;flex:0 0 auto;display:block}
-.shop{flex:1;min-width:0;text-align:left}
+.shop{flex:1;min-width:0;text-align:left;display:flex;align-items:center;gap:10px;
+  padding:6px 8px;margin:-6px -8px;border-radius:9px;transition:.14s}
+.shop:hover{background:var(--coal)}
+.shop.single{pointer-events:none;padding:6px 0;margin:0}
+.shop.single+.chev,.shop.single .chev{display:none}
+.shop-t{flex:1;min-width:0}
 .shop small{display:block;color:var(--smoke);font-size:11px;line-height:1.3}
 .shop b{display:block;font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.chev{color:var(--smoke);font-size:11px}
+.chev{color:var(--smoke);font-size:11px;flex:0 0 auto;transition:.14s}
+.shop:hover .chev{color:var(--bone)}
 
 /* hero */
-.hero{padding:26px 0 20px;border-bottom:1px solid var(--line);position:relative;overflow:hidden}
-.hero::after{content:'';position:absolute;right:-14px;top:0;bottom:0;width:190px;
-  background:url('bull.png') right center/contain no-repeat;opacity:.15;pointer-events:none}
+.hero{padding:30px 0 26px;border-bottom:1px solid var(--line);position:relative;isolation:isolate}
+.hero .smk,.hero .mk-bg,.hero::after{
+  left:50%;right:auto;width:100vw;margin-left:-50vw}
+.hero .smk{position:absolute;top:-1px;bottom:0;z-index:-3;overflow:hidden;pointer-events:none}
+.hero .smk i{position:absolute;top:-8%;left:0;width:220%;height:116%;display:block;
+  background:url('smoke-layer.jpg') left center/auto 100% repeat-x;
+  will-change:transform}
+.hero .smk i:nth-child(1){opacity:.34;animation:drift1 64s linear infinite}
+.hero .smk i:nth-child(2){opacity:.2;transform:scaleX(-1);animation:drift2 96s linear infinite}
+@keyframes drift1{
+  0%{transform:translate3d(0,0,0) scale(1.04)}
+  50%{transform:translate3d(-24%,-2%,0) scale(1.1)}
+  100%{transform:translate3d(-50%,0,0) scale(1.04)}
+}
+@keyframes drift2{
+  0%{transform:scaleX(-1) translate3d(0,0,0) scale(1.06)}
+  50%{transform:scaleX(-1) translate3d(-18%,2%,0) scale(1.02)}
+  100%{transform:scaleX(-1) translate3d(-40%,0,0) scale(1.06)}
+}
+.hero .mk-bg{position:absolute;z-index:-2;top:50%;height:86%;aspect-ratio:1;
+  transform:translateY(-50%);background:url('logo-mark.png') center/contain no-repeat;
+  opacity:.34;pointer-events:none;animation:pulse 9s ease-in-out infinite;
+  width:100vw;background-position:right 4vw center}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:.42}}
+.hero::after{content:'';position:absolute;top:-1px;bottom:0;z-index:-1;pointer-events:none;
+  background:
+    linear-gradient(to right,var(--char) 4%,rgba(20,16,16,.78) 42%,rgba(20,16,16,.1) 100%),
+    linear-gradient(to bottom,rgba(20,16,16,.3),transparent 36%,rgba(20,16,16,.92))}
 .hero>*{position:relative}
 .brand{margin:0 0 10px;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:.16em;
   text-transform:uppercase;color:var(--smoke)}
-.hero h1{font-size:34px;line-height:1.04;text-transform:uppercase;max-width:8.2em}
+.hero h1{font-size:34px;line-height:1.04;text-transform:uppercase;max-width:9em;
+  text-shadow:0 2px 20px rgba(20,16,16,.75)}
 @media(min-width:420px){.hero h1{font-size:40px}}
 .hero h1 span{display:block;color:var(--ember)}
-.hero p:not(.brand){margin:12px 0 0;color:var(--smoke);max-width:26ch;font-size:14px}
+.hero p:not(.brand){margin:12px 0 0;color:var(--bone);opacity:.82;max-width:30ch;font-size:14px;
+  text-shadow:0 1px 12px rgba(20,16,16,.8)}
 .hero-tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;max-width:80%}
 .tag{border:1px solid var(--line-2);border-radius:999px;padding:5px 12px;font-size:12px;color:var(--bone)}
 
 /* search + nav */
-.tools{position:sticky;top:59px;z-index:30;background:var(--char);padding:12px 0 0}
+.tools{position:sticky;top:59px;z-index:30;padding:12px 0 0;
+  background:linear-gradient(var(--char) 74%,rgba(20,16,16,0))}
 .search{display:flex;align-items:center;gap:9px;background:var(--coal);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
 .search input{border:none;background:none;outline:none;flex:1;min-width:0}
 .search input::placeholder{color:var(--smoke)}
-.cats{display:flex;gap:7px;overflow-x:auto;padding:11px 0 12px;scrollbar-width:none}
+.cats{display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;padding:11px 0 12px;scrollbar-width:none}
 .cats::-webkit-scrollbar{display:none}
 .cat{flex:0 0 auto;border:1px solid var(--line-2);border-radius:999px;padding:7px 14px;font-size:13px;color:var(--smoke);white-space:nowrap;transition:.15s}
 .cat[aria-selected=true]{background:var(--ember);border-color:var(--ember);color:#fff}
@@ -82,30 +133,80 @@ a{color:inherit}
 .grp-h{display:flex;align-items:baseline;gap:10px;margin-bottom:12px}
 .grp-h h2{font-size:21px;text-transform:uppercase}
 .grp-h em{font-style:normal;color:var(--smoke);font-size:12px}
-.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
-@media(min-width:560px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
-.card{background:var(--coal);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;text-align:left}
-.ph{aspect-ratio:1;background:var(--coal-2);display:grid;place-items:center;position:relative;overflow:hidden}
+.grid{display:grid;gap:9px}
+.card{background:rgba(30,24,23,.92);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+  display:flex;align-items:stretch;gap:12px;text-align:left;padding:11px;transition:.15s}
+.card:hover{border-color:var(--line-2)}
+.ph{width:92px;height:92px;flex:0 0 auto;order:2;border-radius:9px;background:var(--coal-2);
+  display:grid;place-items:center;position:relative;overflow:hidden}
 .ph img{width:100%;height:100%;object-fit:cover;display:block}
-.ph svg{width:36px;height:36px;opacity:.28}
-.badge{position:absolute;top:8px;left:8px;background:rgba(20,16,16,.82);border-radius:999px;padding:3px 9px;font-size:10px;letter-spacing:.03em;color:var(--bone)}
+.ph svg{width:28px;height:28px;opacity:.28}
+.badge{position:absolute;top:6px;left:6px;background:rgba(20,16,16,.82);border-radius:999px;
+  padding:2px 7px;font-size:9.5px;letter-spacing:.03em;color:var(--bone)}
 .badge.fire{background:var(--ember);color:#fff}
-.c-b{padding:10px;display:flex;flex-direction:column;gap:2px;flex:1}
-.c-b .nm{font-size:13.5px;font-weight:500;line-height:1.3}
-.c-b .un{font-size:11px;color:var(--smoke)}
-.c-f{display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:8px}
-.pr{font-family:'Oswald';font-size:16px;font-weight:500}
-.add{width:30px;height:30px;border-radius:50%;background:var(--ember);color:#fff;display:grid;place-items:center;font-size:17px;line-height:1;transition:.15s}
-.add:active{transform:scale(.9)}
+.c-b{flex:1;min-width:0;order:1;display:flex;flex-direction:column;gap:3px;padding:2px 0}
+.c-b .nm{font-size:15px;font-weight:500;line-height:1.25}
+.c-b .pr-top{font-family:'Oswald';font-size:17px;font-weight:500;color:var(--ember-hot)}
+.c-b .ds{font-size:12.5px;color:var(--smoke);line-height:1.45;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.c-b .un{font-size:12px;color:var(--smoke);line-height:1.45}
+.c-f{display:flex;align-items:center;justify-content:flex-start;margin-top:auto;padding-top:8px}
+.add{height:31px;padding:0 14px;border-radius:8px;background:var(--ember);color:#fff;
+  display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;transition:.15s}
+.add:active{transform:scale(.96)}
 .empty{color:var(--smoke);padding:30px 0;text-align:center;font-size:14px}
+
+/* три колонки на широкому екрані */
+.layout{display:block}
+.side{display:none}
+.side-h{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--smoke);margin:0 0 10px}
+@media(min-width:900px){
+  .wrap{max-width:1180px}
+  .layout{display:grid;grid-template-columns:190px minmax(0,1fr) 240px;
+    grid-template-rows:auto 1fr;gap:14px 26px;align-items:start}
+  .side-l{grid-column:1;grid-row:1 / span 2}
+  .mid{grid-column:2;grid-row:1 / span 2}
+  .mode-bar{grid-column:3;grid-row:1;grid-template-columns:1fr;gap:7px;margin:0}
+  .side-r{grid-column:3;grid-row:2}
+  .mb-btn{padding:10px 12px}
+  .mb-ic{margin-bottom:4px}
+  .side{display:block;position:sticky;top:76px}
+  .tools{position:static;padding-top:14px}
+  .cats{display:none}
+  .side-cats{display:flex;flex-direction:column;gap:3px}
+  .side-cat{position:relative;overflow:hidden;text-align:left;padding:13px 12px 13px 16px;
+    border-radius:10px;font-family:'Oswald',sans-serif;font-size:18px;font-weight:400;
+    letter-spacing:.02em;text-transform:uppercase;color:#C9C0B9;transition:.14s;line-height:1.2}
+  .side-cat:hover{color:var(--bone);background:var(--coal)}
+  .side-cat[aria-selected=true]{background:rgba(196,52,42,.16);color:var(--bone);font-weight:500}
+  .side-cat[aria-selected=true]::before{content:'';position:absolute;left:0;top:9px;bottom:9px;
+    width:3px;border-radius:0 3px 3px 0;background:var(--ember-hot)}
+  .info{background:rgba(30,24,23,.92);border:1px solid var(--line);border-radius:12px;padding:15px}
+  .info-row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+  .info-row:last-of-type{border:none}
+  .info-row .ic{width:19px;height:19px;flex:0 0 auto;color:var(--ember-hot);margin-top:2px}
+  .info-row .ic svg{width:100%;height:100%;display:block}
+  .info-row small{display:block;font-size:11px;color:var(--smoke)}
+  .info-row b{display:block;font-size:13px;font-weight:500;line-height:1.4}
+  .ig-sm{margin-top:10px;width:100%;justify-content:center;padding:9px 12px;font-size:13px}
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ph{width:104px;height:104px}
+  .about{max-width:none}
+  body{padding-bottom:40px}
+  .bar{max-width:none}
+}
+@media(min-width:1180px){
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 
 /* about */
 .about{margin-top:34px;padding:22px 0 8px;border-top:1px solid var(--line)}
 .about h2{font-size:22px;text-transform:uppercase;margin-bottom:10px}
 .about p{color:var(--smoke);font-size:14px;margin:0 0 14px;max-width:52ch}
 .ig{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line-2);border-radius:10px;padding:10px 16px;font-size:14px;text-decoration:none}
-.pts{margin-top:22px;display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-.pt{background:var(--coal);padding:12px 14px;display:flex;justify-content:space-between;gap:12px;align-items:center}
+.pts-h{margin:22px 0 8px;font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--smoke)}
+.pts{margin-top:0;display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.pt{background:rgba(30,24,23,.92);padding:12px 14px;display:flex;justify-content:space-between;gap:12px;align-items:center}
 .pt b{font-weight:500;font-size:13.5px}
 .pt a{color:var(--smoke);font-size:12.5px;text-decoration:none;white-space:nowrap}
 
@@ -118,10 +219,13 @@ a{color:inherit}
 /* sheet */
 .veil{position:fixed;inset:0;background:rgba(8,6,6,.72);z-index:60;opacity:0;pointer-events:none;transition:.2s}
 .veil.on{opacity:1;pointer-events:auto}
-.sheet{position:fixed;left:0;right:0;bottom:0;z-index:61;background:var(--char);border-radius:18px 18px 0 0;border-top:1px solid var(--line-2);max-height:92vh;overflow-y:auto;transform:translateY(101%);transition:transform .26s cubic-bezier(.3,.9,.3,1)}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:61;background:var(--char);border-radius:18px 18px 0 0;border-top:1px solid var(--line-2);max-height:92vh;max-height:92dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;transform:translateY(101%);transition:transform .26s cubic-bezier(.3,.9,.3,1)}
 .sheet.on{transform:none}
 .sheet-in{max-width:620px;margin:0 auto;padding:8px 16px calc(20px + env(safe-area-inset-bottom))}
-.grab{width:38px;height:4px;border-radius:2px;background:var(--line-2);margin:6px auto 14px}
+.grab{width:44px;height:5px;border-radius:3px;background:var(--line-2);margin:0 auto;
+  cursor:grab}
+.grab-zone{padding:10px 0 12px;cursor:grab;touch-action:none}
+.sheet{touch-action:pan-y}
 .sh-h{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
 .sh-h h3{font-size:22px;text-transform:uppercase;line-height:1.1}
 .x{width:30px;height:30px;border-radius:50%;background:var(--coal-2);color:var(--smoke);display:grid;place-items:center;flex:0 0 auto;font-size:16px}
@@ -146,15 +250,20 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 
 /* cart lines */
 .ln{display:flex;gap:11px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)}
+.ln-r{display:flex;align-items:center;gap:10px;margin-left:auto}
+.ln-x{width:28px;height:28px;border-radius:50%;flex:0 0 auto;color:var(--smoke);
+  display:grid;place-items:center;transition:.14s}
+.ln-x svg{width:15px;height:15px}
+.ln-x:hover{color:var(--ember-hot);background:rgba(196,52,42,.12)}
 .ln-th{width:44px;height:44px;border-radius:8px;background:var(--coal-2);flex:0 0 auto;display:grid;place-items:center;overflow:hidden}
 .ln-th img{width:100%;height:100%;object-fit:cover;display:block}
 .ln-th svg{width:20px;height:20px;opacity:.3}
-.ln-b{flex:1;min-width:0}
+.ln-b{flex:1;min-width:0;overflow:hidden}
 .ln-b .nm{font-size:13.5px;font-weight:500}
 .ln-b .un{font-size:11.5px;color:var(--smoke)}
 .qty{display:flex;align-items:center;gap:9px}
 .qbtn{width:26px;height:26px;border-radius:50%;border:1px solid var(--line-2);color:var(--smoke);display:grid;place-items:center;font-size:15px;line-height:1}
-.ln-p{font-family:'Oswald';font-size:15px;min-width:64px;text-align:right}
+.ln-p{font-family:'Oswald';font-size:15px;min-width:58px;text-align:right}
 
 /* checkout */
 .seg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px}
@@ -163,7 +272,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .fld{width:100%;background:var(--coal);border:1px solid var(--line);border-radius:10px;padding:12px 13px;outline:none;margin-top:8px}
 .fld:focus{border-color:var(--line-2)}
 .fld::placeholder{color:var(--smoke)}
-.box{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:12px}
+.box{background:rgba(30,24,23,.94);border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:12px}
 .sw{width:50px;height:29px;border-radius:999px;background:var(--coal-2);border:1px solid var(--line-2);position:relative;flex:0 0 auto;transition:.16s}
 .sw i{position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:var(--smoke);transition:.16s}
 .sw[aria-checked=true]{background:var(--ember);border-color:var(--ember)}
@@ -194,15 +303,211 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .st.on .st-b .t,.st.done .st-b .t{color:var(--bone)}
 .st-b .s{font-size:11.5px;color:var(--smoke)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+/* спосіб отримання */
+.mode-bar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.mb-btn{border:1px solid var(--line-2);border-radius:11px;padding:11px 12px;text-align:left;
+  line-height:1.3;transition:.14s;background:var(--coal)}
+.mb-btn[aria-pressed=true]{border-color:var(--ember);background:rgba(196,52,42,.12)}
+.mb-ic{display:block;width:20px;height:20px;margin-bottom:6px;color:var(--smoke)}
+.mb-ic svg{width:100%;height:100%;display:block}
+.mb-btn[aria-pressed=true] .mb-ic{color:var(--ember-hot)}
+.mb-t{display:block;font-size:14px;font-weight:500}
+.mb-s{display:block;font-size:11.5px;color:var(--smoke)}
+.mb-btn[aria-pressed=true] .mb-t{color:var(--ember-hot)}
+
+/* підкатегорії */
+.subs{display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;padding:2px 0 12px;scrollbar-width:none}
+.subs::-webkit-scrollbar{display:none}
+.sub{flex:0 0 auto;border:1px solid var(--line);border-radius:999px;padding:6px 13px;
+  font-size:12.5px;color:var(--smoke);white-space:nowrap;transition:.14s;background:var(--coal)}
+.sub[aria-selected=true]{background:rgba(196,52,42,.14);border-color:var(--ember);color:var(--ember-hot)}
+
+/* картка товару */
+.lb{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:18px;
+  background:rgba(8,6,6,.9);opacity:0;pointer-events:none;transition:opacity .26s}
+.lb.on{opacity:1;pointer-events:auto}
+.lb-card{width:min(92vw,430px);max-height:88vh;max-height:88dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;background:var(--coal);
+  border:1px solid var(--line-2);border-radius:16px;will-change:transform;transform-origin:center}
+.lb-card::-webkit-scrollbar{width:0}
+.lb-ph{position:relative;background:var(--coal-2)}
+.lb-ph img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+.lb-x{position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;
+  background:var(--ember);color:#fff;display:grid;place-items:center;font-size:15px;
+  box-shadow:0 4px 14px rgba(0,0,0,.4)}
+.lb-b{padding:16px 16px 18px}
+.lb-b h3{font-size:21px;line-height:1.15;text-transform:uppercase}
+.lb-pr{margin:6px 0 0;font-family:'Oswald';font-size:20px;font-weight:500;color:var(--ember-hot)}
+.lb-un{font-size:14px;color:var(--smoke)}
+.lb-pk{margin:4px 0 0;font-size:12.5px;color:var(--smoke)}
+.lb-ds{margin:8px 0 0;font-size:13.5px;color:var(--smoke);line-height:1.55}
+.lb-add{margin-top:16px}
+.ph{cursor:zoom-in;padding:0;border:none;font:inherit;color:inherit}
+.ph:disabled{cursor:default}
+
+.pick-shop{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  width:100%;text-align:left;transition:.14s}
+.pick-shop:hover{border-color:var(--line-2)}
+.ps-t{min-width:0}
+.ps-t small{display:block;font-size:11px;color:var(--smoke)}
+.ps-t b{display:block;font-weight:500;font-size:14px}
+.ps-a{flex:0 0 auto;font-size:12.5px;color:var(--ember-hot)}
+
+/* заглушка замість фото */
+.ph-ph{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden;
+  background:
+    radial-gradient(120% 100% at 30% 15%,rgba(196,52,42,.22),transparent 62%),
+    radial-gradient(100% 90% at 78% 85%,rgba(154,144,138,.16),transparent 60%),
+    var(--coal-2)}
+.ph-ph::before{content:'';position:absolute;inset:-20%;
+  background:url('smoke-bg.jpg') center/cover no-repeat;opacity:.3;mix-blend-mode:screen}
+.ph-g{position:relative;color:var(--ember-hot);opacity:.68;max-width:56%;max-height:56%}
+.hero-img .ph-ph,.up-ph .ph-ph,.ln-th .ph-ph{position:absolute}
+.hero-img,.up-ph,.ln-th{position:relative}
+
+.grp-note{margin:-4px 2px 12px;font-size:13px;color:var(--smoke);line-height:1.55;max-width:60ch;
+  padding-left:11px;border-left:2px solid rgba(196,52,42,.5)}
+
+/* введення ваги */
+.wbox{display:inline-flex;align-items:baseline;gap:3px;flex:0 0 auto;
+  background:var(--coal-2);border:1px solid var(--line);border-radius:9px;padding:6px 9px}
+.wbox input{width:56px;background:none;border:none;outline:none;text-align:right;
+  font-family:'Oswald',sans-serif;font-size:17px;font-weight:500;padding:0;
+  -moz-appearance:textfield;appearance:textfield}
+.wbox input::-webkit-outer-spin-button,.wbox input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.wbox i{font-style:normal;font-size:12px;color:var(--smoke)}
+.wbox:focus-within{border-color:var(--ember)}
+.un-edit{display:inline-flex;align-items:center;gap:5px;padding:2px 0;color:var(--smoke);
+  font-size:11.5px;transition:.14s}
+.un-edit svg{width:12px;height:12px;opacity:.75}
+.un-edit:hover{color:var(--ember-hot)}
+
+/* кошик */
+.empty-cart{text-align:center;padding:26px 10px 22px;color:var(--smoke)}
+.empty-cart svg{width:46px;height:46px;opacity:.4;margin-bottom:12px}
+.empty-cart p{margin:0;font-size:16px;font-weight:500;color:var(--bone)}
+.empty-cart span{display:block;margin-top:5px;font-size:13px;line-height:1.5;max-width:30ch;margin-inline:auto}
+.cart-fry{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;
+  padding:11px 13px;border-radius:11px;background:rgba(196,52,42,.1);border:1px solid rgba(196,52,42,.3)}
+.cart-fry b{display:block;font-weight:500;font-size:13.5px}
+.cart-fry span{display:block;font-size:12px;color:var(--smoke)}
+.cf-sum{font-family:'Oswald';font-size:15px;color:var(--ember-hot);flex:0 0 auto}
+.cart-hint{margin:8px 0 0;font-size:12px;color:var(--smoke);line-height:1.5}
+.cart-note{resize:none;line-height:1.5;font-size:16px}
+
+/* вибір дати й часу */
+.asap-btn{display:flex;align-items:center;gap:11px;width:100%;text-align:left;
+  border:1px solid var(--line-2);background:var(--coal);border-radius:12px;padding:12px;transition:.14s}
+.asap-btn[aria-pressed=true]{border-color:var(--ember);background:rgba(196,52,42,.12)}
+.bolt{width:32px;height:32px;border-radius:50%;background:var(--coal-2);color:var(--smoke);
+  display:grid;place-items:center;flex:0 0 auto;transition:.14s}
+.bolt svg{width:17px;height:17px}
+.asap-btn[aria-pressed=true] .bolt{background:var(--ember);color:#fff}
+.asap-t{flex:1;min-width:0;line-height:1.35}
+.asap-t b{display:block;font-weight:500;font-size:14px}
+.asap-t span{display:block;font-size:12px;color:var(--smoke)}
+.asap-tick{flex:0 0 auto;color:var(--ember-hot);font-size:15px;opacity:0;transition:.14s}
+.asap-btn[aria-pressed=true] .asap-tick{opacity:1}
+
+.wheel{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:4px}
+.wcol{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:6px;
+  height:196px;overflow-y:auto;scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  -webkit-mask-image:linear-gradient(transparent,#000 14px,#000 calc(100% - 14px),transparent);
+  mask-image:linear-gradient(transparent,#000 14px,#000 calc(100% - 14px),transparent)}
+.wcol::-webkit-scrollbar{display:none}
+.wi{display:block;width:100%;padding:11px 6px;border-radius:9px;font-size:13.5px;
+  color:var(--smoke);text-align:center;transition:.12s;white-space:nowrap}
+.wi:hover{color:var(--bone)}
+.wi[aria-pressed=true]{background:var(--ember);color:#fff;font-weight:600}
+
+/* активне замовлення */
+.active-bar{margin-top:14px}
+.active-bar[hidden]{display:none}
+.act-in{display:flex;align-items:center;gap:11px;width:100%;text-align:left;
+  background:rgba(196,52,42,.12);border:1px solid rgba(196,52,42,.4);border-radius:12px;
+  padding:12px 14px;transition:.14s}
+.act-in:hover{background:rgba(196,52,42,.18)}
+.act-in.ready{background:rgba(123,168,79,.14);border-color:rgba(123,168,79,.5)}
+.act-in.ready:hover{background:rgba(123,168,79,.2)}
+.act-in.ready .act-dot{background:var(--ok);animation-name:actpulse-ok}
+.act-in.ready .act-go{color:var(--ok)}
+@keyframes actpulse-ok{
+  0%{box-shadow:0 0 0 0 rgba(123,168,79,.55)}
+  70%{box-shadow:0 0 0 9px rgba(123,168,79,0)}
+  100%{box-shadow:0 0 0 0 rgba(123,168,79,0)}
+}
+.act-dot{width:9px;height:9px;border-radius:50%;background:var(--ember-hot);flex:0 0 auto;
+  box-shadow:0 0 0 0 rgba(224,74,60,.6);animation:actpulse 2s ease-out infinite}
+@keyframes actpulse{
+  0%{box-shadow:0 0 0 0 rgba(224,74,60,.55)}
+  70%{box-shadow:0 0 0 9px rgba(224,74,60,0)}
+  100%{box-shadow:0 0 0 0 rgba(224,74,60,0)}
+}
+.act-t{flex:1;min-width:0;line-height:1.35}
+.act-t b{display:block;font-weight:500;font-size:14px}
+.act-t span{display:block;font-size:12px;color:var(--smoke);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.act-go{flex:0 0 auto;font-size:12.5px;color:var(--ember-hot)}
+.ready-note{display:flex;align-items:center;gap:11px;margin-bottom:12px;padding:13px 14px;
+  border-radius:12px;background:rgba(123,168,79,.14);border:1px solid rgba(123,168,79,.45)}
+.ready-note svg{width:22px;height:22px;color:var(--ok);flex:0 0 auto}
+.ready-note b{display:block;font-weight:600;font-size:14.5px;color:var(--bone)}
+.ready-note span span,.ready-note>span{line-height:1.4}
+.ready-note>span span{font-size:12.5px;color:var(--smoke)}
+/* вибір точки */
+.shop-list{display:flex;flex-direction:column;gap:8px;margin-bottom:4px}
+.shop-row{display:flex;align-items:stretch;gap:8px;border:1px solid var(--line-2);
+  border-radius:11px;overflow:hidden;background:var(--coal);transition:.14s}
+.shop-row.on{border-color:var(--ember);background:rgba(196,52,42,.1)}
+.shop-pick{flex:1;min-width:0;display:flex;align-items:center;gap:10px;text-align:left;padding:12px 4px 12px 13px}
+.sr-t{min-width:0;line-height:1.35}
+.sr-t b{display:block;font-weight:500;font-size:14px}
+.sr-t span{display:block;font-size:12px;color:var(--smoke)}
+.shop-row.on .dot{border-color:var(--ember)}
+.shop-row.on .dot::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--ember)}
+.sr-map{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  padding:0 14px;color:var(--smoke);text-decoration:none;border-left:1px solid var(--line);transition:.14s}
+.sr-map svg{width:17px;height:17px}
+.sr-map span{font-size:10.5px}
+.sr-map:hover{color:var(--ember-hot);background:rgba(196,52,42,.08)}
+/* мої замовлення */
+.hist-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+  border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;font-size:13px;
+  color:var(--bone);transition:.14s;margin-top:10px}
+.hist-btn svg{width:16px;height:16px;color:var(--ember-hot)}
+.hist-btn:hover{border-color:var(--ember);background:rgba(196,52,42,.08)}
+.hist-wide{margin-top:16px;padding:13px;font-size:14px}
+.ho{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:12px 13px;margin-bottom:9px}
+.ho-h{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:7px}
+.ho-h b{font-weight:500;font-size:14px}
+.ho-st{font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(196,52,42,.16);color:var(--ember-hot)}
+.ho-st.done{background:rgba(123,168,79,.16);color:var(--ok)}
+.ho-d{font-size:11.5px;color:var(--smoke);margin-left:auto}
+.ho-l{font-size:12.5px;color:var(--smoke);line-height:1.55}
+.ho-f{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;
+  padding-top:10px;border-top:1px solid var(--line)}
+.ho-sum{font-family:'Oswald';font-size:16px}
+.ho-again{background:var(--ember);color:#fff;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;transition:.14s}
+.ho-again:active{transform:scale(.96)}
+.pt-l{min-width:0}
+.pt-map{display:inline-flex;align-items:center;gap:4px;margin-top:3px;font-size:11.5px;
+  color:var(--ember-hot);text-decoration:none}
+.pt-map svg{width:12px;height:12px}
+.pt-map:hover{text-decoration:underline}
+.pt-tel{color:var(--smoke);font-size:12.5px;text-decoration:none;white-space:nowrap;flex:0 0 auto}
+.info-map{display:inline-block;margin-top:4px;font-size:11.5px;color:var(--ember-hot);text-decoration:none}
+.info-map:hover{text-decoration:underline}
+.ord-link{margin:14px 0 0;font-size:12px;color:var(--smoke);line-height:1.6;text-align:center}
+.lnk-copy{font-size:12.5px;color:var(--ember-hot);text-decoration:underline;padding:4px}
+
 :focus-visible{outline:2px solid var(--ember-hot);outline-offset:2px}
-.up-scroll{max-height:52vh;overflow-y:auto;margin:0 -4px 14px;padding:0 4px;
+.up-scroll{max-height:52vh;max-height:52dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;margin:0 -4px 14px;padding:0 4px;
   display:grid;gap:8px;align-content:start;
   -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 26px),transparent);
   mask-image:linear-gradient(to bottom,#000 calc(100% - 26px),transparent)}
 .up-scroll::-webkit-scrollbar{width:0}
 .up-grp{margin:8px 2px 1px;font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--smoke)}
 .up-grp:first-child{margin-top:0}
-.up{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:var(--coal);
+.up{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:rgba(30,24,23,.92);
   border:1px solid var(--line);border-radius:11px;padding:9px 12px 9px 9px;transition:.14s}
 .up.on{border-color:var(--ember);background:rgba(196,52,42,.1)}
 .up-ph{width:46px;height:46px;border-radius:8px;background:var(--coal-2);flex:0 0 auto;
@@ -215,6 +520,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .up-add{width:27px;height:27px;border-radius:50%;background:var(--ember);color:#fff;
   display:grid;place-items:center;font-size:15px;line-height:1;flex:0 0 auto}
 .up.on .up-add{background:var(--ok)}
+.up.on:hover .up-add{background:var(--ember)}
 .inst{position:fixed;left:0;right:0;bottom:0;z-index:50;padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
 .inst-b{max-width:588px;margin:0 auto;background:var(--coal);border:1px solid var(--line-2);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:11px;box-shadow:0 10px 30px rgba(0,0,0,.55)}
 .inst-t{flex:1;min-width:0;line-height:1.35}
@@ -223,7 +529,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .inst-y{background:var(--ember);color:#fff;border-radius:9px;padding:9px 15px;font-size:13.5px;font-weight:600;flex:0 0 auto}
 .inst-n{color:var(--smoke);font-size:16px;padding:4px 2px;flex:0 0 auto}
 body:has(.inst) .bar{bottom:66px}
-@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
@@ -232,34 +538,89 @@ body:has(.inst) .bar{bottom:66px}
   <div class="wrap top-in">
     <img class="mark" src="icon-192.png" alt="Мʼясний Барон">
     <button class="shop" id="shopBtn">
-      <small>Точка видачі</small>
-      <b id="shopName">Пр-т Героїв Харкова 256</b>
+      <span class="shop-t">
+        <small>Точка видачі</small>
+        <b id="shopName"></b>
+      </span>
+      <span class="chev">▼</span>
     </button>
-    <span class="chev">▼</span>
   </div>
 </header>
 
 <main class="wrap">
   <section class="hero">
+    <div class="smk" aria-hidden="true"><i></i><i></i></div>
+    <div class="mk-bg" aria-hidden="true"></div>
     <p class="brand">Мʼясний Барон</p>
     <h1><span>Найвигідніший шашлик</span>твого міста</h1>
     <p>Свіже мариноване мʼясо, ковбаски власного виробництва та мʼясо зі смокеру. Заберете сирим — або посмажимо на мангалі.</p>
-    <div class="hero-tags">
-      <span class="tag">8 точок у місті</span>
-      <span class="tag">Смаження +50 ₴/кг</span>
-      <span class="tag">Самовивіз і доставка</span>
-    </div>
   </section>
 
-  <div class="tools">
-    <div class="search">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9A908A" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <input id="q" type="search" placeholder="Пошук: ошийок, чевапчічі, реберця…" aria-label="Пошук товарів">
-    </div>
-    <nav class="cats" id="cats" role="tablist" aria-label="Категорії"></nav>
-  </div>
+  <div class="active-bar" id="active" hidden></div>
 
-  <div id="catalog"></div>
+  <div class="layout">
+
+    <div class="mode-bar">
+      <button class="mb-btn" data-gm="pickup" aria-pressed="true">
+        <span class="mb-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5V20h16V9.5"/><path d="M3 9.5 5 4h14l2 5.5a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M10 20v-5h4v5"/></svg></span>
+        <span class="mb-t">Самовивіз</span>
+        <span class="mb-s">з обраної точки</span>
+      </button>
+      <button class="mb-btn" data-gm="delivery" aria-pressed="false">
+        <span class="mb-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h10v9H3z"/><path d="M13 10h4l3 3.2V16h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg></span>
+        <span class="mb-t">Доставка</span>
+        <span class="mb-s">вартість уточнимо</span>
+      </button>
+    </div>
+
+    <aside class="side side-l">
+      <nav class="side-cats" id="sideCats"></nav>
+    </aside>
+
+    <div class="mid">
+      <div class="tools">
+        <div class="search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9A908A" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input id="q" type="search" placeholder="Пошук: ошийок, чевапчічі, реберця…" aria-label="Пошук товарів">
+        </div>
+        <nav class="cats" id="cats" role="tablist" aria-label="Категорії"></nav>
+      </div>
+      <nav class="subs" id="subs" aria-label="Підкатегорії"></nav>
+      <div id="catalog"></div>
+    </div>
+
+    <aside class="side side-r">
+      <div class="info">
+        <p class="side-h">Інформація</p>
+        <div class="info-row">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg></span>
+          <div><small>Точка видачі</small><b id="infoShop"></b>
+            <a class="info-map" id="infoMap" href="#" target="_blank" rel="noopener">Прокласти маршрут</a></div>
+        </div>
+        <div class="info-row">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s4.2 3.3 4.2 7.2c0 1.6-.9 2.7-2 2.7-1.4 0-1.9-1.2-1.7-2.6C10.6 12 9 13.9 9 16.1 9 19 10.9 21 12.6 21 15.6 21 18 18.4 18 15c0-5.2-6-12-6-12z"/><path d="M9.4 21C7.3 20.4 6 18.5 6 16.2c0-1.4.4-2.6 1.1-3.7"/></svg></span>
+          <div><small>Смаження</small><b>50 ₴ за кг сирого мʼяса</b></div>
+        </div>
+        <div class="info-row">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/></svg></span>
+          <div><small>Графік</small><b>Щодня 8:00–20:00<br><span style="font-weight:400;color:var(--smoke)">мангал з 10:00</span></b></div>
+        </div>
+        <div class="info-row">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h10v9H3z"/><path d="M13 10h4l3 3.2V16h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg></span>
+          <div><small>Отримання</small><b>Самовивіз і доставка</b></div>
+        </div>
+        <button class="hist-btn" id="histBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/></svg>
+          Мої замовлення
+        </button>
+        <a class="ig ig-sm" href="https://instagram.com/meat.baron_" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
+          @meat.baron_
+        </a>
+      </div>
+    </aside>
+
+  </div>
 
   <section class="about">
     <h2>Про нас</h2>
@@ -268,7 +629,12 @@ body:has(.inst) .bar{bottom:66px}
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
       @meat.baron_
     </a>
+    <p class="pts-h" id="ptsH"></p>
     <div class="pts" id="pts"></div>
+    <button class="hist-btn hist-wide" id="histBtn2">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/></svg>
+      Мої замовлення
+    </button>
   </section>
 </main>
 
@@ -277,6 +643,10 @@ body:has(.inst) .bar{bottom:66px}
     <span id="barL">Кошик</span>
     <span id="barR">0 ₴</span>
   </button>
+</div>
+
+<div class="lb" id="lb" role="dialog" aria-label="Товар">
+  <div class="lb-card"></div>
 </div>
 
 <div class="veil" id="veil"></div>
@@ -288,8 +658,9 @@ body:has(.inst) .bar{bottom:66px}
 const CATS=[
  {id:'raw',t:'Сире мʼясо',u:'ціна за 100 г',fry:1},
  {id:'saus',t:'Ковбаски',u:'власне виробництво, за 100 г',fry:1},
- {id:'ready',t:'Готова продукція',u:'смокер і гриль, за 100 г',fry:0},
- {id:'side',t:'Гарніри',u:'ціна за порцію',fry:0},
+ {id:'ready',t:'Готова продукція',u:'смокер, за 100 г',fry:0},
+ {id:'grill',t:'Кури гриль',u:'готове, ціна за 100 г',fry:0},
+ {id:'side',t:'Фритюр меню',u:'ціна за порцію',fry:0},
  {id:'extra',t:'До мʼяса',u:'сири, овочі, хліб, соуси',fry:0}
 ];
 const P=[
@@ -307,134 +678,479 @@ const P=[
  ['saus','Ковбаски','Індича',24.19],['saus','Ковбаски','Ковбаски гриль асорті',20.49],
  ['saus','Чевапчічі','Класичні',24.70],['saus','Чевапчічі','З сиром',24.60],['saus','Чевапчічі','З грибами',24.70],
 
- ['ready','Смокер','Курка bbq',26.69],['ready','Смокер','Рулька свиняча',15.65],['ready','Смокер','Ребро свиняче',42.60],
- ['ready','Смокер','Бекон',39.99],['ready','Смокер','Відбивна свиняча',42.69],['ready','Смокер','Рвана свинина',40.69],
- ['ready','Смокер','Рвана яловичина',85.69],['ready','Смокер','Ребро яловиче',30.19],['ready','Смокер','Бріскет яловичий',71.69],
- ['ready','Смокер','Буженіна куряча',31.60],['ready','Смокер','Ковбаса домашня',40.69],['ready','Смокер','Підчеревина',50.69],
- ['ready','Смокер','Індича гомілка',27.00],['ready','Смокер','Індиче філе',54.99],['ready','Смокер','Ошийок пастрамі',66.69],
- ['ready','Смокер','Качка з яблуками',33.19],['ready','Смокер','Плече індиче',22.19],
- ['ready','Гриль','Курка гриль',19.90],['ready','Гриль','Качка гриль',38.00],['ready','Гриль','Качка зі смокеру з яблуками',45.99],
+ ['ready','Смокер','Курка bbq',26.69,0,700],['ready','Смокер','Рулька свиняча',15.65,0,500],['ready','Смокер','Ребро свиняче',42.60,0,400],
+ ['ready','Смокер','Бекон',39.99,0,200],['ready','Смокер','Відбивна свиняча',42.69,0,300],['ready','Смокер','Рвана свинина',40.69,0,300],
+ ['ready','Смокер','Рвана яловичина',85.69,0,300],['ready','Смокер','Ребро яловиче',30.19,0,500],['ready','Смокер','Бріскет яловичий',71.69,0,300],
+ ['ready','Смокер','Буженіна куряча',31.60,0,200],['ready','Смокер','Ковбаса домашня',40.69,0,300],['ready','Смокер','Підчеревина',50.69,0,300],
+ ['ready','Смокер','Індича гомілка',27.00,0,500],['ready','Смокер','Індиче філе',54.99,0,300],['ready','Смокер','Ошийок пастрамі',66.69,0,200],
+ ['ready','Смокер','Качка з яблуками',33.19,0,700],['ready','Смокер','Плече індиче',22.19,0,500],
+ ['grill','Кури гриль','Курка гриль',19.90,0,1000],['grill','Кури гриль','Чверть курки',19.90,0,300],
+ ['grill','Качка','Качка гриль',38.00,0,2000],['grill','Качка','Качка зі смокеру з яблуками',45.99,0,2000],
 
- ['side','Гарніри','Картопля фрі',70,1],['side','Гарніри','Картопля по-селянськи',70,1],
- ['side','Гарніри','Цибулеві кільця',75,1],['side','Гарніри','Картопляні крокети',75,1],
- ['side','Гарніри','Хеш-браун',70,1],['side','Гарніри','Сирні палички',130,1],['side','Гарніри','Батат фрі',95,1],
- ['side','Гарніри','Сет на компанію + 2 соуси',490,1],
+ ['side','Фритюр меню','Картопля фрі',70,1],['side','Фритюр меню','Картопля по-селянськи',70,1],
+ ['side','Фритюр меню','Цибулеві кільця',75,1],['side','Фритюр меню','Картопляні крокети',75,1],
+ ['side','Фритюр меню','Хеш-браун',70,1],['side','Фритюр меню','Сирні палички',130,1],['side','Фритюр меню','Батат фрі',95,1],
+ ['side','Фритюр меню','Сет на компанію + 2 соуси',490,1],
 
- ['extra','Сири','Сулугуні',35.50],['extra','Сири','Халумі',38.90],
- ['extra','Овочі','Картопля з салом',14.00],['extra','Овочі','Кукурудза',13.90],['extra','Овочі','Гриби печериці',22.90],['extra','Овочі','Картопля',9.90],
+ ['extra','Сири','Сулугуні',35.50,0,350],['extra','Сири','Халумі',38.90,0,350],
+ ['extra','Овочі','Картопля з салом',14.00],['extra','Овочі','Кукурудза',13.90,'пак'],['extra','Овочі','Гриби печериці',22.90,'пак'],['extra','Овочі','Картопля',9.90,'пак'],
  ['extra','Хліб і соуси','Матнакаш',35,1],['extra','Хліб і соуси','Лаваш тонкий',35,1],['extra','Хліб і соуси','Соуси в асортименті',35,1]
 ];
-const ITEMS=P.map((r,i)=>({id:'p'+i,cat:r[0],grp:r[1],name:r[2],price:r[3],unit:r[4]?'порція':'100г'}));
+const FRY_RATE=50, MIN_G=200;
+/* графік і час видачі */
+const SHOP_OPEN=8, SHOP_CLOSE=20;      // магазин працює 8:00–20:00
+const GRILL_FROM=10;                    // мангал з 10:00
+const LEAD_PICKUP=60, LEAD_DELIVERY=90; // хвилин на підготовку
+const SLOT_STEP=60;                     // крок слота — 1 година
+const DAYS_AHEAD=7;
+/* рядок: [категорія, група, назва, ціна, одиниця?, мін.вага?]
+   одиниця: undefined — вага (ціна за 100 г); 'шт' — фікс. ціна за штуку;
+            'пак' — упаковка 1 кг, ціна вказана за 100 г */
+const ITEMS=P.map((r,i)=>({
+  id:'p'+i, cat:r[0], grp:r[1], name:r[2], price:r[3],
+  unit: r[4]==='шт'||r[4]===1 ? 'шт' : (r[4]==='пак' ? 'пак' : 'вага'),
+  minG: r[5]||MIN_G
+}));
+
+/* короткі описи товарів: ключ — "Група/Назва" або "Назва" */
+const DESC={
+ 'Ошийок':'Найпопулярніший вибір для шашлику — соковитий, з тонкими прошарками сала.',
+ 'Мʼякоть':'Чиста мʼякоть без кістки — універсальна для шашлику й стейків.',
+ 'Вирізка':'Найніжніша частина туші, майже без жиру.',
+ 'Реберця':'Мʼясні реберця у маринаді — соковиті, з хрусткою скоринкою.',
+ 'Грудинка':'З прошарками сала, виходить дуже соковитою на вогні.',
+ 'Стейк з ошийка':'Товстий зріз ошийка — соковитий навіть при сильному прожарюванні.',
+ 'Стейк з відбивної':'Пісний зріз корейки, ніжний і швидкий у приготуванні.',
+ 'Стейк на кістці':'Класика на кістці — мʼясо біля кістки найсмачніше.',
+ 'Косичка bbq':'Плетена косичка у соусі bbq — ефектно виглядає на грилі.',
+ 'Курка/Гомілка':'Соковита гомілка у маринаді, улюблена дитяча позиція.',
+ 'Курка/Крило':'Мариновані крильця — після грилю хрусткі, ідеально під пиво.',
+ 'Курка/Стейк':'Стейк зі стегна — соковитіший за грудку.',
+ 'Курка/Філе':'Пісне філе грудки, готується швидко.',
+ 'Курка/Люля кебаб':'Рублене куряче мʼясо зі спеціями на шпажці.',
+ 'Курка/Шашлик з індика':'Дієтичний і ніжний, з делікатним смаком.',
+ 'Шашлик з телятини':'Молода яловичина — щільна текстура, насичений смак.',
+ 'Стейк Рібай':'Мармуровий зріз з жировими прошарками — король стейків.',
+ 'Стейк Нью-Йорк':'Щільний стриплойн з вираженим яловичим смаком.',
+ 'Філе-міньйон':'Найніжніший стейк з вирізки, майже без жиру.',
+ 'Баранина/Шашлик з мʼякоті':'Класичний баранячий шашлик з характерним ароматом.',
+ 'Баранина/Люля кебаб':'Рублена баранина зі спеціями та зеленню.',
+ 'Ковбаски/Віденська':'Ніжна ковбаска у натуральній оболонці.',
+ 'Ковбаски/Мисливська':'Підкопчена, з насиченим ароматом спецій.',
+ 'Ковбаски/Свиняча':'Класична домашня ковбаска зі свинини.',
+ 'Ковбаски/Куряча':'Легша за свинячу, ніжна текстура.',
+ 'Ковбаски/Куряча з сиром':'З начинкою з розплавленого сиру всередині.',
+ 'Ковбаски/Куряча з пивом':'З додаванням пива в фарш — мʼякша і ароматніша.',
+ 'Ковбаски/Індича':'Пісна ковбаска з індички — легша за свинячу.',
+ 'Ковбаски/Ковбаски гриль асорті':'Мікс наших ковбасок — щоб спробувати все.',
+ 'Чевапчічі/Класичні':'Балканські мʼясні ковбаски без оболонки.',
+ 'Чевапчічі/З сиром':'З сирною начинкою всередині — тягнеться при розломі.',
+ 'Чевапчічі/З грибами':'З печерицями у фарші — мʼякші й ароматніші.',
+ 'Смокер/Курка bbq':'Ціла курка, томлена у смокері під соусом bbq.',
+ 'Смокер/Рулька свиняча':'Томлена рулька з хрусткою скоринкою.',
+ 'Смокер/Ребро свиняче':'Ребра з димком, мʼясо відходить від кістки.',
+ 'Смокер/Бекон':'Тонкі скибки, підкопчені на буковій трісці.',
+ 'Смокер/Рвана свинина':'Томиться годинами, доки не розбирається на волокна.',
+ 'Смокер/Рвана яловичина':'Волокниста яловичина з глибоким димним смаком.',
+ 'Смокер/Бріскет яловичий':'Грудинка з корою — головна страва техаського барбекю.',
+ 'Смокер/Підчеревина':'Соковита, з рівним балансом мʼяса й сала.',
+ 'Кури гриль/Курка гриль':'Ціла курка на грилі, готова до столу.',
+ 'Кури гриль/Чверть курки':'Порція на одного — стегно зі спинкою.',
+ 'Качка/Качка гриль':'Ціла качка на грилі, з рум\'яною шкіркою.',
+ 'Качка/Качка зі смокеру з яблуками':'Томлена у смокері качка з яблуками.',
+ 'Сулугуні':'Розплавлений на грилі — тягнеться і рум\'яниться.',
+ 'Халумі':'Сир, що не тане — смажиться до золотої скоринки.',
+ 'Кукурудза':'Солодка кукурудза, готова до гриля.',
+ 'Картопля з салом':'Картопля, шпигована салом — гарнір з димком.',
+ 'Гриби печериці':'Мариновані печериці для гриля.',
+ 'Смокер/Відбивна свиняча':'Товста корейка з димною скоринкою.',
+ 'Смокер/Ребро яловиче':'Масивне ребро, мʼясо тане в роті.',
+ 'Смокер/Буженіна куряча':'Куряче філе, запечене цілим шматком.',
+ 'Смокер/Ковбаса домашня':'Домашня ковбаса, підкопчена у смокері.',
+ 'Смокер/Індича гомілка':'Соковита гомілка індички з димком.',
+ 'Смокер/Індиче філе':'Пісне філе, залишається мʼяким завдяки томлінню.',
+ 'Смокер/Ошийок пастрамі':'Пастрамі за нью-йоркським рецептом — перець і коріандр.',
+ 'Смокер/Качка з яблуками':'Качка з яблуками, томлена до мʼякості.',
+ 'Смокер/Плече індиче':'Плече індички — щільне мʼясо з насиченим смаком.',
+ 'Фритюр меню/Картопля фрі':'Хрумка класика — соломкою.',
+ 'Фритюр меню/Картопля по-селянськи':'Товсті дольки зі шкіркою та спеціями.',
+ 'Фритюр меню/Цибулеві кільця':'Цибуля кільцями у хрусткій паніровці.',
+ 'Фритюр меню/Картопляні крокети':'Кульки з картопляного пюре, хрусткі зовні.',
+ 'Фритюр меню/Хеш-браун':'Картопляні оладки — хрусткі, золотисті.',
+ 'Фритюр меню/Сирні палички':'Сир у паніровці — тягнеться при розломі.',
+ 'Фритюр меню/Батат фрі':'Батат у хрусткій скоринці — мʼякий усередині.',
+ 'Фритюр меню/Сет на компанію + 2 соуси':'Мікс усього фритюру плюс два фірмових соуси.',
+ 'Картопля':'Молода картопля, готова до запікання.',
+ 'Соління в асортименті':'Домашні соління — питайте на точці.',
+ 'Матнакаш':'Вірменський хліб — ідеальний до мʼяса.',
+ 'Лаваш тонкий':'Тонкий лаваш — 3 листи в упаковці.',
+ 'Соуси в асортименті':'Фірмові соуси — питайте на точці.'
+};
+const GRP_NOTE={
+ 'Смокер':'Готуємо за американською технологією low and slow — мʼясо томиться годинами на низькій температурі, до димної скоринки й ніжних волокон.',
+ 'Чевапчічі':'Балканська класика — рублене мʼясо без оболонки.'
+};
+const descOf=it=>DESC[it.grp+'/'+it.name]||DESC[it.name]||'';
 
 /* фото товарів: ключ — "Група/Назва" або просто "Назва" */
 const PHOTO={
- 'Ошийок':'oshyyok','Мʼякоть':'myakot','Вирізка':'vyrizka',
- 'Реберця':'rebertsya','Грудинка':'hrudynka',
- 'Стейк з ошийка':'steyk-oshyyok','Стейк на кістці':'steyk-kistka',
- 'Стейк з відбивної':'steyk-vidbyvna',
- 'Курка/Гомілка':'homilka','Курка/Крило':'krylo','Курка/Стейк':'steyk-kur',
- 'Курка/Філе':'file-kur','Курка/Люля кебаб':'lyulya-kur','Курка/Шашлик з індика':'shashlyk-indyk',
- 'Шашлик з телятини':'shashlyk-telyatyna','Стейк Рібай':'ribay',
- 'Стейк Нью-Йорк':'new-york','Філе-міньйон':'file-minyon',
- 'Ковбаски/Віденська':'kovb-videnska','Ковбаски/Мисливська':'kovb-myslyvska',
- 'Ковбаски/Свиняча':'kovb-svynyacha','Ковбаски/Куряча':'kovb-kuryacha',
- 'Ковбаски/Куряча з сиром':'kovb-kur-syr',
- 'Ковбаски/Індича':'kovb-indycha','Ковбаски/Ковбаски гриль асорті':'kovb-asorti',
- 'Чевапчічі/Класичні':'chevap-klas','Чевапчічі/З сиром':'chevap-syr',
- 'Чевапчічі/З грибами':'chevap-klas',
- 'Рулька свиняча':'rulka',
- 'Сулугуні':'sulhuni','Халумі':'halumi','Кукурудза':'kukurudza'
+ /* нові фото — вирізані png на прозорому фоні.
+    решта позицій поки без фото: показується заглушка-іконка.
+    щоб додати — новий рядок 'Група/Назва':'імʼя-файлу.png' */
+ 'Ошийок':'oshyyok.png',
+ 'Мʼякоть':'myakot.png',
+ 'Косичка bbq':'kosychka-bbq.png',
+ 'Баранина/Шашлик з мʼякоті':'baranyna-shashlyk.png',
+ 'Кури гриль/Курка гриль':'kurka-hryl.png'
 };
 const photoOf=it=>{
   const k=PHOTO[it.grp+'/'+it.name]||PHOTO[it.name];
-  return k?`photo/${k}.jpg`:null;
+  return k?`photo/${k}`:null;
 };
-const SHOPS=[
- ['Пр-т Героїв Харкова 256','+380638771309'],['вул. Людвіга Свободи 50','+380664210037'],
- ['пр-т Тракторобудівників 142а','+380631498096'],['вул. Шевченка 142а','+380663210037'],
- ['м-н Захисників України 7/8','+380632452073'],['вул. Різдвяна 16/22','+380505261861'],
- ['пр-т Аерокосмічний 316е',''],['вул. Холодногірська 3','']
+/* усі точки мережі. третій елемент — чи приймає замовлення онлайн.
+   на час тесту працюють Шевченка 142а і Людвіга Свободи 52: щоб увімкнути решту — постав 1 */
+const SHOPS_ALL=[
+ ['Пр-т Героїв Харкова 256','+380638771309',0],['пр-т Людвіга Свободи 52','+380664210037',1],
+ ['пр-т Тракторобудівників 142а','+380631498096',0],['вул. Шевченка 142а','+380663210037',1],
+ ['м-н Захисників України 7/8','+380632452073',0],['вул. Різдвяна 16/22','+380505261861',0],
+ ['пр-т Аерокосмічний 316е','',0],['вул. Холодногірська 3','',0]
 ];
-const FRY_RATE=50, MIN_G=200;
-const API=''; // '' = той самий домен. Для локального тесту: 'http://localhost:3000'
+const SHOPS=SHOPS_ALL.filter(s=>s[2]);
+/* Точки на карті.
+   Координати точніші за адресу — Google інколи ставить мітку на сусідній будинок.
+   Щоб уточнити: Google Maps → правий клік на потрібній будівлі → скопіювати числа. */
+const MAP_ADDR={
+ 'Пр-т Героїв Харкова 256':'проспект Героїв Харкова, 256, Харків',
+ 'пр-т Людвіга Свободи 52':'проспект Людвіга Свободи, 52, Харків',
+ 'пр-т Тракторобудівників 142а':'проспект Тракторобудівників, 142А, Харків',
+ 'вул. Шевченка 142а':'вулиця Шевченка, 142-А, Харків',
+ 'м-н Захисників України 7/8':'майдан Захисників України, 7/8, Харків',
+ 'вул. Різдвяна 16/22':'вулиця Різдвяна, 16/22, Харків',
+ 'пр-т Аерокосмічний 316е':'проспект Аерокосмічний, 316Е, Харків',
+ 'вул. Холодногірська 3':'вулиця Холодногірська, 3, Харків'
+};
+const MAP_GEO={
+ 'пр-т Людвіга Свободи 52':'50.05728625791128,36.20401787205163',
+ 'вул. Шевченка 142а':'50.002336539763355,36.27150015060547'
+};
+const mapQuery=name=>MAP_GEO[name]||encodeURIComponent(MAP_ADDR[name]||(name+', Харків'));
+const mapLink=name=>'https://www.google.com/maps/search/?api=1&query='+mapQuery(name);
+const routeLink=name=>'https://www.google.com/maps/dir/?api=1&destination='+mapQuery(name);
+const API='https://meat-baron-production.up.railway.app'; // сервер прийому замовлень
+/* запит із таймаутом — щоб на поганому звʼязку не висло назавжди */
+async function req(url,opts,ms){
+  const ctl=new AbortController();
+  const t=setTimeout(()=>ctl.abort(),ms||12000);
+  try{ return await fetch(url,{...(opts||{}),signal:ctl.signal}) }
+  finally{ clearTimeout(t) }
+}
 let poll=null;
-const money=n=>n.toFixed(2).replace('.00','')+' ₴';
+/* округлення до копійки, стійке до похибок дробових чисел */
+const kop=n=>Math.round((n+Number.EPSILON)*100)/100;
+const money=n=>kop(n).toFixed(2).replace(/\.00$/,'')+' ₴';
 const wLabel=g=>g>=1000?(g/1000).toFixed(g%1000?1:0)+' кг':g+' г';
+/* заглушки: іконка за типом продукту + дим і силует бика */
+const GLYPH={
+  meat:'<path d="M17.5 6.5c2 2 2 5.5-.5 8s-6 2.5-8 .5-2-5.5.5-8 6-2.5 8-.5z"/><path d="M9.5 15c-1-1-1-2.8.3-4S13 9.6 14 10.6"/><circle cx="18.6" cy="5.4" r="2.1"/>',
+  rib:'<path d="M4 7c4-1.6 10-1.6 15 .6"/><path d="M4 11c4-1.6 10-1.6 15 .6"/><path d="M4 15c4-1.6 10-1.6 15 .6"/><path d="M4 6v10"/>',
+  sausage:'<path d="M6.6 17.4c-2-2-2-5.6.6-8.2s6.2-2.6 8.2-.6 2 5.6-.6 8.2-6.2 2.6-8.2.6z"/><path d="M9 15.2c1.4 1.4 4 1 5.8-.8s2.2-4.4.8-5.8"/>',
+  chicken:'<path d="M13.5 4a5 5 0 0 1 4.3 7.6L9.4 20 6 16.6l8.4-8.4A5 5 0 0 1 13.5 4z"/><path d="M6 16.6 4 20l3.4-.6"/>',
+  steak:'<path d="M5 9.5C5 6.5 8 5 12 5s7 1.5 7 4.5c0 3.4-2.4 9.5-7 9.5S5 12.9 5 9.5z"/><path d="M9.5 10.5c1-1.4 3.5-1.4 4.6 0"/>',
+  fish:'<path d="M3 12c3-4 7-6 11-6s7 2 7 6-3 6-7 6-8-2-11-6z"/><circle cx="16.5" cy="10.5" r="1"/>',
+  potato:'<path d="M6.5 8.5C8 6 12 5 15 6.5s4.5 5 3 8-6 4-9 2.5-4-5.5-2.5-8.5z"/><circle cx="10" cy="11" r="1"/><circle cx="13.5" cy="14" r="1"/>',
+  cheese:'<path d="M4 11 13 5.5 20 9v7H4z"/><circle cx="9" cy="12.5" r="1.1"/><circle cx="15" cy="13.5" r="1.1"/>',
+  bread:'<path d="M4 13c0-3 3.6-5.5 8-5.5s8 2.5 8 5.5v3.5H4z"/><path d="M8.5 8.6C9 6.6 10.4 5.5 12 5.5s3 1.1 3.5 3.1"/>',
+  sauce:'<path d="M10 4h4v2.4l2.2 2.6c.5.6.8 1.4.8 2.2V19a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-7.8c0-.8.3-1.6.8-2.2L10 6.4z"/><path d="M8 13h8"/>',
+  corn:'<path d="M12 4c2.6 0 4.5 2.6 4.5 6.5S14.6 20 12 20s-4.5-5.6-4.5-9.5S9.4 4 12 4z"/><path d="M12 5.5v13"/><path d="M9.4 8h5.2M9.2 11h5.6M9.4 14h5.2"/>',
+  mushroom:'<path d="M4.5 11.5a7.5 7.5 0 0 1 15 0z"/><path d="M10 11.5v5.8a1.7 1.7 0 0 0 3.4 0v-5.8"/>',
+  fries:'<path d="M7.5 10 6 20h12l-1.5-10z"/><path d="M9 10 8.4 5M12 10V4.4M15 10l.6-5"/>',
+  set:'<path d="M4 8h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/>'
+};
+function glyphOf(it){
+  const n=(it.grp+' '+it.name).toLowerCase();
+  if(/фрі|крокет|хеш|кільц|палички|батат/.test(n)) return 'fries';
+  if(/сет/.test(n)) return 'set';
+  if(/матнакаш|лаваш/.test(n)) return 'bread';
+  if(/соус/.test(n)) return 'sauce';
+  if(/сир|сулугун|халум/.test(n)) return 'cheese';
+  if(/кукурудз/.test(n)) return 'corn';
+  if(/гриб|печериц/.test(n)) return 'mushroom';
+  if(/картопл/.test(n)) return 'potato';
+  if(/ковбас|чевапчічі|люля|косичка/.test(n)) return 'sausage';
+  if(/ребр|реберц/.test(n)) return 'rib';
+  if(/стейк|бріскет|вирізк|міньйон|рібай|нью/.test(n)) return 'steak';
+  if(/курк|куряч|гомілк|крил|філе|індич|індик|качк/.test(n)) return 'chicken';
+  return 'meat';
+}
+function ph(it,big){
+  const g=GLYPH[glyphOf(it)];
+  const s=big?96:64;
+  return `<span class="ph-ph">
+    <svg class="ph-g" viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor"
+      stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${g}</svg>
+  </span>`;
+}
 const ICON='<svg viewBox="0 0 24 24" fill="none" stroke="#F0E9DE" stroke-width="1.4"><path d="M4 15c0-4 3.5-8 8-8s8 4 8 8-3.5 4-8 4-8 0-8-4z"/><circle cx="9" cy="13" r="1.2"/></svg>';
 
-let cat='raw', cart=[], shop=0, order=null;
+let cat='raw', sub='', cart=[], shop=0, order=null, getMode='pickup', orderNote='';
 
 /* ---------- catalog ---------- */
 function renderCats(){
+  const q=document.getElementById('q')?document.getElementById('q').value.trim():'';
+  const active=q?null:cat;
   document.getElementById('cats').innerHTML=CATS.map(c=>
-    `<button class="cat" role="tab" aria-selected="${c.id===cat}" data-c="${c.id}">${c.t}</button>`).join('');
+    `<button class="cat" role="tab" aria-selected="${c.id===active}" data-c="${c.id}">${c.t}</button>`).join('');
+  document.getElementById('sideCats').innerHTML=CATS.map(c=>
+    `<button class="side-cat" aria-selected="${c.id===active}" data-c="${c.id}">${c.t}</button>`).join('');
 }
 function renderCatalog(){
   const q=document.getElementById('q').value.trim().toLowerCase();
-  const list=ITEMS.filter(i=>q? (i.name+' '+i.grp).toLowerCase().includes(q) : i.cat===cat);
+  const searching=!!q;
+  const all=ITEMS.filter(i=>searching? (i.name+' '+i.grp).toLowerCase().includes(q) : i.cat===cat);
   const box=document.getElementById('catalog');
-  if(!list.length){box.innerHTML='<p class="empty">Нічого не знайшли. Спробуйте іншу назву.</p>';return}
+  const subBox=document.getElementById('subs');
+  if(!all.length){box.innerHTML='<p class="empty">Нічого не знайшли. Спробуйте іншу назву.</p>';subBox.innerHTML='';return}
+
+  const allGroups=[...new Set(all.map(i=>i.grp))];
+  if(!searching&&allGroups.length>1){
+    subBox.innerHTML=`<button class="sub" data-g="" aria-selected="${!sub}">Все</button>`+
+      allGroups.map(g=>`<button class="sub" data-g="${g}" aria-selected="${sub===g}">${g}</button>`).join('');
+  } else subBox.innerHTML='';
+
+  const list=(!searching&&sub)?all.filter(i=>i.grp===sub):all;
   const groups=[...new Set(list.map(i=>i.grp))];
   box.innerHTML=groups.map(g=>{
     const c=CATS.find(c=>c.id===list.find(i=>i.grp===g).cat);
     return `<section class="grp"><div class="grp-h"><h2>${g}</h2><em>${c.u}</em></div>
+    ${GRP_NOTE[g]?`<p class="grp-note">${GRP_NOTE[g]}</p>`:''}
     <div class="grid">${list.filter(i=>i.grp===g).map(i=>`
       <article class="card">
-        <div class="ph">${photoOf(i)?`<img src="${photoOf(i)}" alt="${i.name}" loading="lazy">`:ICON}${c.fry?'<span class="badge">сире</span>':(c.id==='ready'?'<span class="badge fire">готове</span>':'')}</div>
+        <button class="ph" ${photoOf(i)?`data-ph="${photoOf(i)}" data-id="${i.id}" aria-label="Показати ${i.name}"`:'disabled'}>${photoOf(i)?`<img src="${photoOf(i)}" alt="${i.name}" loading="lazy">`:ph(i)}</button>
         <div class="c-b">
           <span class="nm">${i.name}</span>
-          <span class="un">${i.unit==='порція'?'порція':'за 100 г'}</span>
-          <div class="c-f"><span class="pr">${money(i.price)}</span>
-          <button class="add" data-i="${i.id}" aria-label="Додати ${i.name}">+</button></div>
+          <span class="pr-top">${money(i.price)}</span>
+          ${descOf(i)?`<span class="ds">${descOf(i)}</span>`:''}
+          <span class="un">${unitNote(i)}${c.fry?' · мариноване':''}</span>
+          <div class="c-f">
+            <button class="add" data-i="${i.id}" aria-label="Додати ${i.name}">+ Додати</button>
+          </div>
         </div>
       </article>`).join('')}</div></section>`;
   }).join('');
 }
-document.getElementById('cats').onclick=e=>{const b=e.target.closest('.cat');if(!b)return;cat=b.dataset.c;document.getElementById('q').value='';renderCats();renderCatalog()};
-document.getElementById('q').oninput=renderCatalog;
-document.getElementById('catalog').onclick=e=>{const b=e.target.closest('.add');if(b)openItem(b.dataset.i)};
+function pickCat(id){cat=id;sub='';document.getElementById('q').value='';renderCats();renderCatalog()}
+document.getElementById('cats').onclick=e=>{const b=e.target.closest('.cat');if(b)pickCat(b.dataset.c)};
+document.getElementById('sideCats').onclick=e=>{const b=e.target.closest('.side-cat');if(b)pickCat(b.dataset.c)};
+document.getElementById('subs').onclick=e=>{const b=e.target.closest('.sub');if(!b)return;sub=b.dataset.g;renderCatalog()};
+document.querySelector('.mode-bar').onclick=e=>{
+  const b=e.target.closest('[data-gm]'); if(!b) return;
+  getMode=b.dataset.gm;
+  document.querySelectorAll('[data-gm]').forEach(x=>x.setAttribute('aria-pressed',x===b));
+};
+document.getElementById('q').oninput=()=>{renderCats();renderCatalog()};
+document.getElementById('catalog').onclick=e=>{
+  const b=e.target.closest('.add'); if(b){openItem(b.dataset.i);return}
+  const p=e.target.closest('[data-ph]'); if(p) openPhoto(p);
+};
+
+/* ---------- картка товару з фото ---------- */
+function openPhoto(node){
+  const it=ITEMS.find(i=>i.id===node.dataset.id);
+  if(!it) return;
+  const c=CATS.find(c=>c.id===it.cat);
+  const v=document.getElementById('lb');
+  const card=v.querySelector('.lb-card');
+  card.innerHTML=`
+    <div class="lb-ph">
+      <img src="${photoOf(it)}" alt="${it.name}">
+      <button class="lb-x" aria-label="Закрити">✕</button>
+    </div>
+    <div class="lb-b">
+      <h3>${it.name}</h3>
+      <p class="lb-pr">${money(it.price)}<span class="lb-un">${it.unit==='шт'?' / шт':' / 100 г'}</span></p>
+      ${it.unit==='пак'?`<p class="lb-pk">Упаковка 1 кг — ${money(it.price*PACK_G/100)}</p>`:''}
+      ${descOf(it)?`<p class="lb-ds">${descOf(it)}</p>`:''}
+      <button class="cta lb-add" data-add="${it.id}">Додати в кошик</button>
+    </div>`;
+  const r=node.getBoundingClientRect();
+  card.style.transition='none';
+  card.style.opacity='0';
+  card.style.transform=`translate(${r.left+r.width/2-innerWidth/2}px,${r.top+r.height/2-innerHeight/2}px) scale(.34)`;
+  v.classList.add('on');
+  lockScroll();
+  requestAnimationFrame(()=>{
+    card.style.transition='transform .36s cubic-bezier(.22,.9,.3,1),opacity .22s';
+    card.style.opacity='1';
+    card.style.transform='none';
+  });
+  card.querySelector('.lb-x').onclick=closePhoto;
+  card.querySelector('.lb-add').onclick=()=>{closePhoto();openItem(it.id)};
+}
+function closePhoto(){
+  const v=document.getElementById('lb');
+  v.classList.remove('on');
+  unlockScroll();
+}
+document.getElementById('lb').onclick=e=>{if(e.target.id==='lb')closePhoto()};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closePhoto()});
+document.getElementById('ptsH').textContent = SHOPS.length>1 ? 'Наші точки' : 'Замовлення приймає точка';
 document.getElementById('pts').innerHTML=SHOPS.map(s=>
-  `<div class="pt"><b>${s[0]}</b>${s[1]?`<a href="tel:${s[1]}">${s[1].replace('+38','')}</a>`:'<a>—</a>'}</div>`).join('');
+  `<div class="pt">
+     <div class="pt-l"><b>${s[0]}</b>
+       <a class="pt-map" href="${mapLink(s[0])}" target="_blank" rel="noopener">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>
+         На карті</a>
+     </div>
+     ${s[1]?`<a class="pt-tel" href="tel:${s[1]}">${s[1].replace('+38','')}</a>`:''}
+   </div>`).join('');
 
 /* ---------- sheet ---------- */
 const veil=document.getElementById('veil'),sheet=document.getElementById('sheet'),sIn=document.getElementById('sheetIn');
-function open(html){sIn.innerHTML=html;veil.classList.add('on');sheet.classList.add('on');document.body.style.overflow='hidden'}
-function close(){veil.classList.remove('on');sheet.classList.remove('on');document.body.style.overflow=''}
+function syncScrollLock(){
+  const anyOpen=sheet.classList.contains('on')||document.getElementById('lb').classList.contains('on');
+  document.documentElement.style.overflow=anyOpen?'hidden':'';
+  document.body.style.overflow=anyOpen?'hidden':'';
+  document.body.style.overscrollBehavior=anyOpen?'none':'';
+}
+const lockScroll=syncScrollLock, unlockScroll=syncScrollLock;
+function open(html){
+  sIn.innerHTML=html;veil.classList.add('on');sheet.classList.add('on');lockScroll();
+  sIn.querySelectorAll('input,textarea').forEach(el=>{
+    el.addEventListener('focus',()=>{
+      setTimeout(()=>{
+        try{el.scrollIntoView({block:'center',behavior:'smooth'})}catch(e){}
+      },320);
+    });
+  });
+}
+function close(){veil.classList.remove('on');sheet.classList.remove('on');unlockScroll()}
 veil.onclick=close;
 document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
 
+/* ---------- тягнемо шторку вниз ---------- */
+(function(){
+  let y0=0, dy=0, dragging=false, may=false;
+  const noDrag=el=>el.closest('input,select,textarea,.up-scroll,.wgrid,.seg,#lines,.pay,.wbox,.rowline,.cart-note,.wcol,.wheel');
+  const start=e=>{
+    const t=e.touches?e.touches[0]:e;
+    if(noDrag(e.target)) return;
+    if(sheet.scrollTop>2) return;
+    may=true; dragging=false; y0=t.clientY; dy=0;
+  };
+  const move=e=>{
+    if(!may) return;
+    const t=e.touches?e.touches[0]:e;
+    const d=t.clientY-y0;
+    if(!dragging){
+      if(d<6) { if(d<-4) may=false; return; }
+      dragging=true;
+      sheet.style.transition='none';
+    }
+    dy=Math.max(0,d);
+    sheet.style.transform=`translateY(${dy}px)`;
+    veil.style.opacity=String(Math.max(0,1-dy/380));
+    if(e.cancelable) e.preventDefault();
+  };
+  const end=()=>{
+    may=false;
+    if(!dragging) return;
+    dragging=false;
+    sheet.style.transition='';
+    sheet.style.transform='';
+    veil.style.opacity='';
+    if(dy>100) close();
+  };
+  sheet.addEventListener('touchstart',start,{passive:true});
+  sheet.addEventListener('touchmove',move,{passive:false});
+  sheet.addEventListener('touchend',end);
+  sheet.addEventListener('touchcancel',end);
+  sheet.addEventListener('mousedown',start);
+  window.addEventListener('mousemove',move);
+  window.addEventListener('mouseup',end);
+})();
+
 /* ---------- shop picker ---------- */
-document.getElementById('shopBtn').onclick=()=>{
-  open(`<div class="grab"></div><div class="sh-h"><h3>Оберіть точку</h3><button class="x" onclick="close_()">✕</button></div>
-  ${SHOPS.map((s,i)=>`<button class="pay" aria-pressed="${i===shop}" data-s="${i}"><span class="dot"></span>${s[0]}</button>`).join('')}`);
-  sIn.onclick=e=>{const b=e.target.closest('[data-s]');if(!b)return;shop=+b.dataset.s;document.getElementById('shopName').textContent=SHOPS[shop][0];close()};
-};
+function pickShopSheet(back){
+  open(`<div class="grab-zone"><div class="grab"></div></div>
+  <div class="sh-h"><h3>Оберіть точку</h3><button class="x" onclick="close_()">✕</button></div>
+  <div class="shop-list">
+  ${SHOPS.map((s,i)=>`
+    <div class="shop-row${i===shop?' on':''}">
+      <button class="shop-pick" data-s="${i}">
+        <span class="dot"></span>
+        <span class="sr-t"><b>${s[0]}</b>${s[1]?`<span>${s[1].replace('+38','')}</span>`:''}</span>
+      </button>
+      <a class="sr-map" href="${mapLink(s[0])}" target="_blank" rel="noopener" aria-label="Показати ${s[0]} на карті">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>
+        <span>Карта</span>
+      </a>
+    </div>`).join('')}
+  </div>`);
+  sIn.onclick=e=>{const b=e.target.closest('[data-s]');if(!b)return;
+    shop=+b.dataset.s;
+    document.getElementById('shopName').textContent=SHOPS[shop][0];
+    const ish=document.getElementById('infoShop'); if(ish) ish.textContent=SHOPS[shop][0];
+    const im=document.getElementById('infoMap'); if(im) im.href=routeLink(SHOPS[shop][0]);
+    sIn.onclick=null;
+    if(back) back(); else close();
+  };
+}
+if(SHOPS.length>1){
+  document.getElementById('shopBtn').onclick=()=>pickShopSheet(null);
+}else{
+  const sb=document.getElementById('shopBtn');
+  sb.classList.add('single'); sb.disabled=true;
+}
 
 /* ---------- item sheet ---------- */
-function openItem(id){
+function openItem(id, editIdx){
   const it=ITEMS.find(i=>i.id===id);
-  if(it.unit==='порція'){addToCart(it,1); maybeUpsell(it); return}
-  let g=1000;
-  open(`<div class="grab"></div>
-  <div class="hero-img">${photoOf(it)?`<img src="${photoOf(it)}" alt="${it.name}">`:ICON}</div>
+  const editing=Number.isInteger(editIdx);
+  if(isCount(it)&&!editing){addToCart(it,1); maybeUpsell(it); return}
+  const MAXG=6000;
+  let g=editing? Math.max(cart[editIdx].g,it.minG) : Math.max(1000,it.minG);
+  if(!editing&&it.minG>1000) g=it.minG;
+  const step=it.minG>=1000?500:(it.minG>=500?250:200);
+  const quick=[0,1,2,3].map(k=>it.minG+k*step)
+    .map(v=>v<1000?Math.round(v/50)*50:Math.round(v/100)*100);
+  open(`<div class="grab-zone"><div class="grab"></div></div>
+  <div class="hero-img">${photoOf(it)?`<img src="${photoOf(it)}" alt="${it.name}">`:ph(it,1)}</div>
   <div class="sh-h"><h3>${it.name}</h3><button class="x" onclick="close_()">✕</button></div>
-  <p class="hint" style="margin-top:-6px">${it.cat==='ready'?'Готовий продукт. Ціна за 100 г.':'Мариноване мʼясо. Ціна за 100 г — ' + money(it.price)+'.'}</p>
+  <p class="hint" style="margin-top:-6px">${it.cat==='ready'?'Готовий продукт. Ціна за 100 г.':(it.cat==='extra'?'Ціна за 100 г — '+money(it.price)+'.':'Мариноване мʼясо. Ціна за 100 г — '+money(it.price)+'.')}</p>
   <span class="lbl">Оберіть вагу</span>
-  <div class="wgrid">${[300,500,1000,1500].map(v=>`<button class="w" data-g="${v}" aria-pressed="${v===g}">${wLabel(v)}</button>`).join('')}</div>
-  <div class="rowline"><input type="range" id="rg" min="${MIN_G}" max="4000" step="100" value="${g}"><b id="wv" style="font-family:Oswald;min-width:62px;text-align:right">${wLabel(g)}</b></div>
+  <div class="wgrid">${quick.map(v=>`<button class="w" data-g="${v}" aria-pressed="${v===g}">${wLabel(v)}</button>`).join('')}</div>
+  <div class="rowline">
+    <input type="range" id="rg" min="${it.minG}" max="${MAXG}" step="50" value="${g}" aria-label="Вага">
+    <span class="wbox"><input id="wv" type="number" inputmode="numeric" min="${it.minG}" max="${MAXG}" step="10" value="${g}" aria-label="Вага у грамах"><i>г</i></span>
+  </div>
   <div class="tot"><span style="color:var(--smoke);font-size:13px">Разом</span><b id="tv">${money(it.price*g/100)}</b></div>
-  <button class="cta" id="addBtn">Додати в кошик</button>
-  <p class="hint">Мінімальна вага — ${MIN_G} г. ${it.cat!=='ready'?'Смаження можна обрати при оформленні.':''}</p>`);
+  <button class="cta" id="addBtn">${editing?'Зберегти':'Додати в кошик'}</button>
+  <p class="hint">Мінімальна вага — ${it.minG} г, можна ввести свою. ${it.cat!=='ready'&&it.cat!=='grill'?'Смаження можна обрати при оформленні.':''}</p>`);
   const rg=sIn.querySelector('#rg'),wv=sIn.querySelector('#wv'),tv=sIn.querySelector('#tv');
-  const paint=()=>{wv.textContent=wLabel(g);tv.textContent=money(it.price*g/100);
-    sIn.querySelectorAll('.w').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.g===g))};
-  sIn.querySelectorAll('.w').forEach(b=>b.onclick=()=>{g=+b.dataset.g;rg.value=g;paint()});
+  const paint=(syncField)=>{
+    tv.textContent=money(it.price*g/100);
+    rg.value=Math.min(g,MAXG);
+    if(syncField!==false) wv.value=g;
+    sIn.querySelectorAll('.w').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.g===g));
+  };
+  sIn.querySelectorAll('.w').forEach(b=>b.onclick=()=>{g=+b.dataset.g;paint()});
   rg.oninput=()=>{g=+rg.value;paint()};
-  sIn.querySelector('#addBtn').onclick=()=>{addToCart(it,g); if(!maybeUpsell(it)) close()};
+  wv.oninput=()=>{
+    const v=parseInt(wv.value,10);
+    if(!Number.isFinite(v)) return;
+    g=Math.min(Math.max(v,it.minG),MAXG);
+    paint(false);
+  };
+  wv.onblur=()=>{paint()};
+  wv.onfocus=()=>wv.select();
+  sIn.querySelector('#addBtn').onclick=()=>{
+    if(editing){cart[editIdx].g=g;paintBar();openCart();return}
+    addToCart(it,g); if(!maybeUpsell(it)) close();
+  };
 }
 function addToCart(it,g){
   const ex=cart.find(l=>l.id===it.id);
-  if(ex) ex.g+=g; else cart.push({id:it.id,name:it.name,grp:it.grp,price:it.price,unit:it.unit,cat:it.cat,g});
+  if(ex) ex.g+=g; else cart.push({id:it.id,name:it.name,grp:it.grp,price:it.price,unit:it.unit,cat:it.cat,minG:it.minG,g});
   paintBar();
 }
 
@@ -449,30 +1165,57 @@ function maybeUpsell(it){
   if(!pool.length) return false;
   upsellShown=true;
   const groups=[...new Set(pool.map(i=>i.grp))];
-  open(`<div class="grab"></div>
+  open(`<div class="grab-zone"><div class="grab"></div></div>
   <div class="sh-h"><h3>Що до мʼяса?</h3><button class="x" onclick="close_()">✕</button></div>
-  <p class="hint" style="margin:-6px 0 12px">Соуси, сир, овочі та гарніри — щоб стіл був повний.</p>
+  <p class="hint" style="margin:-6px 0 12px">Соуси, сир, овочі та хліб — щоб стіл був повний.</p>
   <div class="up-scroll">${groups.map(g=>`
     <p class="up-grp">${g}</p>
     ${pool.filter(i=>i.grp===g).map(i=>`
     <button class="up" data-u="${i.id}">
-      <div class="up-ph">${photoOf(i)?`<img src="${photoOf(i)}" alt="" loading="lazy">`:ICON}</div>
+      <div class="up-ph">${photoOf(i)?`<img src="${photoOf(i)}" alt="" loading="lazy">`:ph(i)}</div>
       <div class="up-b"><span class="nm">${i.name}</span>
-      <span class="pr">${money(i.price)}${i.unit==='порція'?'':' / 100 г'}</span></div>
+      <span class="pr">${money(i.price)}${i.unit==='шт'?' / шт':' / 100 г'}${i.unit==='пак'?' · упак. 1 кг':''}</span></div>
       <span class="up-add">+</span>
     </button>`).join('')}`).join('')}</div>
   <button class="cta" onclick="close_()">Готово</button>`);
   sIn.querySelector('.up-scroll').onclick=e=>{
     const b=e.target.closest('[data-u]'); if(!b) return;
     const item=ITEMS.find(i=>i.id===b.dataset.u);
-    if(b.classList.contains('on')) return;
-    addToCart(item, item.unit==='порція'?1:500);
-    b.classList.add('on'); b.querySelector('.up-add').textContent='✓';
+    if(b.classList.contains('on')){
+      const i=cart.findIndex(l=>l.id===item.id);
+      if(i>-1) cart.splice(i,1);
+      b.classList.remove('on'); b.querySelector('.up-add').textContent='+';
+    } else {
+      addToCart(item, isCount(item)?1:Math.max(500,item.minG));
+      b.classList.add('on'); b.querySelector('.up-add').textContent='✓';
+    }
+    paintBar();
   };
   return true;
 }
-function lineSum(l){return l.unit==='порція'? l.price*l.g : l.price*l.g/100}
-function goodsTotal(){return cart.reduce((s,l)=>s+lineSum(l),0)}
+const PACK_G=1000;                      // упаковка овочів — 1 кг
+const isCount=l=>l.unit==='шт'||l.unit==='пак';   // додаються поштучно
+const minOf=l=>{
+  if(l.minG) return l.minG;
+  const it=ITEMS.find(i=>i.id===l.id);
+  return (it&&it.minG)||MIN_G;
+};
+function lineSum(l){
+  if(l.unit==='шт')  return kop(l.price*l.g);                 // фікс. ціна за штуку
+  if(l.unit==='пак') return kop(l.price*PACK_G/100*l.g);      // ціна за 100 г × 1 кг × к-сть
+  return kop(l.price*l.g/100);                                // за вагою
+}
+function unitNote(it){
+  if(it.unit==='шт')  return 'за штуку';
+  if(it.unit==='пак') return `упаковка 1 кг — ${money(it.price*PACK_G/100)}`;
+  return 'за 100 г';
+}
+function lineQty(l){
+  if(l.unit==='шт')  return l.g+' шт';
+  if(l.unit==='пак') return l.g+' × 1 кг';
+  return wLabel(l.g);
+}
+function goodsTotal(){return kop(cart.reduce((s,l)=>s+lineSum(l),0))}
 function fryGrams(){return cart.filter(l=>l.cat==='raw'||l.cat==='saus').reduce((s,l)=>s+l.g,0)}
 function paintBar(){
   const bar=document.getElementById('bar');
@@ -485,44 +1228,241 @@ function paintBar(){
 /* ---------- cart ---------- */
 document.getElementById('barBtn').onclick=openCart;
 function openCart(){
-  open(`<div class="grab"></div><div class="sh-h"><h3>Кошик</h3><button class="x" onclick="close_()">✕</button></div>
+  if(!cart.length){
+    open(`<div class="grab-zone"><div class="grab"></div></div>
+    <div class="sh-h"><h3>Кошик</h3><button class="x" onclick="close_()">✕</button></div>
+    <div class="empty-cart">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.4 12.2a1.6 1.6 0 0 0 1.6 1.3h8.6a1.6 1.6 0 0 0 1.6-1.3L21 7H6"/></svg>
+      <p>Кошик порожній</p>
+      <span>Оберіть мʼясо в каталозі — і воно зʼявиться тут.</span>
+    </div>
+    <button class="cta" onclick="close_()">До каталогу</button>`);
+    return;
+  }
+  const fg=fryGrams();
+  const fryCost=fg>=MIN_G? kop(fg/1000*FRY_RATE) : 0;
+  open(`<div class="grab-zone"><div class="grab"></div></div><div class="sh-h"><h3>Кошик</h3><button class="x" onclick="close_()">✕</button></div>
   <div id="lines"></div>
+
+  ${fg>=MIN_G?`<div class="cart-fry">
+    <div>
+      <b>Посмажити мʼясо</b>
+      <span>${FRY_RATE} ₴/кг · до смаження ${wLabel(fg)}</span>
+    </div>
+    <span class="cf-sum">+${money(fryCost)}</span>
+  </div>
+  <p class="cart-hint">Смаження вмикається при оформленні — там і побачите підсумок.</p>`:''}
+
+  <span class="lbl">Коментар до замовлення</span>
+  <textarea class="fld cart-note" id="note" rows="2" placeholder="Побажання: гостріше, без цибулі, подзвоніть за 10 хв…">${orderNote}</textarea>
+
   <div class="tot"><span style="color:var(--smoke);font-size:13px">Товари</span><b>${money(goodsTotal())}</b></div>
+  <p class="cart-hint">Остаточна сума може відрізнятись залежно від фактичної ваги.</p>
   <button class="cta" id="toCheckout">Оформити замовлення</button>
   <button class="cta ghost" onclick="close_()">Додати ще</button>`);
   paintLines();
-  sIn.querySelector('#toCheckout').onclick=openCheckout;
+  const nt=sIn.querySelector('#note');
+  if(nt) nt.oninput=()=>{orderNote=nt.value};
+  sIn.querySelector('#toCheckout').onclick=()=>{if(nt)orderNote=nt.value;openCheckout()};
 }
 function paintLines(){
   const el=sIn.querySelector('#lines');if(!el)return;
   el.innerHTML=cart.map((l,i)=>`<div class="ln">
-    <div class="ln-th">${photoOf(l)?`<img src="${photoOf(l)}" alt="">`:ICON}</div>
-    <div class="ln-b"><div class="nm">${l.name}</div><div class="un">${l.unit==='порція'?l.g+' × порція':wLabel(l.g)}</div></div>
-    <div class="qty"><button class="qbtn" data-m="${i}">−</button><button class="qbtn" data-p="${i}">+</button></div>
-    <div class="ln-p">${money(lineSum(l))}</div></div>`).join('');
+    <div class="ln-th">${photoOf(l)?`<img src="${photoOf(l)}" alt="">`:ph(l)}</div>
+    <div class="ln-b"><div class="nm">${l.name}</div>
+      ${isCount(l)?`<div class="un">${lineQty(l)}</div>`
+        :`<button class="un un-edit" data-e="${i}">${lineQty(l)} <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z"/></svg></button>`}</div>
+    <div class="ln-r">
+      <div class="qty"><button class="qbtn" data-m="${i}" aria-label="Менше">−</button><button class="qbtn" data-p="${i}" aria-label="Більше">+</button></div>
+      <div class="ln-p">${money(lineSum(l))}</div>
+    </div>
+    <button class="ln-x" data-x="${i}" aria-label="Прибрати ${l.name}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button></div>`).join('');
   el.onclick=e=>{
+    const ed=e.target.closest('[data-e]');
+    if(ed){const i=+ed.dataset.e;openItem(cart[i].id,i);return}
+    const x=e.target.closest('[data-x]');
     const m=e.target.closest('[data-m]'),p=e.target.closest('[data-p]');
-    if(m){const i=+m.dataset.m,l=cart[i];l.g-=l.unit==='порція'?1:100;if(l.g<(l.unit==='порція'?1:MIN_G))cart.splice(i,1)}
-    if(p){const l=cart[+p.dataset.p];l.g+=l.unit==='порція'?1:100}
-    paintBar(); cart.length?openCart():close();
+    if(x){cart.splice(+x.dataset.x,1)}
+    else if(m){
+      const i=+m.dataset.m, l=cart[i];
+      const lo=isCount(l)?1:minOf(l), stp=isCount(l)?1:100;
+      l.g=Math.max(lo, l.g-stp);
+    }
+    else if(p){
+      const l=cart[+p.dataset.p];
+      const hi=isCount(l)?99:6000, stp=isCount(l)?1:100;
+      l.g=Math.min(hi, l.g+stp);
+    }
+    else return;
+    paintBar(); openCart();
   };
 }
 
 /* ---------- checkout ---------- */
+/* ---------- телефон ---------- */
+function normPhone(v){
+  let d=String(v).replace(/\D/g,'');
+  if(d.startsWith('380')) d=d.slice(3);
+  else if(d.startsWith('80')) d=d.slice(2);
+  else if(d.startsWith('0')) d=d.slice(1);
+  return d.slice(0,9);
+}
+function fmtPhone(v){
+  const d=normPhone(v);
+  if(!d) return '';
+  let s='+380 '+d.slice(0,2);
+  if(d.length>2) s+=' '+d.slice(2,5);
+  if(d.length>5) s+=' '+d.slice(5,7);
+  if(d.length>7) s+=' '+d.slice(7,9);
+  return s;
+}
+function bindPhone(el){
+  if(!el) return;
+  const apply=()=>{el.value=fmtPhone(el.value)};
+  el.addEventListener('input',apply);
+  el.addEventListener('blur',apply);
+  el.addEventListener('focus',()=>{if(!el.value)el.value='+380 '});
+}
+
+/* ---------- дата і час видачі ---------- */
+const DAY_NAMES=['Нд','Пн','Вт','Ср','Чт','Пт','Сб'];
+const MON=['січня','лютого','березня','квітня','травня','червня',
+           'липня','серпня','вересня','жовтня','листопада','грудня'];
+let pickWhen=null;            // null = «якнайшвидше»
+
+function dayKey(d){return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()}
+function dayLabel(d){
+  const t=new Date(), tm=new Date(); tm.setDate(t.getDate()+1);
+  if(dayKey(d)===dayKey(t)) return 'Сьогодні';
+  if(dayKey(d)===dayKey(tm)) return 'Завтра';
+  return DAY_NAMES[d.getDay()]+', '+d.getDate()+' '+MON[d.getMonth()];
+}
+/* найраніший можливий час з урахуванням підготовки і графіка роботи */
+function earliest(mode){
+  const lead=mode==='delivery'?LEAD_DELIVERY:LEAD_PICKUP;
+  const t=new Date(Date.now()+lead*60000);
+  t.setMinutes(0,0,0);   // слот — це година на видачу, тож округлюємо вниз
+  // до відкриття мангала — чекаємо на нього
+  if(t.getHours()<GRILL_FROM) t.setHours(GRILL_FROM,0,0,0);
+  // після останньої видачі — переносимо на завтра
+  if(t.getHours()>=SHOP_CLOSE){
+    t.setDate(t.getDate()+1);
+    t.setHours(GRILL_FROM,0,0,0);
+  }
+  return t;
+}
+/* підпис для «якнайшвидше»: з датою, якщо це вже не сьогодні */
+function asapLabel(mode){
+  const e=earliest(mode);
+  const h=String(e.getHours()).padStart(2,'0')+':00';
+  return dayKey(e)===dayKey(new Date()) ? 'орієнтовно з '+h
+       : dayLabel(e).toLowerCase()+', орієнтовно з '+h;
+}
+/* слоти на конкретний день */
+function slotsFor(d,mode){
+  const out=[], e=earliest(mode);
+  const sameDay=dayKey(d)===dayKey(e);
+  let h=Math.max(GRILL_FROM, sameDay? e.getHours():GRILL_FROM);
+  for(; h<SHOP_CLOSE; h+=SLOT_STEP/60){
+    const from=new Date(d); from.setHours(h,0,0,0);
+    if(from<e) continue;
+    const to=Math.min(h+1,SHOP_CLOSE);
+    out.push({h,label:String(h).padStart(2,'0')+':00–'+String(to).padStart(2,'0')+':00'});
+  }
+  return out;
+}
+function whenLabel(mode){
+  if(!pickWhen) return 'Якнайшвидше · '+asapLabel(mode);
+  const d=new Date(pickWhen.day);
+  return dayLabel(d)+' · '+pickWhen.label;
+}
+/* якщо обраний слот став неможливим (змінили спосіб отримання) — скидаємо */
+function validateWhen(mode){
+  if(!pickWhen) return;
+  const d=new Date(pickWhen.day);
+  const ok=slotsFor(d,mode).some(s=>s.h===pickWhen.h);
+  if(!ok) pickWhen=null;
+}
+function pickTimeSheet(mode,back){
+  const days=[];
+  for(let i=0;i<DAYS_AHEAD;i++){
+    const d=new Date(); d.setDate(d.getDate()+i); d.setHours(0,0,0,0);
+    if(slotsFor(d,mode).length) days.push(d);
+  }
+  let sel=pickWhen? days.findIndex(d=>dayKey(d)===dayKey(new Date(pickWhen.day))) : 0;
+  if(sel<0) sel=0;
+  const lead=Math.round((mode==='delivery'?LEAD_DELIVERY:LEAD_PICKUP)/60*10)/10;
+
+  const draw=()=>{
+    const d=days[sel], list=slotsFor(d,mode);
+    sIn.innerHTML=`<div class="grab-zone"><div class="grab"></div></div>
+    <div class="sh-h"><h3>Коли забрати</h3><button class="x" onclick="close_()">✕</button></div>
+
+    <button class="asap-btn" data-asap="1" aria-pressed="${!pickWhen}">
+      <span class="bolt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M13 3 5.5 13.5H11l-1 7.5L18.5 10H13z"/></svg></span>
+      <span class="asap-t"><b>Якнайшвидше</b><span>${asapLabel(mode)}</span></span>
+      <span class="asap-tick">✓</span>
+    </button>
+
+    <span class="lbl">Або оберіть день і час</span>
+    <div class="wheel">
+      <div class="wcol" id="wDays">${days.map((x,i)=>
+        `<button class="wi" data-d="${i}" aria-pressed="${i===sel}">${dayLabel(x)}</button>`).join('')}</div>
+      <div class="wcol" id="wSlots">${list.map(sl=>{
+        const on=pickWhen&&pickWhen.h===sl.h&&dayKey(new Date(pickWhen.day))===dayKey(d);
+        return `<button class="wi" data-h="${sl.h}" aria-pressed="${!!on}">${sl.label}</button>`}).join('')}</div>
+    </div>
+
+    <p class="hint">Готуємо ${mode==='delivery'?'і доставляємо ':''}від ${lead} год. Мангал працює з ${GRILL_FROM}:00 до ${SHOP_CLOSE}:00.</p>
+    <button class="cta" id="whenOk">Готово</button>`;
+
+    sIn.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{sel=+b.dataset.d;draw()});
+    sIn.querySelector('[data-asap]').onclick=()=>{pickWhen=null;draw()};
+    sIn.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>{
+      const h=+b.dataset.h, sl=list.find(x=>x.h===h);
+      pickWhen={day:days[sel].getTime(),h,label:sl.label};
+      draw();
+    });
+    sIn.querySelector('#whenOk').onclick=()=>{ back? back() : close() };
+    // підкручуємо стовпці до обраного
+    requestAnimationFrame(()=>{
+      ['#wDays','#wSlots'].forEach(id=>{
+        const col=sIn.querySelector(id); if(!col) return;
+        const on=col.querySelector('[aria-pressed=true]');
+        if(on) col.scrollTop=Math.max(0,on.offsetTop-col.clientHeight/2+on.offsetHeight/2);
+      });
+    });
+  };
+  open('');draw();
+}
+
 function openCheckout(){
-  let mode='pickup',fry=false,pay='online';
+  let mode=getMode,fry=false,pay=getMode==='delivery'?'cash':'online';
   const fg=fryGrams();
   const draw=()=>{
-    const fryCost=fry?fg/1000*FRY_RATE:0, total=goodsTotal()+fryCost;
-    open(`<div class="grab"></div><div class="sh-h"><h3>Оформлення</h3><button class="x" onclick="close_()">✕</button></div>
+    const fryCost=fry?kop(fg/1000*FRY_RATE):0, total=kop(goodsTotal()+fryCost);
+    open(`<div class="grab-zone"><div class="grab"></div></div><div class="sh-h"><h3>Оформлення</h3><button class="x" onclick="close_()">✕</button></div>
 
     <span class="lbl">Спосіб отримання</span>
     <div class="seg"><button class="sg" data-mode="pickup" aria-pressed="${mode==='pickup'}">Самовивіз</button>
     <button class="sg" data-mode="delivery" aria-pressed="${mode==='delivery'}">Доставка</button></div>
     ${mode==='pickup'
-      ? `<div class="box"><div style="font-size:11px;color:var(--smoke)">Точка видачі</div><b style="font-weight:500">${SHOPS[shop][0]}</b></div>`
+      ? (SHOPS.length>1
+          ? `<button class="box pick-shop" id="pickShop">
+               <span class="ps-t"><small>Точка видачі</small><b>${SHOPS[shop][0]}</b></span>
+               <span class="ps-a">Змінити</span>
+             </button>`
+          : `<div class="box"><div style="font-size:11px;color:var(--smoke)">Точка видачі</div>
+             <b style="font-weight:500">${SHOPS[shop][0]}</b></div>`)
       : `<input class="fld" id="addr" placeholder="Вулиця, будинок, квартира">
-         <p class="hint">Вартість доставки уточнить оператор по телефону — служба доставки партнерська.</p>`}
+         <p class="hint">Вартість доставки уточнить оператор телефоном — служба доставки партнерська.</p>`}
+
+    <button class="box pick-shop" id="pickWhen">
+      <span class="ps-t"><small>Час отримання</small><b>${whenLabel(mode)}</b></span>
+      <span class="ps-a">Обрати</span>
+    </button>
 
     ${fg>=MIN_G?`<div class="box">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
@@ -541,11 +1481,12 @@ function openCheckout(){
     <span class="lbl">Контакти</span>
     <input class="fld" id="nm" placeholder="Імʼя" autocomplete="name">
     <input class="fld" id="tel" placeholder="+380 __ ___ __ __" inputmode="tel" autocomplete="tel">
-    <p class="err" id="err">Заповніть імʼя і телефон.</p>
+    <p class="err" id="err">Вкажіть імʼя та номер телефону.</p>
 
     <div class="box" style="margin-top:16px">
       <div class="sum"><span>Товари</span><span>${money(goodsTotal())}</span></div>
       ${fry?`<div class="sum"><span>Смаження · ${wLabel(fg)}</span><span>${money(fryCost)}</span></div>`:''}
+      <div class="sum"><span>Час</span><span>${whenLabel(mode)}</span></div>
       ${mode==='delivery'?`<div class="sum"><span>Доставка</span><span>уточнить оператор</span></div>`:''}
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:10px;border-top:1px solid var(--line)">
         <span style="font-size:13px">Разом</span><b style="font-family:Oswald;font-size:23px">${money(total)}</b></div>
@@ -553,46 +1494,70 @@ function openCheckout(){
     </div>
     <button class="cta" id="send">Підтвердити замовлення</button>`);
 
+    const ps=sIn.querySelector('#pickShop');
+    if(ps) ps.onclick=()=>pickShopSheet(draw);
+    const pw=sIn.querySelector('#pickWhen');
+    if(pw) pw.onclick=()=>pickTimeSheet(mode,draw);
+    bindPhone(sIn.querySelector('#tel'));
     sIn.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
-      mode=b.dataset.mode; if(mode==='delivery'&&pay==='online')pay='cash'; draw()});
+      mode=b.dataset.mode; if(mode==='delivery'&&pay==='online')pay='cash'; validateWhen(mode); draw()});
     sIn.querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>{pay=b.dataset.pay;draw()});
     const sw=sIn.querySelector('#sw'); if(sw) sw.onclick=()=>{fry=!fry;draw()};
     sIn.querySelector('#send').onclick=async ()=>{
       const btn=sIn.querySelector('#send');
-      const nm=sIn.querySelector('#nm').value.trim(), tel=sIn.querySelector('#tel').value.trim();
+      const nm=sIn.querySelector('#nm').value.trim(), telRaw=sIn.querySelector('#tel').value.trim();
+      const telDigits=normPhone(telRaw);
+      const tel=telDigits.length===9?'+380'+telDigits:telRaw;
       const addr=sIn.querySelector('#addr')?sIn.querySelector('#addr').value.trim():'';
-      if(nm.length<2||tel.replace(/\D/g,'').length<9){sIn.querySelector('#err').style.display='block';return}
+      if(nm.length<2||telDigits.length<9){
+        const e=sIn.querySelector('#err');
+        e.textContent=nm.length<2?'Вкажіть імʼя.':'Вкажіть коректний номер телефону.';
+        e.style.display='block';return}
       if(mode==='delivery'&&addr.length<5){const e=sIn.querySelector('#err');e.textContent='Вкажіть адресу доставки.';e.style.display='block';return}
-      const payload={shop,mode,addr,fry,fg,pay,total,nm,tel,lines:cart.map(l=>({...l,sum:lineSum(l)}))};
+      const payload={shop,shopName:SHOPS[shop][0],mode,addr,fry,fg,pay,total,nm,tel,note:orderNote,when:whenLabel(mode),lines:cart.map(l=>({...l,sum:lineSum(l)}))};
       btn.disabled=true;btn.textContent='Відправляємо…';
       try{
-        const r=await fetch(API+'/api/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const r=await req(API+'/api/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)},15000);
         const d=await r.json();
         if(!r.ok) throw new Error(d.error||'Помилка');
         order={...payload,no:d.no,shop:SHOPS[shop][0]};
       }catch(err){
-        order={...payload,no:'—',shop:SHOPS[shop][0],offline:err.message};
+        const msg=String(err&&err.message||'');
+        if(/Забагато/.test(msg)){
+          btn.disabled=false; btn.textContent='Підтвердити замовлення';
+          const e=sIn.querySelector('#err');
+          if(e){e.textContent=msg;e.style.display='block'}
+          return;
+        }
+        order={...payload,no:'—',shop:SHOPS[shop][0],offline:msg};
       }
-      cart=[];upsellShown=false;paintBar();openStatus();
+      cart=[];upsellShown=false;orderNote='';paintBar();
+      if(order.no!=='—'){order.lines=payload.lines;saveLast(order)}
+      openStatus();
     };
   };
   draw();
 }
 
 /* ---------- status ---------- */
-function openStatus(){
+function openStatus(startStatus){
   const o=order;
   const STK=['accepted','cooking','ready','done'];
   const draw=(status)=>{
     const step=Math.max(0,STK.indexOf(status));
     const steps=[['Прийнято','оператор підтвердив'],['Готується',o.fry?'мʼясо на мангалі':'збираємо замовлення'],
       ['Готове','надішлемо SMS'],[o.mode==='pickup'?'Видано':'Передано курʼєру','']];
-    sIn.innerHTML=`<div class="grab"></div>
+    sIn.innerHTML=`<div class="grab-zone"><div class="grab"></div></div>
     <div class="done-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round"><path d="M4 12.5l5.5 5.5L20 7"/></svg></div>
     <h3 style="text-align:center;font-size:23px;text-transform:uppercase">Замовлення прийнято</h3>
-    <p style="text-align:center;color:var(--smoke);font-size:13px;margin:5px 0 18px">№ ${o.no} · ${o.shop}</p>
+    <p style="text-align:center;color:var(--smoke);font-size:13px;margin:5px 0 4px">№ ${o.no} · ${o.shop}</p>
+    <p style="text-align:center;color:var(--ember-hot);font-size:13.5px;margin:0 0 18px">${o.when||''}</p>
     ${o.offline?`<div class="warn">Не вдалося звʼязатися з точкою автоматично. Зателефонуйте, будь ласка: ${SHOPS[shop][1]||SHOPS[0][1]}</div>`:''}
 
+    ${status==='ready'?`<div class="ready-note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5.5 5.5L20 7"/></svg>
+      <span><b>Замовлення готове</b><span>${o.mode==='pickup'?'Чекаємо на вас за адресою '+o.shop:'Курʼєр уже виїжджає'}</span></span>
+    </div>`:''}
     <div class="box steps">${steps.map((s,i)=>`
       <div class="st ${i<step?'done':i===step?'on':''}">
         <div class="st-l"><div class="st-d">${i<step?'✓':''}</div>${i<3?'<div class="st-bar"></div>':''}</div>
@@ -600,24 +1565,35 @@ function openStatus(){
       </div>`).join('')}</div>
 
     <div class="box">
-      ${o.lines.map(l=>`<div class="sum"><span>${l.name} · ${l.unit==='порція'?l.g+' шт':wLabel(l.g)}</span><span>${money(l.sum)}</span></div>`).join('')}
-      ${o.fry?`<div class="sum"><span>Смаження · ${wLabel(o.fg)}</span><span>${money(o.fg/1000*FRY_RATE)}</span></div>`:''}
+      ${o.lines.map(l=>`<div class="sum"><span>${l.name} · ${lineQty(l)}</span><span>${money(l.sum)}</span></div>`).join('')}
+      ${o.fry?`<div class="sum"><span>Смаження · ${wLabel(o.fg)}</span><span>${money(kop(o.fg/1000*FRY_RATE))}</span></div>`:''}
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:10px;border-top:1px solid var(--line)">
         <span style="font-size:13px">Разом</span><b style="font-family:Oswald;font-size:21px">${money(o.total)}</b></div>
       <p class="hint">${o.mode==='delivery'?'Оператор зателефонує і уточнить вартість доставки. ':''}Остаточна сума може відрізнятись залежно від фактичної ваги.</p>
     </div>
 
+    <p class="ord-link">Посилання на замовлення можна зберегти або переслати:<br>
+      <button class="lnk-copy" id="copyLink">Скопіювати посилання</button></p>
     <div class="two">
       <a class="cta ghost" style="text-align:center;text-decoration:none;display:block" href="tel:${SHOPS[shop][1]||''}">Зателефонувати</a>
-      <button class="cta ghost" onclick="close_()">Готово</button>
-    </div>`;
+      ${o.mode==='pickup'
+        ? `<a class="cta ghost" style="text-align:center;text-decoration:none;display:block" href="${routeLink(o.shop)}" target="_blank" rel="noopener">Прокласти маршрут</a>`
+        : `<button class="cta ghost" onclick="close_()">Готово</button>`}
+    </div>
+    ${o.mode==='pickup'?`<button class="cta ghost" onclick="close_()">Готово</button>`:''}`;
+    const cp=sIn.querySelector('#copyLink');
+    if(cp) cp.onclick=async()=>{
+      const url=location.origin+location.pathname+'?order='+o.no;
+      try{await navigator.clipboard.writeText(url);cp.textContent='Скопійовано ✓'}
+      catch(e){cp.textContent=url}
+    };
   };
-  open('');draw('accepted');
+  open('');draw(startStatus||'accepted');
   clearInterval(poll);
   if(o.no!=='—'){
     poll=setInterval(async()=>{
-      try{const r=await fetch(API+'/api/order/'+o.no);const d=await r.json();
-        if(d.status){draw(d.status); if(d.status==='done')clearInterval(poll)}
+      try{const r=await req(API+'/api/order/'+o.no,null,8000);const d=await r.json();
+        if(d.status){draw(d.status); if(d.status==='done'){clearInterval(poll);clearLast()} showActiveBar()}
       }catch(e){}
     },15000);
   }
@@ -625,16 +1601,177 @@ function openStatus(){
 const _close=close; close=()=>{clearInterval(poll);_close()};
 window.close_=close;
 
-renderCats();renderCatalog();
+document.getElementById('shopName').textContent=SHOPS[shop][0];
+(function(){
+  const e=document.getElementById('infoShop'); if(e) e.textContent=SHOPS[shop][0];
+  const m=document.getElementById('infoMap'); if(m) m.href=routeLink(SHOPS[shop][0]);
+})();
+renderCats();renderCatalog();syncScrollLock();
+['histBtn','histBtn2'].forEach(id=>{const b=document.getElementById(id); if(b) b.onclick=()=>openHistory()});
+
+/* ---------- активне замовлення ---------- */
+const LAST_KEY='mb-last-order';
+function saveLast(o){
+  try{localStorage.setItem(LAST_KEY,JSON.stringify({no:o.no,shop:o.shop,total:o.total,when:o.when,at:Date.now()}))}catch(e){}
+}
+function clearLast(){try{localStorage.removeItem(LAST_KEY)}catch(e){}}
+function readLast(){
+  try{
+    const v=JSON.parse(localStorage.getItem(LAST_KEY)||'null');
+    if(!v||!v.no||v.no==='—') return null;
+    if(Date.now()-v.at > 36*3600*1000){clearLast();return null}   // старше 36 год — забуваємо
+    return v;
+  }catch(e){return null}
+}
+const ST_LABEL={accepted:'Прийнято',cooking:'Готується',ready:'Готове',done:'Видано'};
+async function showActiveBar(){
+  const v=readLast(); const el=document.getElementById('active');
+  if(!v||!el) return;
+  let st='accepted';
+  try{
+    const r=await req(API+'/api/order/'+v.no,null,8000);
+    const d=await r.json();
+    if(d.status) st=d.status;
+  }catch(e){}
+  if(st==='done'){clearLast();el.hidden=true;return}
+  el.hidden=false;
+  const ready=st==='ready';
+  const sub=ready? 'Можна забирати · '+v.shop : v.shop+(v.when?' · '+v.when:'');
+  el.innerHTML=`<button class="act-in${ready?' ready':''}" id="actOpen">
+    <span class="act-dot"></span>
+    <span class="act-t"><b>Замовлення № ${v.no} · ${ST_LABEL[st]||'Прийнято'}</b>
+    <span>${sub}</span></span>
+    <span class="act-go">Стежити</span></button>`;
+  el.querySelector('#actOpen').onclick=()=>openOrder(v.no);
+}
+async function openOrder(no){
+  try{
+    const r=await req(API+'/api/order/'+no,null,10000);
+    const d=await r.json();
+    if(!d.no) throw 0;
+    const v=readLast()||{};
+    order={no:d.no,shop:v.shop||SHOPS[shop][0],when:v.when||'',total:d.total,mode:d.mode||'pickup',
+           fry:false,fg:0,lines:v.lines||[]};
+    openStatus(d.status);
+  }catch(e){
+    clearLast();
+    const el=document.getElementById('active'); if(el) el.hidden=true;
+    open(`<div class="grab-zone"><div class="grab"></div></div>
+    <div class="sh-h"><h3>Замовлення не знайдено</h3><button class="x" onclick="close_()">✕</button></div>
+    <p class="hint" style="margin-top:-4px">Можливо, воно вже видане або минуло багато часу.
+    Якщо замовлення актуальне — зателефонуйте на точку.</p>
+    <a class="cta ghost" style="text-align:center;text-decoration:none;display:block"
+       href="tel:${SHOPS[shop][1]||''}">Зателефонувати</a>
+    <button class="cta" onclick="close_()">Зрозуміло</button>`);
+  }
+}
+
+/* ---------- мої замовлення ---------- */
+const TEL_KEY='mb-tel';
+function savedTel(){try{return localStorage.getItem(TEL_KEY)||''}catch(e){return ''}}
+function rememberTel(t){try{localStorage.setItem(TEL_KEY,t)}catch(e){}}
+
+function fmtDate(ts){
+  const d=new Date(ts), t=new Date(), y=new Date(); y.setDate(t.getDate()-1);
+  const hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  if(dayKey(d)===dayKey(t)) return 'сьогодні, '+hm;
+  if(dayKey(d)===dayKey(y)) return 'вчора, '+hm;
+  return d.getDate()+' '+MON[d.getMonth()]+', '+hm;
+}
+
+function openHistory(){
+  const tel=savedTel();
+  open(`<div class="grab-zone"><div class="grab"></div></div>
+  <div class="sh-h"><h3>Мої замовлення</h3><button class="x" onclick="close_()">✕</button></div>
+  <p class="hint" style="margin-top:-4px">Вкажіть номер, з якого робили замовлення.</p>
+  <input class="fld" id="hTel" placeholder="+380 __ ___ __ __" inputmode="tel" autocomplete="tel" value="${tel}">
+  <p class="err" id="hErr">Вкажіть коректний номер телефону.</p>
+  <button class="cta" id="hGo">Показати</button>
+  <div id="hList"></div>`);
+  bindPhone(sIn.querySelector('#hTel'));
+  const go=async()=>{
+    const el=sIn.querySelector('#hTel'), err=sIn.querySelector('#hErr'), box=sIn.querySelector('#hList');
+    const d=normPhone(el.value);
+    if(d.length<9){err.style.display='block';return}
+    err.style.display='none';
+    rememberTel(el.value);
+    box.innerHTML='<p class="hint" style="text-align:center;padding:14px 0">Шукаємо…</p>';
+    try{
+      const r=await req(API+'/api/history/'+d,null,10000);
+      const j=await r.json();
+      if(!j.orders||!j.orders.length){
+        box.innerHTML='<p class="hint" style="text-align:center;padding:18px 0">За цим номером замовлень не знайдено.</p>';
+        return;
+      }
+      box.innerHTML='<span class="lbl">Останні замовлення</span>'+j.orders.map(o=>`
+        <div class="ho">
+          <div class="ho-h">
+            <b>№ ${o.no}</b>
+            <span class="ho-st${o.status==='done'?' done':''}">${o.label||''}</span>
+            <span class="ho-d">${fmtDate(o.createdAt)}</span>
+          </div>
+          <div class="ho-l">${(o.lines||[]).map(l=>l.name+' · '+(l.unit==='шт'?l.g+' шт':l.unit==='пак'?l.g+' × 1 кг':wLabel(l.g))).join('<br>')}</div>
+          <div class="ho-f">
+            <span class="ho-sum">${money(o.total)}</span>
+            <button class="ho-again" ${(o.lines||[]).length?'':'disabled'} data-again='${encodeURIComponent(JSON.stringify(o.lines||[]))}'>Повторити</button>
+          </div>
+        </div>`).join('');
+      box.querySelectorAll('[data-again]').forEach(b=>b.onclick=()=>repeatOrder(JSON.parse(decodeURIComponent(b.dataset.again))));
+    }catch(e){
+      box.innerHTML='<p class="hint" style="text-align:center;padding:18px 0">Не вдалося завантажити. Спробуйте пізніше.</p>';
+    }
+  };
+  sIn.querySelector('#hGo').onclick=go;
+  sIn.querySelector('#hTel').addEventListener('keydown',e=>{if(e.key==='Enter')go()});
+  if(normPhone(tel).length===9) go();
+}
+
+function repeatOrder(lines){
+  let added=0, skipped=[];
+  lines.forEach(l=>{
+    const it=ITEMS.find(i=>i.id===l.id)||ITEMS.find(i=>i.name===l.name&&i.grp===l.grp);
+    if(!it){skipped.push(l.name);return}
+    const g=isCount(it)? Math.max(1,l.g) : Math.max(it.minG,l.g);
+    const ex=cart.find(c=>c.id===it.id);
+    if(ex) ex.g+=g;
+    else cart.push({id:it.id,name:it.name,grp:it.grp,price:it.price,unit:it.unit,cat:it.cat,minG:it.minG,g});
+    added++;
+  });
+  paintBar();
+  upsellShown=true;          // не набридаємо допродажем при повторі
+  openCart();
+  if(skipped.length){
+    const n=sIn.querySelector('#lines');
+    if(n) n.insertAdjacentHTML('beforebegin',
+      `<p class="cart-hint" style="color:var(--ember-hot)">Немає в наявності: ${skipped.join(', ')}</p>`);
+  }
+}
 
 /* ---------- PWA ---------- */
 if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').then(reg=>{
+      reg.addEventListener('updatefound',()=>{
+        const sw=reg.installing;
+        sw&&sw.addEventListener('statechange',()=>{
+          if(sw.state==='activated'&&navigator.serviceWorker.controller) location.reload();
+        });
+      });
+      setInterval(()=>reg.update(), 60*60*1000);
+    }).catch(()=>{});
+  });
 }
+/* стартуємо після того, як усе оголошено */
+showActiveBar();
+(function(){
+  const q=new URLSearchParams(location.search).get('order');
+  if(q) openOrder(q);
+})();
+
 let installEvt=null;
 window.addEventListener('beforeinstallprompt',e=>{
   e.preventDefault(); installEvt=e;
-  if(localStorage.getItem('mb-install-off'))return;
+  try{if(localStorage.getItem('mb-install-off'))return}catch(err){}
   const b=document.createElement('div');
   b.className='inst';
   b.innerHTML=`<div class="inst-b">
@@ -642,7 +1779,7 @@ window.addEventListener('beforeinstallprompt',e=>{
     <button class="inst-y">Додати</button><button class="inst-n" aria-label="Закрити">✕</button></div>`;
   document.body.appendChild(b);
   b.querySelector('.inst-y').onclick=async()=>{b.remove();installEvt.prompt();installEvt=null};
-  b.querySelector('.inst-n').onclick=()=>{b.remove();localStorage.setItem('mb-install-off','1')};
+  b.querySelector('.inst-n').onclick=()=>{b.remove();try{localStorage.setItem('mb-install-off','1')}catch(err){}};
 });
 </script>
 </body>
