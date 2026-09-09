@@ -248,6 +248,8 @@ a{color:inherit}
 .wgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
 .w{border:1px solid var(--line-2);border-radius:9px;padding:9px 0;font-size:13px;color:var(--smoke);transition:.14s}
 .w[aria-pressed=true]{background:var(--ember);border-color:var(--ember);color:#fff}
+/* «скільки це штук» — для позицій, які просять штуками, а важать на вагах */
+.w i{display:block;font-style:normal;font-size:10.5px;opacity:.72;margin-top:1px}
 input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:2px;background:var(--coal-2);outline:none}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--ember);cursor:pointer}
 input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-radius:50%;background:var(--ember);cursor:pointer}
@@ -480,6 +482,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .sr-map svg{width:17px;height:17px}
 .sr-map span{font-size:10.5px}
 .sr-map:hover{color:var(--ember-hot);background:rgba(196,52,42,.08)}
+/* опис товару в картці — під ціною, повністю, без обрізання */
+.sh-desc{margin-top:6px;line-height:1.45}
 /* мої замовлення */
 .ho{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:12px 13px;margin-bottom:9px}
 .ho-h{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:7px}
@@ -696,7 +700,7 @@ const P=[
  ['side','Фритюр меню','Сет на компанію + 2 соуси',490,1],
 
  ['extra','Сири','Сулугуні',35.50,0,350],['extra','Сири','Халумі',38.90,0,350],
- ['extra','Овочі','Картопля з салом',14.00],['extra','Овочі','Кукурудза',13.90,'пак'],['extra','Овочі','Гриби печериці',22.90,'пак'],['extra','Овочі','Картопля',9.90,'пак'],['extra','Овочі','Перець',39.90,'пак'],
+ ['extra','Овочі','Картопля з салом',14.00,0,300],['extra','Овочі','Кукурудза',13.90,'пак'],['extra','Овочі','Гриби печериці',22.90,'пак'],['extra','Овочі','Картопля',9.90,'пак'],['extra','Овочі','Перець',39.90,'пак'],
  ['extra','Хліб і соуси','Матнакаш',35,1],['extra','Хліб і соуси','Лаваш тонкий',35,1],['extra','Хліб і соуси','Соуси в асортименті',35,1]
 ];
 const FRY_RATE=50, MIN_G=200;
@@ -764,7 +768,7 @@ const DESC={
  'Сулугуні':'Розплавлений на грилі — тягнеться і рум\'яниться.',
  'Халумі':'Сир, що не тане — смажиться до золотої скоринки.',
  'Кукурудза':'Солодка кукурудза, готова до гриля.',
- 'Картопля з салом':'Картопля, шпигована салом — гарнір з димком.',
+ 'Картопля з салом':'Картопля, шпигована салом — гарнір з димком. Приїжджає готовою. Продається на вагу: одна картоплина — приблизно 300 г.',
  'Гриби печериці':'Мариновані печериці для гриля.',
  'Перець':'Печений солодкий перець — димний смак, готовий до подачі.',
  'Смокер/Відбивна свиняча':'Товста корейка з димною скоринкою.',
@@ -1148,24 +1152,29 @@ function openItem(id, editIdx){
   const editing=Number.isInteger(editIdx);
   if(isCount(it)&&!editing){addToCart(it,1); maybeUpsell(it); return}
   const MAXG=6000;
+  const por=portionOf(it);                       // вага однієї штуки, якщо є
   let g=editing? Math.max(cart[editIdx].g,it.minG) : Math.max(1000,it.minG);
   if(!editing&&it.minG>1000) g=it.minG;
-  const step=it.minG>=1000?500:(it.minG>=500?250:200);
-  const quick=[0,1,2,3].map(k=>it.minG+k*step)
-    .map(v=>v<1000?Math.round(v/50)*50:Math.round(v/100)*100);
+  if(!editing&&por) g=Math.max(por,Math.round(1000/por)*por);   // найближче ціле число штук
+  const step=por||(it.minG>=1000?500:(it.minG>=500?250:200));
+  const quick=por
+    ? [1,2,3,4].map(k=>k*por)
+    : [0,1,2,3].map(k=>it.minG+k*step)
+        .map(v=>v<1000?Math.round(v/50)*50:Math.round(v/100)*100);
   open(`<div class="grab-zone"><div class="grab"></div></div>
   <div class="hero-img">${photoOf(it)?`<img src="${photoOf(it)}" alt="${it.name}">`:ph(it,1)}</div>
   <div class="sh-h"><h3>${it.name}</h3><button class="x" onclick="close_()">✕</button></div>
   <p class="hint" style="margin-top:-6px">${it.cat==='ready'?'Готовий продукт. Ціна за 100 г.':(it.cat==='extra'?'Ціна за 100 г — '+money(it.price)+'.':'Мариноване мʼясо. Ціна за 100 г — '+money(it.price)+'.')}</p>
+  ${descOf(it)?`<p class="hint sh-desc">${descOf(it)}</p>`:''}
   <span class="lbl">Оберіть вагу</span>
-  <div class="wgrid">${quick.map(v=>`<button class="w" data-g="${v}" aria-pressed="${v===g}">${wLabel(v)}</button>`).join('')}</div>
+  <div class="wgrid">${quick.map(v=>`<button class="w" data-g="${v}" aria-pressed="${v===g}">${wLabel(v)}${por?`<i>${v/por} шт</i>`:''}</button>`).join('')}</div>
   <div class="rowline">
     <input type="range" id="rg" min="${it.minG}" max="${MAXG}" step="50" value="${g}" aria-label="Вага">
     <span class="wbox"><input id="wv" type="number" inputmode="numeric" min="${it.minG}" max="${MAXG}" step="10" value="${g}" aria-label="Вага у грамах"><i>г</i></span>
   </div>
   <div class="tot"><span style="color:var(--smoke);font-size:13px">Разом</span><b id="tv">${money(it.price*g/100)}</b></div>
   <button class="cta" id="addBtn">${editing?'Зберегти':'Додати в кошик'}</button>
-  <p class="hint">Мінімальна вага — ${it.minG} г, можна ввести свою. ${it.cat!=='ready'&&it.cat!=='grill'?'Смаження можна обрати при оформленні.':''}</p>`);
+  <p class="hint">Мінімальна вага — ${it.minG} г, можна ввести свою. ${canFry(it)?'Смаження можна обрати при оформленні.':''}</p>`);
   const rg=sIn.querySelector('#rg'),wv=sIn.querySelector('#wv'),tv=sIn.querySelector('#tv');
   const paint=(syncField)=>{
     tv.textContent=money(it.price*g/100);
@@ -1256,7 +1265,31 @@ function lineQty(l){
   return wLabel(l.g);
 }
 function goodsTotal(){return kop(cart.reduce((s,l)=>s+lineSum(l),0))}
-function fryGrams(){return cart.filter(l=>l.cat==='raw'||l.cat==='saus').reduce((s,l)=>s+l.g,0)}
+/* На мангал іде все вагове: сире мʼясо, ковбаски, сири, овочі.
+   Не смажимо те, що вже готове (смокер, кури гриль, фритюр),
+   а також поштучні позиції — хліб і соуси. */
+const NO_FRY=new Set(['ready','grill','side']);
+/* Готові позиції всередині вагових категорій. Ключ — «Група/Назва».
+   Картопля з салом приїжджає вже готовою, її не смажать. */
+const READY_MADE=new Set(['Овочі/Картопля з салом']);
+/* Позиції, які купують штуками, а важать на вагах. Ключ — «Група/Назва»,
+   значення — приблизна вага однієї штуки. Задає крок вибору ваги
+   і підпис «скільки це штук» на кнопках. */
+const PORTION={'Овочі/Картопля з салом':300};
+const portionOf=it=>PORTION[it.grp+'/'+it.name]||0;
+/* Одне джерело правди: і підказка в картці товару, і підрахунок ваги */
+const canFry=it=>!NO_FRY.has(it.cat)
+              && !READY_MADE.has(it.grp+'/'+it.name)
+              && it.unit!=='шт';              // хліб і соуси
+function fryableG(l){
+  if(!canFry(l)) return 0;
+  if(l.unit==='пак') return l.g*PACK_G;       // g — кількість упаковок по 1 кг
+  return l.g;                                 // g — грами
+}
+function fryGrams(){return cart.reduce((s,l)=>s+fryableG(l),0)}
+/* Ужарка 30–35% стосується лише мʼяса — сир і овочі так не втрачають вагу */
+const MEAT=new Set(['raw','saus']);
+function meatGrams(){return cart.reduce((s,l)=>s+(MEAT.has(l.cat)?fryableG(l):0),0)}
 function paintBar(){
   const bar=document.getElementById('bar');
   bar.hidden=!cart.length;
@@ -1286,7 +1319,7 @@ function openCart(){
 
   ${fg>=MIN_G?`<div class="cart-fry">
     <div>
-      <b>Посмажити мʼясо</b>
+      <b>Посмажити на мангалі</b>
       <span>${FRY_RATE} ₴/кг · до смаження ${wLabel(fg)}</span>
     </div>
     <span class="cf-sum">+${money(fryCost)}</span>
@@ -1506,11 +1539,11 @@ function openCheckout(){
 
     ${fg>=MIN_G?`<div class="box">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
-        <div><b style="font-weight:500">Посмажити мʼясо</b>
+        <div><b style="font-weight:500">Посмажити на мангалі</b>
         <div style="font-size:12px;color:var(--smoke)">${FRY_RATE} ₴ за кг · до смаження ${wLabel(fg)}</div></div>
         <button class="sw" id="sw" role="switch" aria-checked="${fry}"><i></i></button>
       </div>
-      ${fry?`<div class="warn">При смаженні мʼясо втрачає 30–35% ваги. З ${wLabel(fg)} сирого вийде приблизно ${wLabel(Math.round(fg*.67/50)*50)}–${wLabel(Math.round(fg*.7/50)*50)} готового.</div>`:''}
+      ${fry&&meatGrams()?`<div class="warn">При смаженні мʼясо втрачає 30–35% ваги. З ${wLabel(meatGrams())} сирого вийде приблизно ${wLabel(Math.round(meatGrams()*.67/50)*50)}–${wLabel(Math.round(meatGrams()*.7/50)*50)} готового.</div>`:''}
     </div>`:''}
 
     <span class="lbl">Оплата</span>
