@@ -38,8 +38,35 @@ function New-Argb([System.Drawing.Image]$img, [int]$w, [int]$h) {
   return $bmp
 }
 
+# System.Drawing cannot open webp, and phones hand out webp all the time.
+# Windows itself can decode it through WIC, so fall back to that and hand
+# back a plain Bitmap the rest of the script already knows how to use.
+function Read-AnyImage([string]$path) {
+  try { return [System.Drawing.Image]::FromFile($path) } catch { }
+  Add-Type -AssemblyName PresentationCore
+  $dec = [System.Windows.Media.Imaging.BitmapDecoder]::Create(
+           (New-Object System.Uri $path), 'None', 'OnLoad')
+  $conv = New-Object System.Windows.Media.Imaging.FormatConvertedBitmap(
+            $dec.Frames[0], [System.Windows.Media.PixelFormats]::Bgra32, $null, 0.0)
+  $pw = $conv.PixelWidth; $ph = $conv.PixelHeight
+  $srcStride = $pw * 4
+  $buf = New-Object byte[] ($srcStride * $ph)
+  $conv.CopyPixels($buf, $srcStride, 0)
+
+  $bmp = New-Object System.Drawing.Bitmap $pw, $ph, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+  $r = New-Object System.Drawing.Rectangle 0, 0, $pw, $ph
+  $bd = $bmp.LockBits($r, [System.Drawing.Imaging.ImageLockMode]::WriteOnly,
+                      [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+  for ($yy = 0; $yy -lt $ph; $yy++) {
+    [System.Runtime.InteropServices.Marshal]::Copy(
+      $buf, $yy * $srcStride, [IntPtr]::Add($bd.Scan0, $yy * $bd.Stride), $srcStride)
+  }
+  $bmp.UnlockBits($bd)
+  return $bmp
+}
+
 if (-not (Test-Path -LiteralPath $In)) { throw "No such file: $In" }
-$src = [System.Drawing.Image]::FromFile($In)
+$src = Read-AnyImage $In
 
 # work at a bounded size: output is 640 anyway, and per-pixel work in
 # PowerShell gets slow fast
