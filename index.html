@@ -1289,16 +1289,19 @@ function paintLines(){
     if(ed){const i=+ed.dataset.e;openItem(cart[i].id,i);return}
     const x=e.target.closest('[data-x]');
     const m=e.target.closest('[data-m]'),p=e.target.closest('[data-p]');
+    /* У позицій, які просять штуками, крок дорівнює вазі однієї штуки —
+       інакше 900 г картоплі перетворювалися б на 800, тобто 2⅔ штуки. */
+    const stepOf=l=>isCount(l)?1:(portionOf(l)||100);
     if(x){cart.splice(+x.dataset.x,1)}
     else if(m){
-      const i=+m.dataset.m, l=cart[i];
-      const lo=isCount(l)?1:minOf(l), stp=isCount(l)?1:100;
-      l.g=Math.max(lo, l.g-stp);
+      const l=cart[+m.dataset.m];
+      const lo=isCount(l)?1:minOf(l);
+      l.g=Math.max(lo, l.g-stepOf(l));
     }
     else if(p){
       const l=cart[+p.dataset.p];
-      const hi=isCount(l)?99:6000, stp=isCount(l)?1:100;
-      l.g=Math.min(hi, l.g+stp);
+      const hi=isCount(l)?99:6000;
+      l.g=Math.min(hi, l.g+stepOf(l));
     }
     else return;
     paintBar(); openCart();
@@ -1344,24 +1347,38 @@ function dayLabel(d){
   if(dayKey(d)===dayKey(tm)) return 'Завтра';
   return DAY_NAMES[d.getDay()]+', '+d.getDate()+' '+MON[d.getMonth()];
 }
-/* найраніший можливий час з урахуванням підготовки і графіка роботи */
-function earliest(mode){
+/* Чи потрібен мангал. Без смаження магазин видає з відкриття,
+   а мангал розпалюють пізніше — тримати всіх до 10:00 нема причини. */
+let fryWanted=false;
+const openFrom=()=>fryWanted?GRILL_FROM:SHOP_OPEN;
+
+/* Найраніший можливий час — точний, разом із хвилинами. */
+function earliestExact(mode){
   const lead=mode==='delivery'?LEAD_DELIVERY:LEAD_PICKUP;
   const t=new Date(Date.now()+lead*60000);
-  t.setMinutes(0,0,0);   // слот — це година на видачу, тож округлюємо вниз
-  // до відкриття мангала — чекаємо на нього
-  if(t.getHours()<GRILL_FROM) t.setHours(GRILL_FROM,0,0,0);
+  t.setSeconds(0,0);
+  const from=openFrom();
+  // ще не відчинено — чекаємо на відкриття
+  if(t.getHours()<from) t.setHours(from,0,0,0);
   // після останньої видачі — переносимо на завтра
   if(t.getHours()>=SHOP_CLOSE){
     t.setDate(t.getDate()+1);
-    t.setHours(GRILL_FROM,0,0,0);
+    t.setHours(from,0,0,0);
   }
   return t;
 }
-/* підпис для «якнайшвидше»: з датою, якщо це вже не сьогодні */
+/* Те саме, округлене вниз до години: слот — це година на видачу,
+   і 13:30 потрапляє у слот 13:00–14:00. */
+function earliest(mode){
+  const t=earliestExact(mode);
+  t.setMinutes(0,0,0);
+  return t;
+}
+/* Підпис для «якнайшвидше». Час беремо точний, інакше о 12:30
+   обіцяли б «з 13:00», хоча раніше 13:30 не встигнемо. */
 function asapLabel(mode){
-  const e=earliest(mode);
-  const h=String(e.getHours()).padStart(2,'0')+':00';
+  const e=earliestExact(mode);
+  const h=String(e.getHours()).padStart(2,'0')+':'+String(e.getMinutes()).padStart(2,'0');
   return dayKey(e)===dayKey(new Date()) ? 'орієнтовно з '+h
        : dayLabel(e).toLowerCase()+', орієнтовно з '+h;
 }
@@ -1369,7 +1386,7 @@ function asapLabel(mode){
 function slotsFor(d,mode){
   const out=[], e=earliest(mode);
   const sameDay=dayKey(d)===dayKey(e);
-  let h=Math.max(GRILL_FROM, sameDay? e.getHours():GRILL_FROM);
+  let h=Math.max(openFrom(), sameDay? e.getHours():openFrom());
   for(; h<SHOP_CLOSE; h+=SLOT_STEP/60){
     const from=new Date(d); from.setHours(h,0,0,0);
     if(from<e) continue;
@@ -1447,6 +1464,7 @@ function openCheckout(){
   /* Онлайн-оплати поки немає. Поки її не підключено, не пропонуємо:
      інакше оператор бачив би «оплачено», а грошей ніхто не брав. */
   let mode=getMode,fry=false,pay='cash';
+  fryWanted=false;                       // без мангала можна забирати з відкриття
   const fg=fryGrams();
   const draw=()=>{
     const fryCost=fry?kop(fg/1000*FRY_RATE):0, total=kop(goodsTotal()+fryCost);
@@ -1508,7 +1526,10 @@ function openCheckout(){
     sIn.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
       mode=b.dataset.mode; validateWhen(mode); draw()});
     sIn.querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>{pay=b.dataset.pay;draw()});
-    const sw=sIn.querySelector('#sw'); if(sw) sw.onclick=()=>{fry=!fry;draw()};
+    /* Увімкнули мангал — найраніший час зсувається на 10:00,
+       і вже обраний ранній слот може стати неможливим. */
+    const sw=sIn.querySelector('#sw');
+    if(sw) sw.onclick=()=>{fry=!fry; fryWanted=fry; validateWhen(mode); draw()};
     sIn.querySelector('#send').onclick=async ()=>{
       const btn=sIn.querySelector('#send');
       const nm=sIn.querySelector('#nm').value.trim(), telRaw=sIn.querySelector('#tel').value.trim();
@@ -1527,7 +1548,8 @@ function openCheckout(){
         const d=await r.json();
         if(!r.ok) throw new Error(d.error||'Помилка');
         /* сума з сервера головніша: він рахує за прайсом */
-        order={...payload,no:d.no,shop:SHOPS[shop][0],total:Number.isFinite(d.total)?d.total:payload.total};
+        order={...payload,no:d.no,shop:SHOPS[shop][0],st:d.status||'new',
+               total:Number.isFinite(d.total)?d.total:payload.total};
       }catch(err){
         const msg=String(err&&err.message||'');
         if(/Забагато/.test(msg)){
@@ -1540,7 +1562,7 @@ function openCheckout(){
       }
       cart=[];upsellShown=false;orderNote='';paintBar();
       if(order.no!=='—'){order.lines=payload.lines;saveLast(order)}
-      openStatus();
+      openStatus(order.st||'new');
     };
   };
   draw();
@@ -1552,7 +1574,8 @@ function openStatus(startStatus){
   const STK=['accepted','cooking','ready','done'];
   const draw=(status)=>{
     const step=Math.max(0,STK.indexOf(status));
-    const steps=[['Прийнято','оператор підтвердив'],['Готується',o.fry?'мʼясо на мангалі':'збираємо замовлення'],
+    const steps=[['Прийнято',status==='new'?'чекаємо підтвердження точки':'оператор підтвердив'],
+      ['Готується',o.fry?'мʼясо на мангалі':'збираємо замовлення'],
       ['Готове','надішлемо SMS'],[o.mode==='pickup'?'Видано':'Передано курʼєру','']];
     sIn.innerHTML=`<div class="grab-zone"><div class="grab"></div></div>
     <div class="done-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round"><path d="M4 12.5l5.5 5.5L20 7"/></svg></div>
@@ -1572,7 +1595,9 @@ function openStatus(startStatus){
       </div>`).join('')}</div>
 
     <div class="box">
-      ${o.lines.map(l=>`<div class="sum"><span>${l.name} · ${lineQty(l)}</span><span>${money(l.sum)}</span></div>`).join('')}
+      ${o.lines.length
+        ? o.lines.map(l=>`<div class="sum"><span>${l.name} · ${lineQty(l)}</span><span>${money(l.sum)}</span></div>`).join('')
+        : `<p class="hint" style="margin:0 0 6px">Склад замовлення видно лише на тому пристрої, з якого його оформили.</p>`}
       ${o.fry?`<div class="sum"><span>Смаження · ${wLabel(o.fg)}</span><span>${money(kop(o.fg/1000*FRY_RATE))}</span></div>`:''}
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:10px;border-top:1px solid var(--line)">
         <span style="font-size:13px">Разом</span><b style="font-family:Oswald;font-size:21px">${money(o.total)}</b></div>
@@ -1595,7 +1620,7 @@ function openStatus(startStatus){
       catch(e){cp.textContent=url}
     };
   };
-  open('');draw(startStatus||'accepted');
+  open('');draw(startStatus||'new');
   clearInterval(poll);
   if(o.no!=='—'){
     poll=setInterval(async()=>{
@@ -1618,8 +1643,16 @@ renderCats();renderCatalog();syncScrollLock();
 
 /* ---------- активне замовлення ---------- */
 const LAST_KEY='mb-last-order';
+/* Склад замовлення зберігаємо теж: сервер його не віддає за номером,
+   бо тоді чужі замовлення читалися б простим перебором. Без цього
+   екран статусу показував порожній список і суму нізвідки. */
 function saveLast(o){
-  try{localStorage.setItem(LAST_KEY,JSON.stringify({no:o.no,shop:o.shop,total:o.total,when:o.when,at:Date.now()}))}catch(e){}
+  try{localStorage.setItem(LAST_KEY,JSON.stringify({
+    no:o.no, shop:o.shop, total:o.total, when:o.when, mode:o.mode,
+    fry:!!o.fry, fg:o.fg||0,
+    lines:(o.lines||[]).map(l=>({name:l.name,grp:l.grp,unit:l.unit,g:l.g,sum:l.sum})),
+    at:Date.now()
+  }))}catch(e){}
 }
 function clearLast(){try{localStorage.removeItem(LAST_KEY)}catch(e){}}
 function readLast(){
@@ -1630,11 +1663,14 @@ function readLast(){
     return v;
   }catch(e){return null}
 }
-const ST_LABEL={accepted:'Прийнято',cooking:'Готується',ready:'Готове',done:'Видано'};
+/* 'new' — точка ще не підтвердила. Раніше такий заказ показувався
+   як «Прийнято», і клієнт думав, що його вже взяли в роботу. */
+const ST_LABEL={new:'Очікує підтвердження',accepted:'Прийнято',
+                cooking:'Готується',ready:'Готове',done:'Видано'};
 async function showActiveBar(){
   const v=readLast(); const el=document.getElementById('active');
   if(!v||!el) return;
-  let st='accepted';
+  let st='new';
   try{
     const r=await req(API+'/api/order/'+v.no,null,8000);
     const d=await r.json();
@@ -1646,7 +1682,7 @@ async function showActiveBar(){
   const sub=ready? 'Можна забирати · '+v.shop : v.shop+(v.when?' · '+v.when:'');
   el.innerHTML=`<button class="act-in${ready?' ready':''}" id="actOpen">
     <span class="act-dot"></span>
-    <span class="act-t"><b>Замовлення № ${v.no} · ${ST_LABEL[st]||'Прийнято'}</b>
+    <span class="act-t"><b>Замовлення № ${v.no} · ${ST_LABEL[st]||'Очікує підтвердження'}</b>
     <span>${sub}</span></span>
     <span class="act-go">Стежити</span></button>`;
   el.querySelector('#actOpen').onclick=()=>openOrder(v.no);
@@ -1656,9 +1692,13 @@ async function openOrder(no){
     const r=await req(API+'/api/order/'+no,null,10000);
     const d=await r.json();
     if(!d.no) throw 0;
+    /* Склад і смаження беремо з памʼяті браузера — сервер їх не віддає.
+       Якщо це чуже посилання, памʼяті немає: покажемо лише статус і суму. */
     const v=readLast()||{};
-    order={no:d.no,shop:v.shop||SHOPS[shop][0],when:v.when||'',total:d.total,mode:d.mode||'pickup',
-           fry:false,fg:0,lines:v.lines||[]};
+    const mine=String(v.no)===String(d.no);
+    order={no:d.no, shop:(mine&&v.shop)||SHOPS[shop][0], when:(mine&&v.when)||'',
+           total:d.total, mode:d.mode||'pickup',
+           fry:mine&&!!v.fry, fg:(mine&&v.fg)||0, lines:(mine&&v.lines)||[]};
     openStatus(d.status);
   }catch(e){
     clearLast();
