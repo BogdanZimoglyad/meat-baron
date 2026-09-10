@@ -212,26 +212,33 @@ function keyboard(o) {
   return { inline_keyboard: btns };
 }
 
-/* ---------- захист від напливу замовлень ---------- */
-const hits = new Map();                       // ip → [часи запитів]
+/* ---------- захист від напливу запитів ---------- */
 const RATE_WINDOW = 10 * 60 * 1000;           // вікно 10 хвилин
-const RATE_MAX = 5;                           // не більше 5 замовлень з однієї адреси
-function tooOften(ip) {
+const buckets = new Map();                    // "кошик:ip" → [часи запитів]
+function tooOften(bucket, ip, max) {
+  const key = bucket + ':' + ip;
   const now = Date.now();
-  const list = (hits.get(ip) || []).filter(t => now - t < RATE_WINDOW);
+  const list = (buckets.get(key) || []).filter(t => now - t < RATE_WINDOW);
   list.push(now);
-  hits.set(ip, list);
-  if (hits.size > 5000) hits.clear();         // щоб не росло безмежно
-  return list.length > RATE_MAX;
+  buckets.set(key, list);
+  if (buckets.size > 20000) buckets.clear();  // щоб не росло безмежно
+  return list.length > max;
 }
+
+/* Скільки запитів за 10 хвилин дозволяємо з однієї адреси.
+   Статус свого замовлення сайт питає раз на 15 секунд — це 40 за вікно,
+   тож ліміт вищий; перебрати ним усі номери замовлень уже не вийде. */
+const RATE = { order: 5, status: 150, history: 20 };
+
+const ipOf = req => (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+                 || req.socket.remoteAddress || 'unknown';
 
 /* ---------- приймання замовлення з сайту ---------- */
 app.post('/api/order', async (req, res) => {
   const b = req.body || {};
 
-  const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
-           || req.socket.remoteAddress || 'unknown';
-  if (tooOften(ip)) {
+  const ip = ipOf(req);
+  if (tooOften('order', ip, RATE.order)) {
     return res.status(429).json({ error: 'Забагато замовлень поспіль. Зачекайте кілька хвилин.' });
   }
 
@@ -339,6 +346,11 @@ app.post('/api/order', async (req, res) => {
 
 /* ---------- статус для сайту ---------- */
 app.get('/api/order/:no', (req, res) => {
+  /* Номери йдуть підряд, тож без ліміту їх можна було б просто перебрати
+     і побачити суми всіх замовлень магазину. */
+  if (tooOften('status', ipOf(req), RATE.status)) {
+    return res.status(429).json({ error: 'Забагато запитів. Зачекайте кілька хвилин.' });
+  }
   const o = db.orders[req.params.no];
   if (!o) return res.status(404).json({ error: 'Замовлення не знайдено' });
   res.json({ no: o.no, status: o.status, label: LABEL[o.status], total: o.total, mode: o.mode });
@@ -346,6 +358,11 @@ app.get('/api/order/:no', (req, res) => {
 
 /* ---------- історія замовлень за номером ---------- */
 app.get('/api/history/:tel', (req, res) => {
+  /* Історія прив'язана лише до номера телефону, іншої перевірки немає.
+     Без ліміту чужі номери можна було б перебирати пачками. */
+  if (tooOften('history', ipOf(req), RATE.history)) {
+    return res.status(429).json({ error: 'Забагато запитів. Зачекайте кілька хвилин.' });
+  }
   const key = normTel(req.params.tel);
   if (key.length < 9) return res.status(400).json({ error: 'Некоректний номер' });
 
