@@ -47,7 +47,7 @@ app.use(express.json({ limit: '64kb' }));
    Службові файли назовні не пускаємо. */
 const PRIVATE = new Set([
   'server.js', 'package.json', 'package-lock.json',
-  'readme.md', 'data', 'node_modules'
+  'readme.md', 'data', 'node_modules', 'tools'
 ]);
 app.use((req, res, next) => {
   let p = req.path;
