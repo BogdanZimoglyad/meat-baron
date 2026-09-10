@@ -1,14 +1,21 @@
-# Removes a white studio background and produces a 640x640 transparent PNG,
-# matching the format already used on the site.
+# Removes a plain studio background and produces a 640x640 transparent PNG,
+# matching the format already used on the site. White backdrop by default,
+# black with -Dark.
 #
-#   cutout.ps1 -In photo.jpg -Out photo\name.png [-Size 640] [-Pad 24]
-#              [-White 232] [-Soft 196] [-Neutral 20]
+#   cutout.ps1 -In photo.jpg -Out photo\name.png
+#   cutout.ps1 -In duck.jpg  -Out photo\kachka.png -Dark
 #
-# White   : a pixel this bright (min channel) can belong to the background
-# Soft    : below this brightness a pixel is definitely product
-# Neutral : max spread between R,G,B for a pixel to count as grey/white
-# Only background CONNECTED TO THE BORDER is erased, so white highlights
-# inside the product survive.
+# White    : a pixel this bright (min channel) can belong to the backdrop
+# Soft     : below this brightness a pixel is definitely product
+# Neutral  : max spread between R,G,B for a pixel to count as neutral
+# Shadow   : a strictly neutral pixel this bright is a soft shadow
+# Dark     : cut a black backdrop instead of a white one
+# DarkMax  : on black, a pixel this dark (max channel) can be backdrop
+# DarkSoft : on black, above this brightness a pixel is definitely product
+#
+# Only background CONNECTED TO THE BORDER is erased, so highlights inside
+# the product survive. Enclosed islands of backdrop colour are erased too,
+# but only when they are large enough to be a real hole.
 
 param(
   [Parameter(Mandatory=$true)][string]$In,
@@ -19,6 +26,9 @@ param(
   [int]$Soft = 196,
   [int]$Neutral = 20,
   [int]$Shadow = 140,
+  [switch]$Dark,
+  [int]$DarkMax = 46,
+  [int]$DarkSoft = 96,
   [double]$Holes = 0.08,
   [int]$Erode = 3,
   [int]$WorkMax = 1400
@@ -87,6 +97,7 @@ $bytes = New-Object byte[] ($stride * $h)
 $n = $w * $h
 $isBg = New-Object bool[] $n          # background, connected to the border
 $bright = New-Object byte[] $n        # min channel, i.e. how white
+$dimm = New-Object byte[] $n          # max channel, i.e. how far from black
 $grey = New-Object bool[] $n          # near-neutral colour
 $flat = New-Object bool[] $n          # strictly neutral: a soft shadow looks like this,
                                       # food almost never does
@@ -100,17 +111,26 @@ for ($y = 0; $y -lt $h; $y++) {
     $mx = [Math]::Max($b, [Math]::Max($g, $r))
     $i = $y * $w + $x
     $bright[$i] = $mn
+    $dimm[$i] = $mx
     $spread = $mx - $mn
     $grey[$i] = $spread -le $Neutral
     $flat[$i] = $spread -le [int]($Neutral / 2)
   }
 }
 
-# a pixel counts as background if it is pale grey (the backdrop) or a
-# strictly neutral mid-grey (a soft shadow)
+# What counts as background.
+# On white: a pale grey pixel (the backdrop) or a strictly neutral
+# mid-grey one (a soft shadow under the product).
+# On black: a neutral pixel dark enough that no food looks like it.
+# Judged by the brightest channel, so a deep red glaze is not mistaken
+# for backdrop.
 $bgLike = New-Object bool[] $n
 for ($i = 0; $i -lt $n; $i++) {
-  $bgLike[$i] = ($grey[$i] -and $bright[$i] -ge $Soft) -or ($flat[$i] -and $bright[$i] -ge $Shadow)
+  if ($Dark) {
+    $bgLike[$i] = $grey[$i] -and $dimm[$i] -le $DarkMax
+  } else {
+    $bgLike[$i] = ($grey[$i] -and $bright[$i] -ge $Soft) -or ($flat[$i] -and $bright[$i] -ge $Shadow)
+  }
 }
 
 # flood fill from every border pixel
@@ -181,6 +201,8 @@ for ($pass = 0; $pass -lt $Erode; $pass++) {
 # does not look like scissors work
 $span = [double]($White - $Soft)
 if ($span -lt 1) { $span = 1 }
+$darkSpan = [double]($DarkSoft - $DarkMax)
+if ($darkSpan -lt 1) { $darkSpan = 1 }
 for ($y = 0; $y -lt $h; $y++) {
   $row = $y * $stride
   for ($x = 0; $x -lt $w; $x++) {
@@ -193,14 +215,18 @@ for ($y = 0; $y -lt $h; $y++) {
     if ($x -lt $w - 1 -and $isBg[$i + 1])  { $touching = $true }
     if ($y -gt 0      -and $isBg[$i - $w]) { $touching = $true }
     if ($y -lt $h - 1 -and $isBg[$i + $w]) { $touching = $true }
-    if ($touching -and $grey[$i] -and $bright[$i] -gt $Soft) {
-      $a = 255 - [int](255 * (($bright[$i] - $Soft) / $span))
+    $a = 255
+    if ($touching -and $grey[$i]) {
+      if ($Dark) {
+        # the darker the pixel, the more of the backdrop is in it
+        if ($dimm[$i] -lt $DarkSoft) { $a = [int](255 * (($dimm[$i] - $DarkMax) / $darkSpan)) }
+      } elseif ($bright[$i] -gt $Soft) {
+        $a = 255 - [int](255 * (($bright[$i] - $Soft) / $span))
+      }
       if ($a -lt 0) { $a = 0 }
       if ($a -gt 255) { $a = 255 }
-      $bytes[$o + 3] = [byte]$a
-    } else {
-      $bytes[$o + 3] = 255
     }
+    $bytes[$o + 3] = [byte]$a
   }
 }
 
