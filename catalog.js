@@ -57,7 +57,14 @@ function itemId(cat,grp,name){
   return 'i'+(h>>>0).toString(36);
 }
 
-const ITEMS=P.map(r=>({
+/* Категорії, зняті з продажу. Рядки лишаються в прайсі разом з описами
+   й фото — щоб повернути, досить прибрати id звідси.
+   'ready' (смокер) на паузі: немає фото і ще не вирішили, як продавати.
+   Позиції не показуються на сайті і не приймаються сервером: номер
+   рахується від назви, тож решта товарів від цього не зсувається. */
+const CATS_OFF=new Set(['ready']);
+
+const ITEMS=P.filter(r=>!CATS_OFF.has(r[0])).map(r=>({
   id:itemId(r[0],r[1],r[2]), cat:r[0], grp:r[1], name:r[2], price:r[3],
   unit: r[4]==='шт'||r[4]===1 ? 'шт' : (r[4]==='пак' ? 'пак' : 'вага'),
   minG: r[5]||MIN_G
@@ -118,6 +125,6 @@ function fryableG(l){
 /* Для сервера. У браузері файл підключається тегом <script>,
    і все вище стає доступним головному скрипту як є. */
 if(typeof module!=='undefined'&&module.exports){
-  module.exports={P,ITEMS,itemId,SHOPS_ALL,SHOPS,FRY_RATE,MIN_G,PACK_G,kop,lineSum,
+  module.exports={P,ITEMS,itemId,CATS_OFF,SHOPS_ALL,SHOPS,FRY_RATE,MIN_G,PACK_G,kop,lineSum,
                   NO_FRY,READY_MADE,PORTION,portionOf,canFry,fryableG};
 }
