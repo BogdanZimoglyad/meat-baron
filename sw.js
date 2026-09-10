@@ -1,9 +1,10 @@
 /* Мʼясний Барон — service worker */
 
-const CACHE = 'mb-v3';
+const CACHE = 'mb-v4';
 const SHELL = [
   './',
   './index.html',
+  './catalog.js',
   './manifest.json'
 ];
 

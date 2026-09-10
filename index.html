@@ -661,6 +661,9 @@ body:has(.inst) .bar{bottom:66px}
   <div class="sheet-in" id="sheetIn"></div>
 </div>
 
+<!-- Прайс і правила рахунку. Той самий файл читає сервер,
+     тому підроблену суму замовлення видно одразу. -->
+<script src="catalog.js"></script>
 <script>
 const CATS=[
  {id:'raw',t:'Сире мʼясо',u:'ціна за 100 г',fry:1},
@@ -670,54 +673,12 @@ const CATS=[
  {id:'side',t:'Фритюр меню',u:'ціна за порцію',fry:0},
  {id:'extra',t:'До мʼяса',u:'сири, овочі, хліб, соуси',fry:0}
 ];
-const P=[
- ['raw','Свинина','Ошийок',36.19],['raw','Свинина','Мʼякоть',26.60],['raw','Свинина','Вирізка',38.00],
- ['raw','Свинина','Реберця',25.49],['raw','Свинина','Грудинка',22.49],['raw','Свинина','Стейк з ошийка',36.49],
- ['raw','Свинина','Стейк з відбивної',30.49],['raw','Свинина','Стейк на кістці',27.09],['raw','Свинина','Косичка bbq',22.20],
- ['raw','Курка','Гомілка',15.00],['raw','Курка','Крило',14.45],['raw','Курка','Стейк',19.28],
- ['raw','Курка','Філе',25.60],['raw','Курка','Люля кебаб',26.05],['raw','Курка','Шашлик з індика',40.10],
- ['raw','Яловичина','Шашлик з телятини',50.10],['raw','Яловичина','Стейк Рібай',46.10],
- ['raw','Яловичина','Стейк Нью-Йорк',40.49],['raw','Яловичина','Філе-міньйон',80.40],
- ['raw','Баранина','Шашлик з мʼякоті',60.19],['raw','Баранина','Люля кебаб',40.29],
-
- ['saus','Ковбаски','Віденська',21.19],['saus','Ковбаски','Мисливська',26.10],['saus','Ковбаски','Свиняча',19.99],
- ['saus','Ковбаски','Куряча',18.54],['saus','Ковбаски','Куряча з сиром',20.19],['saus','Ковбаски','Куряча з пивом',17.19],
- ['saus','Ковбаски','Індича',24.19],['saus','Ковбаски','Ковбаски гриль асорті',20.49],
- ['saus','Чевапчічі','Класичні',24.70],['saus','Чевапчічі','З сиром',24.60],['saus','Чевапчічі','З грибами',24.70],
-
- ['ready','Смокер','Курка bbq',26.69,0,700],['ready','Смокер','Рулька свиняча',15.65,0,500],['ready','Смокер','Ребро свиняче',42.60,0,400],
- ['ready','Смокер','Бекон',39.99,0,200],['ready','Смокер','Відбивна свиняча',42.69,0,300],['ready','Смокер','Рвана свинина',40.69,0,300],
- ['ready','Смокер','Рвана яловичина',85.69,0,300],['ready','Смокер','Ребро яловиче',30.19,0,500],['ready','Смокер','Бріскет яловичий',71.69,0,300],
- ['ready','Смокер','Буженіна куряча',31.60,0,200],['ready','Смокер','Ковбаса домашня',40.69,0,300],['ready','Смокер','Підчеревина',50.69,0,300],
- ['ready','Смокер','Індича гомілка',27.00,0,500],['ready','Смокер','Індиче філе',54.99,0,300],['ready','Смокер','Ошийок пастрамі',66.69,0,200],
- ['ready','Смокер','Качка з яблуками',33.19,0,700],['ready','Смокер','Плече індиче',22.19,0,500],
- ['grill','Кури гриль','Курка гриль',19.90,0,1000],['grill','Кури гриль','Чверть курки',19.90,0,300],
- ['grill','Качка','Качка гриль',38.00,0,2000],['grill','Качка','Качка зі смокеру з яблуками',45.99,0,2000],
-
- ['side','Фритюр меню','Картопля фрі',70,1],['side','Фритюр меню','Картопля по-селянськи',70,1],
- ['side','Фритюр меню','Цибулеві кільця',75,1],['side','Фритюр меню','Картопляні крокети',75,1],
- ['side','Фритюр меню','Хеш-браун',70,1],['side','Фритюр меню','Сирні палички',130,1],['side','Фритюр меню','Батат фрі',95,1],
- ['side','Фритюр меню','Сет на компанію + 2 соуси',490,1],
-
- ['extra','Сири','Сулугуні',35.50,0,350],['extra','Сири','Халумі',38.90,0,350],
- ['extra','Овочі','Картопля з салом',14.00,0,300],['extra','Овочі','Кукурудза',13.90,'пак'],['extra','Овочі','Гриби печериці',22.90,'пак'],['extra','Овочі','Картопля',9.90,'пак'],['extra','Овочі','Перець',39.90,'пак'],
- ['extra','Хліб і соуси','Матнакаш',35,1],['extra','Хліб і соуси','Лаваш тонкий',35,1],['extra','Хліб і соуси','Соуси в асортименті',35,1]
-];
-const FRY_RATE=50, MIN_G=200;
 /* графік і час видачі */
 const SHOP_OPEN=8, SHOP_CLOSE=20;      // магазин працює 8:00–20:00
 const GRILL_FROM=10;                    // мангал з 10:00
 const LEAD_PICKUP=60, LEAD_DELIVERY=90; // хвилин на підготовку
 const SLOT_STEP=60;                     // крок слота — 1 година
 const DAYS_AHEAD=7;
-/* рядок: [категорія, група, назва, ціна, одиниця?, мін.вага?]
-   одиниця: undefined — вага (ціна за 100 г); 'шт' — фікс. ціна за штуку;
-            'пак' — упаковка 1 кг, ціна вказана за 100 г */
-const ITEMS=P.map((r,i)=>({
-  id:'p'+i, cat:r[0], grp:r[1], name:r[2], price:r[3],
-  unit: r[4]==='шт'||r[4]===1 ? 'шт' : (r[4]==='пак' ? 'пак' : 'вага'),
-  minG: r[5]||MIN_G
-}));
 
 /* короткі описи товарів: ключ — "Група/Назва" або "Назва" */
 const DESC={
@@ -889,8 +850,6 @@ async function req(url,opts,ms){
   finally{ clearTimeout(t) }
 }
 let poll=null;
-/* округлення до копійки, стійке до похибок дробових чисел */
-const kop=n=>Math.round((n+Number.EPSILON)*100)/100;
 const money=n=>kop(n).toFixed(2).replace(/\.00$/,'')+' ₴';
 const wLabel=g=>g>=1000?(g/1000).toFixed(g%1000?1:0)+' кг':g+' г';
 /* заглушки: іконка за типом продукту + дим і силует бика */
@@ -1242,18 +1201,12 @@ function maybeUpsell(it){
   };
   return true;
 }
-const PACK_G=1000;                      // упаковка овочів — 1 кг
 const isCount=l=>l.unit==='шт'||l.unit==='пак';   // додаються поштучно
 const minOf=l=>{
   if(l.minG) return l.minG;
   const it=ITEMS.find(i=>i.id===l.id);
   return (it&&it.minG)||MIN_G;
 };
-function lineSum(l){
-  if(l.unit==='шт')  return kop(l.price*l.g);                 // фікс. ціна за штуку
-  if(l.unit==='пак') return kop(l.price*PACK_G/100*l.g);      // ціна за 100 г × 1 кг × к-сть
-  return kop(l.price*l.g/100);                                // за вагою
-}
 function unitNote(it){
   if(it.unit==='шт')  return 'за штуку';
   if(it.unit==='пак') return `упаковка 1 кг — ${money(it.price*PACK_G/100)}`;
@@ -1265,27 +1218,6 @@ function lineQty(l){
   return wLabel(l.g);
 }
 function goodsTotal(){return kop(cart.reduce((s,l)=>s+lineSum(l),0))}
-/* На мангал іде все вагове: сире мʼясо, ковбаски, сири, овочі.
-   Не смажимо те, що вже готове (смокер, кури гриль, фритюр),
-   а також поштучні позиції — хліб і соуси. */
-const NO_FRY=new Set(['ready','grill','side']);
-/* Готові позиції всередині вагових категорій. Ключ — «Група/Назва».
-   Картопля з салом приїжджає вже готовою, її не смажать. */
-const READY_MADE=new Set(['Овочі/Картопля з салом']);
-/* Позиції, які купують штуками, а важать на вагах. Ключ — «Група/Назва»,
-   значення — приблизна вага однієї штуки. Задає крок вибору ваги
-   і підпис «скільки це штук» на кнопках. */
-const PORTION={'Овочі/Картопля з салом':300};
-const portionOf=it=>PORTION[it.grp+'/'+it.name]||0;
-/* Одне джерело правди: і підказка в картці товару, і підрахунок ваги */
-const canFry=it=>!NO_FRY.has(it.cat)
-              && !READY_MADE.has(it.grp+'/'+it.name)
-              && it.unit!=='шт';              // хліб і соуси
-function fryableG(l){
-  if(!canFry(l)) return 0;
-  if(l.unit==='пак') return l.g*PACK_G;       // g — кількість упаковок по 1 кг
-  return l.g;                                 // g — грами
-}
 function fryGrams(){return cart.reduce((s,l)=>s+fryableG(l),0)}
 /* Ужарка 30–35% стосується лише мʼяса — сир і овочі так не втрачають вагу */
 const MEAT=new Set(['raw','saus']);
@@ -1512,7 +1444,9 @@ function pickTimeSheet(mode,back){
 }
 
 function openCheckout(){
-  let mode=getMode,fry=false,pay=getMode==='delivery'?'cash':'online';
+  /* Онлайн-оплати поки немає. Поки її не підключено, не пропонуємо:
+     інакше оператор бачив би «оплачено», а грошей ніхто не брав. */
+  let mode=getMode,fry=false,pay='cash';
   const fg=fryGrams();
   const draw=()=>{
     const fryCost=fry?kop(fg/1000*FRY_RATE):0, total=kop(goodsTotal()+fryCost);
@@ -1547,7 +1481,6 @@ function openCheckout(){
     </div>`:''}
 
     <span class="lbl">Оплата</span>
-    ${mode==='pickup'?`<button class="pay" data-pay="online" aria-pressed="${pay==='online'}"><span class="dot"></span>Карткою онлайн</button>`:''}
     <button class="pay" data-pay="cash" aria-pressed="${pay==='cash'}"><span class="dot"></span>Готівкою ${mode==='pickup'?'на місці':'курʼєру'}</button>
     <button class="pay" data-pay="card" aria-pressed="${pay==='card'}"><span class="dot"></span>Карткою ${mode==='pickup'?'на місці':'курʼєру'}</button>
 
@@ -1573,7 +1506,7 @@ function openCheckout(){
     if(pw) pw.onclick=()=>pickTimeSheet(mode,draw);
     bindPhone(sIn.querySelector('#tel'));
     sIn.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
-      mode=b.dataset.mode; if(mode==='delivery'&&pay==='online')pay='cash'; validateWhen(mode); draw()});
+      mode=b.dataset.mode; validateWhen(mode); draw()});
     sIn.querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>{pay=b.dataset.pay;draw()});
     const sw=sIn.querySelector('#sw'); if(sw) sw.onclick=()=>{fry=!fry;draw()};
     sIn.querySelector('#send').onclick=async ()=>{
@@ -1593,7 +1526,8 @@ function openCheckout(){
         const r=await req(API+'/api/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)},15000);
         const d=await r.json();
         if(!r.ok) throw new Error(d.error||'Помилка');
-        order={...payload,no:d.no,shop:SHOPS[shop][0]};
+        /* сума з сервера головніша: він рахує за прайсом */
+        order={...payload,no:d.no,shop:SHOPS[shop][0],total:Number.isFinite(d.total)?d.total:payload.total};
       }catch(err){
         const msg=String(err&&err.message||'');
         if(/Забагато/.test(msg)){
