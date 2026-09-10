@@ -8,7 +8,11 @@
  *
  * Змінні оточення (.env або налаштування хостингу):
  *   BOT_TOKEN  — токен від @BotFather
+ *   BIND_CODE  — пароль для команди /bind. Без нього прив'язати чат
+ *                до точки не можна: інакше замовлення забере чужий чат
  *   PORT       — порт (за замовчуванням 3000)
+ *   DATA_DIR   — тека для бази замовлень (на Railway — /data)
+ *   CHAT_1…N   — ID чатів точок, щоб прив'язки пережили перезапуск
  */
 
 const express = require('express');
@@ -98,8 +102,12 @@ const NEXT_BTN = {
   done: []
 };
 
-const FRY_RATE = 50;                              // ₴ за кг смаження
-const kop = n => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+/* Прайс і правила рахунку — той самий файл, що підключає сайт.
+   Сервер більше не вірить сумі з браузера, а рахує сам. */
+const CATALOG = require('./catalog.js');
+const { FRY_RATE, MIN_G, kop, lineSum, fryableG } = CATALOG;
+const byId = new Map(CATALOG.ITEMS.map(it => [it.id, it]));
+
 const money = n => kop(n).toFixed(2).replace(/\.00$/, '') + ' ₴';
 const normTel = t => {
   let d = String(t || '').replace(/\D/g, '');
@@ -117,7 +125,7 @@ bot.onText(/\/start|\/help/, msg => {
   bot.sendMessage(msg.chat.id,
     'Бот прийому замовлень «Мʼясний Барон».\n\n' +
     'Щоб цей чат отримував замовлення певної точки, надішліть:\n' +
-    '/bind НОМЕР\n\n' +
+    '/bind НОМЕР КОД\n\n' +
     'Список точок — /points\n' +
     'Поточна прив’язка — /whoami');
 });
@@ -125,18 +133,36 @@ bot.onText(/\/start|\/help/, msg => {
 bot.onText(/\/points/, msg => {
   bot.sendMessage(msg.chat.id,
     'Точки:\n' + SHOPS.map((s, i) => `${i + 1}. ${s}`).join('\n') +
-    '\n\nПрив’язати: /bind 1');
+    '\n\nПрив’язати: /bind 1 КОД');
 });
 
-bot.onText(/\/bind (\d+)/, (msg, m) => {
+/* Прив'язка змінює, куди підуть гроші клієнтів, тому вона під кодом.
+   Без BIND_CODE у змінних оточення прив'язати чат не можна взагалі —
+   інакше будь-хто додав би бота до себе в групу і забрав замовлення. */
+const BIND_CODE = String(process.env.BIND_CODE || '');
+
+bot.onText(/\/bind\s+(\d+)(?:\s+(\S+))?/, (msg, m) => {
   const n = parseInt(m[1], 10);
+  const code = m[2] || '';
+
+  if (!BIND_CODE) {
+    return bot.sendMessage(msg.chat.id,
+      'Прив’язку вимкнено. Додайте у змінні проєкту BIND_CODE — і команда запрацює.');
+  }
+  if (code !== BIND_CODE) {
+    console.warn('Спроба прив’язки без коду. Чат:', msg.chat.id, 'від:', msg.from && msg.from.id);
+    return bot.sendMessage(msg.chat.id, 'Потрібен код: /bind НОМЕР КОД');
+  }
   if (n < 1 || n > SHOPS.length) return bot.sendMessage(msg.chat.id, 'Немає такої точки. /points');
+
   db.shops[n - 1] = msg.chat.id;
   save();
+  console.log('Точку', n, 'прив’язано до чату', msg.chat.id);
   bot.sendMessage(msg.chat.id,
     `Готово. Цей чат отримує замовлення точки:\n${SHOPS[n - 1]}\n\n` +
     `Щоб прив'язка не злетіла після перезапуску сервера, додайте у змінні проєкту:\n` +
-    `<code>CHAT_${n} = ${msg.chat.id}</code>`,
+    `<code>CHAT_${n} = ${msg.chat.id}</code>\n\n` +
+    `Видаліть, будь ласка, повідомлення з кодом із цього чату.`,
     { parse_mode: 'HTML' });
 });
 
@@ -144,7 +170,7 @@ bot.onText(/\/whoami/, msg => {
   const i = Object.keys(db.shops).find(k => db.shops[k] === msg.chat.id);
   bot.sendMessage(msg.chat.id, i !== undefined
     ? `Точка: ${SHOPS[i]}\nID чату: ${msg.chat.id}`
-    : `Чат ще не прив’язаний. ID: ${msg.chat.id}\nВикористайте /bind НОМЕР`);
+    : `Чат ще не прив’язаний. ID: ${msg.chat.id}\nВикористайте /bind НОМЕР КОД`);
 });
 
 /* ---------- текст замовлення ---------- */
@@ -164,12 +190,18 @@ function orderText(o) {
     ? `\n🚚 ДОСТАВКА: ${esc(o.addr) || '—'}\n   ⚠️ передзвонити, уточнити вартість доставки`
     : `\n🏪 САМОВИВІЗ: ${esc(o.shopName)}`;
 
-  const pay = { online: '💳 Оплачено онлайн', cash: '💵 Готівкою', card: '💳 Карткою на місці' }[o.pay] || o.pay;
+  const pay = { cash: '💵 Готівкою', card: '💳 Карткою на місці' }[o.pay] || o.pay;
   const when = o.when ? `\n🕒 <b>${esc(o.when)}</b>` : '';
+
+  /* Сайт показав клієнту іншу суму: або в нього застарілий кеш після
+     зміни цін, або запит підроблено. Правильна — та, що нижче. */
+  const warn = o.mismatch
+    ? `\n⚠️ <b>На сайті клієнт бачив ${money(o.mismatch)}</b> — перевірте ціни\n`
+    : '';
 
   return `<b>Замовлення № ${o.no}</b> — ${LABEL[o.status]}\n` +
     `${delivery}${when}\n${pay}\n\n${lines}${fry}\n\n` +
-    `<b>Разом: ${money(o.total)}</b>\n` +
+    `<b>Разом: ${money(o.total)}</b>${warn}\n` +
     `<i>Сума орієнтовна — залежить від фактичної ваги</i>\n\n` +
     `👤 ${esc(o.nm)}\n📞 ${esc(o.tel)}` +
     (o.note ? `\n\n💬 <b>Коментар:</b> ${esc(o.note)}` : '');
@@ -211,19 +243,43 @@ app.post('/api/order', async (req, res) => {
   if (!Array.isArray(b.lines) || !b.lines.length || b.lines.length > 40) {
     return res.status(400).json({ error: 'Некоректний склад замовлення' });
   }
-  const total = Number(b.total);
-  if (!Number.isFinite(total) || total <= 0 || total > 200000) {
+  /* Склад і суму рахуємо самі, за прайсом. З браузера беремо лише
+     номер позиції та кількість — ціну він міг би підмінити. */
+  const lines = [];
+  for (const raw of b.lines.slice(0, 40)) {
+    const it = byId.get(String(raw.id || ''));
+    if (!it) {
+      return res.status(400).json({ error: 'У замовленні є позиція, якої немає в каталозі' });
+    }
+    const q = Math.floor(Number(raw.g) || 0);
+    const minQ = it.unit === 'вага' ? it.minG : 1;
+    const maxQ = it.unit === 'вага' ? 20000 : 99;
+    if (!(q >= minQ) || q > maxQ) {
+      return res.status(400).json({ error: `Некоректна кількість: ${it.name}` });
+    }
+    lines.push({
+      name: it.name, grp: it.grp, cat: it.cat, unit: it.unit, id: it.id,
+      g: q, sum: lineSum({ unit: it.unit, price: it.price, g: q })
+    });
+  }
+
+  const goods = kop(lines.reduce((s, l) => s + l.sum, 0));
+  const fg = lines.reduce((s, l) => s + fryableG(l), 0);
+  const fry = !!b.fry && fg >= MIN_G;          // смаження лише коли є що смажити
+  const fryCost = fry ? kop(fg / 1000 * FRY_RATE) : 0;
+  const total = kop(goods + fryCost);
+  if (total <= 0 || total > 200000) {
     return res.status(400).json({ error: 'Некоректна сума замовлення' });
   }
-  // чистимо позиції від зайвого
-  const lines = b.lines.slice(0, 40).map(l => ({
-    name: String(l.name || '').slice(0, 80),
-    unit: ['шт', 'пак', 'вага'].includes(l.unit) ? l.unit : 'вага',
-    g: Math.max(0, Math.min(Number(l.g) || 0, 20000)),
-    id: String(l.id || '').slice(0, 12),
-    grp: String(l.grp || '').slice(0, 40),
-    sum: Math.max(0, Number(l.sum) || 0)
-  }));
+
+  /* Розбіжність означає або підміну, або застарілий кеш сайту
+     після зміни цін. Оператору краще знати. */
+  const claimed = Number(b.total);
+  const mismatch = Number.isFinite(claimed) && Math.abs(claimed - total) > 0.01
+    ? kop(claimed) : null;
+  if (mismatch !== null) {
+    console.warn('Сума з браузера', mismatch, 'не збігається з прайсом', total, '· IP', ip);
+  }
 
   let shopIndex = Number.isInteger(b.shop) ? b.shop : 0;
   if (b.shopName) {
@@ -235,7 +291,7 @@ app.post('/api/order', async (req, res) => {
   if (!chatId) {
     return res.status(503).json({
       error: 'Точка ще не підключена до Telegram',
-      hint: `Надішліть боту /bind ${shopIndex + 1} у потрібному чаті`
+      hint: `Надішліть боту /bind ${shopIndex + 1} КОД у потрібному чаті`
     });
   }
 
@@ -247,9 +303,12 @@ app.post('/api/order', async (req, res) => {
     shopName: SHOPS[shopIndex],
     mode: b.mode === 'delivery' ? 'delivery' : 'pickup',
     addr: String(b.addr || '').slice(0, 200),
-    fry: !!b.fry,
-    fg: Math.max(0, Math.min(Number(b.fg) || 0, 40000)),
-    pay: ['online','cash','card'].includes(b.pay) ? b.pay : 'cash',
+    fry,
+    fg,
+    mismatch,
+    /* 'online' навмисно не приймаємо: онлайн-оплати ще немає, і позначка
+       «оплачено» у чаті точки означала б гроші, яких ніхто не отримував. */
+    pay: ['cash','card'].includes(b.pay) ? b.pay : 'cash',
     nm,
     tel: '+380' + telKey,
     telKey,
@@ -270,7 +329,7 @@ app.post('/api/order', async (req, res) => {
     o.msgId = sent.message_id;
     o.chatId = chatId;
     save();
-    res.json({ ok: true, no, status: o.status });
+    res.json({ ok: true, no, status: o.status, total: o.total });
   } catch (e) {
     const detail = (e.response && e.response.body && e.response.body.description) || e.message;
     console.error('Telegram error:', detail);
