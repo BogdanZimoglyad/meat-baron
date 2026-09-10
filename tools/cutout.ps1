@@ -10,6 +10,7 @@
 # Neutral  : max spread between R,G,B for a pixel to count as neutral
 # Shadow   : a strictly neutral pixel this bright is a soft shadow
 # Dark     : cut a black backdrop instead of a white one
+# Keep     : background already removed elsewhere, only reframe to 640x640
 # DarkMax  : on black, a pixel this dark (max channel) can be backdrop
 # DarkSoft : on black, above this brightness a pixel is definitely product
 #
@@ -27,6 +28,7 @@ param(
   [int]$Neutral = 20,
   [int]$Shadow = 140,
   [switch]$Dark,
+  [switch]$Keep,
   [int]$DarkMax = 46,
   [int]$DarkSoft = 96,
   [double]$Holes = 0.08,
@@ -95,6 +97,12 @@ $bytes = New-Object byte[] ($stride * $h)
 [System.Runtime.InteropServices.Marshal]::Copy($data.Scan0, $bytes, 0, $bytes.Length)
 
 $n = $w * $h
+
+# -Keep: the picture already has a transparent background, cut elsewhere.
+# Touch nothing but the framing — otherwise we would hunt for a backdrop
+# that is not there and eat the product instead.
+if (-not $Keep) {
+
 $isBg = New-Object bool[] $n          # background, connected to the border
 $bright = New-Object byte[] $n        # min channel, i.e. how white
 $dimm = New-Object byte[] $n          # max channel, i.e. how far from black
@@ -229,6 +237,8 @@ for ($y = 0; $y -lt $h; $y++) {
     $bytes[$o + 3] = [byte]$a
   }
 }
+
+}  # end of -Keep guard
 
 [System.Runtime.InteropServices.Marshal]::Copy($bytes, 0, $data.Scan0, $bytes.Length)
 $bmp.UnlockBits($data)
