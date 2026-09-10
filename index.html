@@ -812,15 +812,8 @@ const photoOf=it=>{
   const k=PHOTO[it.grp+'/'+it.name]||PHOTO[it.name];
   return k?`photo/${k}`:null;
 };
-/* усі точки мережі. третій елемент — чи приймає замовлення онлайн.
-   на час тесту працюють Шевченка 142а і Людвіга Свободи 52: щоб увімкнути решту — постав 1 */
-const SHOPS_ALL=[
- ['Пр-т Героїв Харкова 256','+380638771309',0],['пр-т Людвіга Свободи 52','+380664210037',1],
- ['пр-т Тракторобудівників 142а','+380631498096',0],['вул. Шевченка 142а','+380663210037',1],
- ['м-н Захисників України 7/8','+380632452073',0],['вул. Різдвяна 16/22','+380505261861',0],
- ['пр-т Аерокосмічний 316е','',0],['вул. Холодногірська 3','',0]
-];
-const SHOPS=SHOPS_ALL.filter(s=>s[2]);
+/* SHOPS_ALL і SHOPS живуть у catalog.js — сервер читає той самий список.
+   Тут лишається тільки те, що потрібне для карти. */
 /* Точки на карті.
    Координати точніші за адресу — Google інколи ставить мітку на сусідній будинок.
    Щоб уточнити: Google Maps → правий клік на потрібній будівлі → скопіювати числа. */
@@ -850,6 +843,10 @@ async function req(url,opts,ms){
   finally{ clearTimeout(t) }
 }
 let poll=null;
+/* Екранування для вставки в розмітку. Потрібне там, де текст прийшов
+   ззовні: збережені замовлення й те, що ввела людина. */
+const esc=s=>String(s==null?'':s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const money=n=>kop(n).toFixed(2).replace(/\.00$/,'')+' ₴';
 const wLabel=g=>g>=1000?(g/1000).toFixed(g%1000?1:0)+' кг':g+' г';
 /* заглушки: іконка за типом продукту + дим і силует бика */
@@ -1026,7 +1023,10 @@ function open(html){
     });
   });
 }
-function close(){veil.classList.remove('on');sheet.classList.remove('on');unlockScroll()}
+/* Опитування статусу глушимо тут, а не в обгортці нижче: інакше воно
+   лишалося жити після закриття тапом по фону — обробник фону тримав
+   посилання на стару функцію і опитував сервер вічно. */
+function close(){clearInterval(poll);veil.classList.remove('on');sheet.classList.remove('on');unlockScroll()}
 veil.onclick=close;
 document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
 
@@ -1194,7 +1194,9 @@ function maybeUpsell(it){
       if(i>-1) cart.splice(i,1);
       b.classList.remove('on'); b.querySelector('.up-add').textContent='+';
     } else {
-      addToCart(item, isCount(item)?1:Math.max(500,item.minG));
+      /* Порційні позиції кладемо однією штукою, а не 500 г:
+         півтори картоплини нікому не потрібні. */
+      addToCart(item, isCount(item)?1:(portionOf(item)||Math.max(500,item.minG)));
       b.classList.add('on'); b.querySelector('.up-add').textContent='✓';
     }
     paintBar();
@@ -1465,6 +1467,10 @@ function openCheckout(){
      інакше оператор бачив би «оплачено», а грошей ніхто не брав. */
   let mode=getMode,fry=false,pay='cash';
   fryWanted=false;                       // без мангала можна забирати з відкриття
+  /* Контакти тримаємо в змінних, бо draw() перемальовує форму цілком.
+     Без цього людина вводила імʼя й телефон, вмикала мангал — і поля
+     порожніли. Те саме було при зміні оплати, точки й часу. */
+  let nmV='', telV='', addrV='';
   const fg=fryGrams();
   const draw=()=>{
     const fryCost=fry?kop(fg/1000*FRY_RATE):0, total=kop(goodsTotal()+fryCost);
@@ -1481,7 +1487,7 @@ function openCheckout(){
              </button>`
           : `<div class="box"><div style="font-size:11px;color:var(--smoke)">Точка видачі</div>
              <b style="font-weight:500">${SHOPS[shop][0]}</b></div>`)
-      : `<input class="fld" id="addr" placeholder="Вулиця, будинок, квартира">
+      : `<input class="fld" id="addr" placeholder="Вулиця, будинок, квартира" value="${esc(addrV)}">
          <p class="hint">Вартість доставки уточнить оператор телефоном — служба доставки партнерська.</p>`}
 
     <button class="box pick-shop" id="pickWhen">
@@ -1503,8 +1509,8 @@ function openCheckout(){
     <button class="pay" data-pay="card" aria-pressed="${pay==='card'}"><span class="dot"></span>Карткою ${mode==='pickup'?'на місці':'курʼєру'}</button>
 
     <span class="lbl">Контакти</span>
-    <input class="fld" id="nm" placeholder="Імʼя" autocomplete="name">
-    <input class="fld" id="tel" placeholder="+380 __ ___ __ __" inputmode="tel" autocomplete="tel">
+    <input class="fld" id="nm" placeholder="Імʼя" autocomplete="name" value="${esc(nmV)}">
+    <input class="fld" id="tel" placeholder="+380 __ ___ __ __" inputmode="tel" autocomplete="tel" value="${esc(telV)}">
     <p class="err" id="err">Вкажіть імʼя та номер телефону.</p>
 
     <div class="box" style="margin-top:16px">
@@ -1523,6 +1529,12 @@ function openCheckout(){
     const pw=sIn.querySelector('#pickWhen');
     if(pw) pw.onclick=()=>pickTimeSheet(mode,draw);
     bindPhone(sIn.querySelector('#tel'));
+    /* Запамʼятовуємо кожне натискання клавіші — перемальовування форми
+       не повинно стирати те, що людина вже ввела. */
+    const keep=(id,set)=>{const el=sIn.querySelector(id); if(el) el.addEventListener('input',()=>set(el.value))};
+    keep('#nm',   v=>nmV=v);
+    keep('#tel',  v=>telV=v);
+    keep('#addr', v=>addrV=v);
     sIn.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
       mode=b.dataset.mode; validateWhen(mode); draw()});
     sIn.querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>{pay=b.dataset.pay;draw()});
@@ -1630,7 +1642,6 @@ function openStatus(startStatus){
     },15000);
   }
 }
-const _close=close; close=()=>{clearInterval(poll);_close()};
 window.close_=close;
 
 document.getElementById('shopName').textContent=SHOPS[shop][0];
@@ -1757,7 +1768,7 @@ function openHistory(){
             <span class="ho-st${o.status==='done'?' done':''}">${o.label||''}</span>
             <span class="ho-d">${fmtDate(o.createdAt)}</span>
           </div>
-          <div class="ho-l">${(o.lines||[]).map(l=>l.name+' · '+(l.unit==='шт'?l.g+' шт':l.unit==='пак'?l.g+' × 1 кг':wLabel(l.g))).join('<br>')}</div>
+          <div class="ho-l">${(o.lines||[]).map(l=>esc(l.name)+' · '+(l.unit==='шт'?l.g+' шт':l.unit==='пак'?l.g+' × 1 кг':wLabel(l.g))).join('<br>')}</div>
           <div class="ho-f">
             <span class="ho-sum">${money(o.total)}</span>
             <button class="ho-again" ${(o.lines||[]).length?'':'disabled'} data-again='${encodeURIComponent(JSON.stringify(o.lines||[]))}'>Повторити</button>
@@ -1776,7 +1787,10 @@ function openHistory(){
 function repeatOrder(lines){
   let added=0, skipped=[];
   lines.forEach(l=>{
-    const it=ITEMS.find(i=>i.id===l.id)||ITEMS.find(i=>i.name===l.name&&i.grp===l.grp);
+    /* Спершу за назвою: старі замовлення зберігають номери позицій
+       у колишньому форматі, і збіг за номером міг би підставити
+       зовсім інший товар. */
+    const it=ITEMS.find(i=>i.name===l.name&&i.grp===l.grp)||ITEMS.find(i=>i.id===l.id);
     if(!it){skipped.push(l.name);return}
     const g=isCount(it)? Math.max(1,l.g) : Math.max(it.minG,l.g);
     const ex=cart.find(c=>c.id===it.id);

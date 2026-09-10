@@ -21,6 +21,13 @@ const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const path = require('path');
 
+/* Прайс, правила рахунку і список точок — той самий файл, що підключає
+   сайт. Сервер не вірить ні сумі, ні назві точки з браузера. */
+const CATALOG = require('./catalog.js');
+const { FRY_RATE, MIN_G, kop, lineSum, fryableG } = CATALOG;
+const CATALOG_SHOPS = CATALOG.SHOPS;
+const byId = new Map(CATALOG.ITEMS.map(it => [it.id, it]));
+
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const PORT = process.env.PORT || 3000;
 
@@ -61,7 +68,36 @@ const DB = path.join(DATA_DIR, 'data.json');
 try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
 let db = { orders: {}, shops: {}, counter: 1000 };
 try { db = JSON.parse(fs.readFileSync(DB, 'utf8')); } catch (e) {}
-const save = () => { try { fs.writeFileSync(DB, JSON.stringify(db, null, 2)); } catch (e) {} };
+
+const writeNow = () => { try { fs.writeFileSync(DB, JSON.stringify(db, null, 2)); } catch (e) {} };
+
+/* Кожен запис — це перезапис усього файлу. Оператор може натиснути
+   три кнопки поспіль, тож збираємо їх в один запис. */
+let saveTimer = null;
+const save = () => {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => { saveTimer = null; writeNow(); }, 400);
+};
+/* Аварійне завершення не повинно з'їдати останні кілька секунд. */
+['SIGTERM', 'SIGINT'].forEach(sig => process.on(sig, () => {
+  if (saveTimer) { clearTimeout(saveTimer); writeNow(); }
+  process.exit(0);
+}));
+
+/* Замовлення старші за пів року нікому не потрібні: історія й так
+   показує лише 60 днів. Без чистки база росла б вічно, а кожен запит
+   історії перебирає її цілком. */
+const KEEP_DAYS = 180;
+function prune() {
+  const edge = Date.now() - KEEP_DAYS * 24 * 3600 * 1000;
+  let gone = 0;
+  for (const [no, o] of Object.entries(db.orders)) {
+    if ((o.createdAt || 0) < edge) { delete db.orders[no]; gone++; }
+  }
+  if (gone) { console.log('Прибрано старих замовлень:', gone); writeNow(); }
+}
+prune();
+setInterval(prune, 24 * 3600 * 1000).unref();
 
 /* Прив'язки чатів беремо зі змінних оточення CHAT_1, CHAT_2, …
    Диск на хостингу очищується при кожному перезапуску, а змінні — ні.
@@ -72,19 +108,11 @@ for (let i = 1; i <= 20; i++) {
 }
 
 /* ---------- точки ---------- */
-/* На час тесту працюють дві точки.
-   Щоб підключити решту — розкоментуй потрібні рядки
-   і перепривʼяжи чати командою /bind. */
-const SHOPS = [
-  'пр-т Людвіга Свободи 52',
-  'вул. Шевченка 142а'
-  // 'Пр-т Героїв Харкова 256',
-  // 'пр-т Тракторобудівників 142а',
-  // 'м-н Захисників України 7/8',
-  // 'вул. Різдвяна 16/22',
-  // 'пр-т Аерокосмічний 316е',
-  // 'вул. Холодногірська 3'
-];
+/* Список один на два боки — у catalog.js. Раніше він жив і тут, і в
+   index.html, причому по-різному: там прапорець, тут закоментовані
+   рядки. Розійшлися б — і замовлення поїхало б не на ту точку.
+   Щоб увімкнути точку, постав 1 у третьому стовпці в catalog.js. */
+const SHOPS = CATALOG_SHOPS.map(s => s[0]);
 
 const STATUSES = ['new', 'accepted', 'cooking', 'ready', 'done'];
 const LABEL = {
@@ -101,12 +129,6 @@ const NEXT_BTN = {
   ready: [['done', '🤝 Видано']],
   done: []
 };
-
-/* Прайс і правила рахунку — той самий файл, що підключає сайт.
-   Сервер більше не вірить сумі з браузера, а рахує сам. */
-const CATALOG = require('./catalog.js');
-const { FRY_RATE, MIN_G, kop, lineSum, fryableG } = CATALOG;
-const byId = new Map(CATALOG.ITEMS.map(it => [it.id, it]));
 
 const money = n => kop(n).toFixed(2).replace(/\.00$/, '') + ' ₴';
 const normTel = t => {
@@ -215,14 +237,36 @@ function keyboard(o) {
 /* ---------- захист від напливу запитів ---------- */
 const RATE_WINDOW = 10 * 60 * 1000;           // вікно 10 хвилин
 const buckets = new Map();                    // "кошик:ip" → [часи запитів]
-function tooOften(bucket, ip, max) {
-  const key = bucket + ':' + ip;
+
+const fresh = key => {
   const now = Date.now();
   const list = (buckets.get(key) || []).filter(t => now - t < RATE_WINDOW);
-  list.push(now);
+  if (list.length) buckets.set(key, list); else buckets.delete(key);
+  return list;
+};
+/* Прибираємо лише протухле. Раніше на переповненні чистили все підряд —
+   разом із чужими лічильниками, і ліміт скидався для всіх. */
+function sweep() {
+  if (buckets.size < 20000) return;
+  for (const key of [...buckets.keys()]) fresh(key);
+}
+/* Чи вичерпано ліміт. Нічого не записує — перевірку і запис розділено,
+   щоб відмова не з'їдала спробу. */
+function overLimit(bucket, ip, max) {
+  sweep();
+  return fresh(bucket + ':' + ip).length >= max;
+}
+function countHit(bucket, ip) {
+  const key = bucket + ':' + ip;
+  const list = fresh(key);
+  list.push(Date.now());
   buckets.set(key, list);
-  if (buckets.size > 20000) buckets.clear();  // щоб не росло безмежно
-  return list.length > max;
+}
+/* Читання рахуємо одразу: там кожен запит і є навантаженням. */
+function tooOften(bucket, ip, max) {
+  if (overLimit(bucket, ip, max)) return true;
+  countHit(bucket, ip);
+  return false;
 }
 
 /* Скільки запитів за 10 хвилин дозволяємо з однієї адреси.
@@ -230,15 +274,24 @@ function tooOften(bucket, ip, max) {
    тож ліміт вищий; перебрати ним усі номери замовлень уже не вийде. */
 const RATE = { order: 5, status: 150, history: 20 };
 
-const ipOf = req => (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
-                 || req.socket.remoteAddress || 'unknown';
+/* Беремо ОСТАННЮ адресу зі списку, а не першу. Перша — та, яку надіслав
+   сам клієнт, і нею можна було б обходити ліміти; останню дописує
+   проксі хостингу. Railway свій заголовок і так перезаписує, але
+   покладатися на це не варто. */
+const ipOf = req => {
+  const chain = String(req.headers['x-forwarded-for'] || '').split(',');
+  return chain[chain.length - 1].trim() || req.socket.remoteAddress || 'unknown';
+};
 
 /* ---------- приймання замовлення з сайту ---------- */
 app.post('/api/order', async (req, res) => {
   const b = req.body || {};
 
+  /* Перевіряємо, але ще не рахуємо: спробу зарахуємо лише коли замовлення
+     справді пішло на точку. Інакше пʼять відмов (скажімо, точка не
+     підключена) замикали людину на десять хвилин. */
   const ip = ipOf(req);
-  if (tooOften('order', ip, RATE.order)) {
+  if (overLimit('order', ip, RATE.order)) {
     return res.status(429).json({ error: 'Забагато замовлень поспіль. Зачекайте кілька хвилин.' });
   }
 
@@ -325,23 +378,30 @@ app.post('/api/order', async (req, res) => {
     total,
     createdAt: Date.now()
   };
-  db.orders[no] = o;
-  save();
-
+  /* Спершу надсилаємо на точку і лише потім записуємо. Раніше було
+     навпаки: якщо бот не доставив повідомлення, клієнт бачив помилку,
+     а замовлення лишалося в базі й потім спливало в його історії як
+     справжнє, хоча точка його не бачила. */
+  let sent;
   try {
-    const sent = await bot.sendMessage(chatId, orderText(o), {
+    sent = await bot.sendMessage(chatId, orderText(o), {
       parse_mode: 'HTML',
       reply_markup: keyboard(o)
     });
-    o.msgId = sent.message_id;
-    o.chatId = chatId;
-    save();
-    res.json({ ok: true, no, status: o.status, total: o.total });
   } catch (e) {
     const detail = (e.response && e.response.body && e.response.body.description) || e.message;
-    console.error('Telegram error:', detail);
-    res.status(500).json({ error: 'Не вдалося передати замовлення на точку', detail });
+    console.error('Telegram error:', detail, '· замовлення не збережено:', JSON.stringify(o));
+    /* Номер не повертаємо: поки чекали на Telegram, його міг зайняти
+       наступний клієнт. Пропуск у нумерації нікому не заважає. */
+    return res.status(500).json({ error: 'Не вдалося передати замовлення на точку', detail });
   }
+
+  o.msgId = sent.message_id;
+  o.chatId = chatId;
+  db.orders[no] = o;
+  save();
+  countHit('order', ip);                       // зараховуємо лише те, що дійшло
+  res.json({ ok: true, no, status: o.status, total: o.total });
 });
 
 /* ---------- статус для сайту ---------- */

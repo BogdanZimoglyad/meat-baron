@@ -46,11 +46,43 @@ const FRY_RATE=50;        // ₴ за кг смаження
 const MIN_G=200;          // мінімальна вага позиції
 const PACK_G=1000;        // упаковка овочів — 1 кг
 
-const ITEMS=P.map((r,i)=>({
-  id:'p'+i, cat:r[0], grp:r[1], name:r[2], price:r[3],
+/* Номер позиції рахуємо від категорії, групи і назви, а не від місця
+   в списку. Раніше id був 'p'+індекс: варто вставити рядок у середину —
+   і всі наступні товари змінювали номер. Старе замовлення просило p0,
+   а «Повторити» мовчки клало в кошик інший товар. */
+function itemId(cat,grp,name){
+  const s=cat+'/'+grp+'/'+name;
+  let h=0;
+  for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))|0;
+  return 'i'+(h>>>0).toString(36);
+}
+
+const ITEMS=P.map(r=>({
+  id:itemId(r[0],r[1],r[2]), cat:r[0], grp:r[1], name:r[2], price:r[3],
   unit: r[4]==='шт'||r[4]===1 ? 'шт' : (r[4]==='пак' ? 'пак' : 'вага'),
   minG: r[5]||MIN_G
 }));
+
+/* Якщо два товари дадуть однаковий номер, кошик і сервер сплутають їх.
+   Краще впасти одразу при старті, ніж шукати це в бою. */
+(function(){
+  const seen=new Set();
+  for(const it of ITEMS){
+    if(seen.has(it.id)) throw new Error('Однаковий номер позиції: '+it.grp+'/'+it.name);
+    seen.add(it.id);
+  }
+})();
+
+/* Усі точки мережі. Третій елемент — чи приймає замовлення онлайн.
+   Список тут, а не в двох файлах: сайт і сервер мають бачити однакове,
+   інакше замовлення поїде не на ту точку. Щоб увімкнути точку — постав 1. */
+const SHOPS_ALL=[
+ ['Пр-т Героїв Харкова 256','+380638771309',0],['пр-т Людвіга Свободи 52','+380664210037',1],
+ ['пр-т Тракторобудівників 142а','+380631498096',0],['вул. Шевченка 142а','+380663210037',1],
+ ['м-н Захисників України 7/8','+380632452073',0],['вул. Різдвяна 16/22','+380505261861',0],
+ ['пр-т Аерокосмічний 316е','',0],['вул. Холодногірська 3','',0]
+];
+const SHOPS=SHOPS_ALL.filter(s=>s[2]);
 
 const kop=n=>Math.round((Number(n)+Number.EPSILON)*100)/100;
 
@@ -86,6 +118,6 @@ function fryableG(l){
 /* Для сервера. У браузері файл підключається тегом <script>,
    і все вище стає доступним головному скрипту як є. */
 if(typeof module!=='undefined'&&module.exports){
-  module.exports={P,ITEMS,FRY_RATE,MIN_G,PACK_G,kop,lineSum,
+  module.exports={P,ITEMS,itemId,SHOPS_ALL,SHOPS,FRY_RATE,MIN_G,PACK_G,kop,lineSum,
                   NO_FRY,READY_MADE,PORTION,portionOf,canFry,fryableG};
 }
