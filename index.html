@@ -905,6 +905,88 @@ function ph(it,big){
 }
 const ICON='<svg viewBox="0 0 24 24" fill="none" stroke="#F0E9DE" stroke-width="1.4"><path d="M4 15c0-4 3.5-8 8-8s8 4 8 8-3.5 4-8 4-8 0-8-4z"/><circle cx="9" cy="13" r="1.2"/></svg>';
 
+/* ---------- пошук ----------
+   Половина покупців пише російською, а каталог український: «колбаски»
+   не знаходили ковбасок, «утка» не знаходила качки, «ошеек» — ошийка.
+
+   Спершу зводимо обидва боки до спрощеного вигляду: апостроф і мʼякий
+   знак геть, и/і/ї/й/ы — в одну літеру, е/є/ё/э — в другу, подвоєні
+   літери — в одну. Після цього «вырезка» дорівнює «вирізці», «филе» —
+   «філе», а «ассорти» — «асорті», і половина різниці зникає сама. */
+const FOLD=[[/[ʼ'`´’‘]/g,''],[/[ьъ]/g,''],[/[іїийы]/g,'и'],[/[єёэ]/g,'е'],[/ґ/g,'г'],[/([а-я])\1+/g,'$1']];
+const fold=s=>FOLD.reduce((a,r)=>a.replace(r[0],r[1]),String(s==null?'':s).toLowerCase());
+const tokens=s=>s.split(/[^0-9a-zа-я]+/).filter(Boolean);
+
+/* Слова з різними коренями — їх літерами не зведеш. Ліворуч початок
+   слова, як його пише покупець, праворуч — слова з нашого каталогу. */
+const SYN={
+ 'кур':'курка куряча','цыплен':'курка','говя':'яловичина',
+ 'индейк':'індик індича','индюш':'індича','индюк':'індик',
+ 'утк':'качка','утин':'качка',
+ 'шея':'ошийок','шеи':'ошийок','ошеек':'ошийок',
+ 'ребр':'реберця','ребер':'реберця',
+ 'голен':'гомілка','ножк':'гомілка','окороч':'гомілка',
+ 'отбивн':'відбивної','корейк':'відбивної','кост':'кістці',
+ 'колбас':'ковбаски','сосиск':'ковбаски','сардел':'ковбаски',
+ 'венск':'віденська','охотнич':'мисливська',
+ 'лук':'цибулеві','кольц':'кільця','овощ':'овочі','шампинь':'печериці',
+ 'яблок':'яблуками','палочк':'палички','набор':'сет','четверт':'чверть',
+ 'миньон':'міньйон','деревенск':'по-селянськи','хлеб':'хліб','вырезк':'вирізка',
+ 'сыро':'сире','барбекю':'bbq'
+};
+const SYN_F=Object.keys(SYN).map(k=>[fold(k),tokens(fold(SYN[k]))]);
+
+/* Текст, за яким шукаємо. Назва й група — головне; категорія та опис
+   ідуть другим заходом. Категорія саме там, бо «Сире мʼясо» починається
+   так само, як «сир»: інакше запит «сыр» видавав би всю свинину, а сири
+   губилися б унизу. */
+const SEARCH_IX=new Map();
+function ixOf(it){
+  let x=SEARCH_IX.get(it.id);
+  if(!x){
+    const c=CATS.find(c=>c.id===it.cat);
+    const main=fold(it.name+' '+it.grp);
+    const all=main+' '+fold((c?c.t:'')+' '+descOf(it));
+    x={main:main,mainW:tokens(main),allW:tokens(all)};
+    SEARCH_IX.set(it.id,x);
+  }
+  return x;
+}
+/* Слово підходить, якщо збігається початок — чийсь із двох. Чотири
+   літери — компроміс: «картошка» знаходить картоплю, «свиная» —
+   свинячу, а зайвого майже не тягне. Слова каталогу коротші за три
+   літери до порівняння не беремо: «з» і «на» з назв підійшли б до
+   всього підряд. */
+function hitWord(w,t){
+  if(t.length>2&&w.indexOf(t)===0) return true;
+  if(w.length>2&&t.indexOf(w)===0) return true;
+  return t.length>3&&w.length>3&&t.slice(0,4)===w.slice(0,4);
+}
+/* Слово покупця плюс те, на що його міняє словник */
+function variants(t){
+  const v=[t];
+  for(const p of SYN_F) if(t.indexOf(p[0])===0) for(const s of p[1]) if(v.indexOf(s)<0) v.push(s);
+  return v;
+}
+/* Товар підходить, якщо кожне слово запиту знайшлося хоч у якомусь
+   вигляді. Саме кожне: «ковбаски з сиром» не має видавати всі ковбаски. */
+function searchItems(q){
+  const f=fold(q), ts=tokens(f).filter(t=>t.length>2);
+  if(!ts.length){                                  // запит на дві літери
+    const s=f.replace(/[^0-9a-zа-я]/g,'');
+    return s?ITEMS.filter(i=>ixOf(i).main.indexOf(s)>=0):ITEMS.slice();
+  }
+  const vs=ts.map(variants);
+  /* Порівнюємо по словах, а не шматком рядка: «лук» усередині
+     «яблуками» — не цибуля, а випадковий збіг. */
+  const pick=k=>ITEMS.filter(i=>{
+    const ws=ixOf(i)[k];
+    return vs.every(v=>v.some(t=>ws.some(w=>hitWord(w,t))));
+  });
+  const found=pick('mainW');
+  return found.length?found:pick('allW');
+}
+
 let cat='raw', sub='', cart=[], shop=0, order=null, getMode='pickup', orderNote='';
 
 /* ---------- catalog ---------- */
@@ -919,7 +1001,7 @@ function renderCats(){
 function renderCatalog(){
   const q=document.getElementById('q').value.trim().toLowerCase();
   const searching=!!q;
-  const all=ITEMS.filter(i=>searching? (i.name+' '+i.grp).toLowerCase().includes(q) : i.cat===cat);
+  const all=searching? searchItems(q) : ITEMS.filter(i=>i.cat===cat);
   const box=document.getElementById('catalog');
   const subBox=document.getElementById('subs');
   if(!all.length){box.innerHTML='<p class="empty">Нічого не знайшли. Спробуйте іншу назву.</p>';subBox.innerHTML='';return}
