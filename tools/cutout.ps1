@@ -32,6 +32,7 @@ param(
   [int]$DarkMax = 46,
   [int]$DarkSoft = 96,
   [double]$Holes = 0.08,
+  [double]$Specks = 0.05,
   [int]$Erode = 3,
   [int]$WorkMax = 1400
 )
@@ -203,6 +204,34 @@ for ($pass = 0; $pass -lt $Erode; $pass++) {
     }
   }
   foreach ($i in $grow) { $isBg[$i] = $true }
+}
+
+# Loose specks: a reflection on a glossy table, crumbs beside the dish,
+# a stray highlight. They survive the fill because they are not backdrop
+# colour, and on the site they read as dirt floating under the product.
+# Drop every island of kept pixels that is too small to be the dish.
+$minSpeck = [int]($n * $Specks / 100.0)
+if ($minSpeck -gt 0) {
+  $seenK = New-Object bool[] $n
+  $isle = New-Object System.Collections.Generic.List[int]
+  for ($s = 0; $s -lt $n; $s++) {
+    if ($seenK[$s] -or $isBg[$s]) { continue }
+    $isle.Clear()
+    $stack.Push($s); $seenK[$s] = $true
+    while ($stack.Count -gt 0) {
+      $i = $stack.Pop()
+      $isle.Add($i)
+      $x = $i % $w; $y = [int][Math]::Floor($i / $w)
+      foreach ($j in ($i-1), ($i+1), ($i-$w), ($i+$w)) {
+        if ($j -lt 0 -or $j -ge $n) { continue }
+        if ($j -eq $i - 1 -and $x -eq 0) { continue }
+        if ($j -eq $i + 1 -and $x -eq $w - 1) { continue }
+        if ($seenK[$j] -or $isBg[$j]) { continue }
+        $seenK[$j] = $true; $stack.Push($j)
+      }
+    }
+    if ($isle.Count -lt $minSpeck) { foreach ($i in $isle) { $isBg[$i] = $true } }
+  }
 }
 
 # write alpha: background clear, edge pixels partly clear so the cut
