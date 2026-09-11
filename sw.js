@@ -1,6 +1,6 @@
 /* Мʼясний Барон — service worker */
 
-const CACHE = 'mb-v5';
+const CACHE = 'mb-v6';
 const SHELL = [
   './',
   './index.html',
@@ -47,14 +47,29 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Фото та іконки: спершу кеш — вони не змінюються
+  /* Фото та іконки: показуємо з кеша одразу, але слідом тихо
+     перевіряємо мережу і оновлюємо кеш.
+
+     Раніше тут було просто «спершу кеш», із поміткою що фото не
+     змінюються. Поки ми лише додавали нові файли, так і було. Але
+     коли фото товару замінили, лишивши те саме імʼя, у всіх, хто вже
+     заходив на сайт, назавжди лишалася стара картинка: до мережі
+     запит не йшов узагалі.
+
+     Тепер стара версія показується один раз, а на наступному відкритті
+     вже нова. Ніяких ручних підвищень версії кеша для цього не треба. */
   e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request).then(r => {
-      if (r.ok && url.origin === location.origin) {
-        const copy = r.clone();
-        caches.open(CACHE).then(c => c.put(e.request, copy));
-      }
-      return r;
-    }))
+    caches.match(e.request).then(hit => {
+      const fromNet = fetch(e.request).then(r => {
+        if (r.ok && url.origin === location.origin) {
+          const copy = r.clone();
+          caches.open(CACHE).then(c => c.put(e.request, copy));
+        }
+        return r;
+      });
+      // є в кеші — віддаємо миттєво, мережу довантажуємо у фоні
+      if (hit) { fromNet.catch(() => {}); return hit; }
+      return fromNet;
+    })
   );
 });
