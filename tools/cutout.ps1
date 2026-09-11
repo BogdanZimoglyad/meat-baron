@@ -11,6 +11,8 @@
 # Shadow   : a strictly neutral pixel this bright is a soft shadow
 # Dark     : cut a black backdrop instead of a white one
 # Keep     : background already removed elsewhere, only reframe to 640x640
+# CropBot  : cut this percent off the bottom before anything else, to
+#            drop a mirror reflection that touches the product
 # DarkMax  : on black, a pixel this dark (max channel) can be backdrop
 # DarkSoft : on black, above this brightness a pixel is definitely product
 #
@@ -33,6 +35,7 @@ param(
   [int]$DarkSoft = 96,
   [double]$Holes = 0.08,
   [double]$Specks = 0.05,
+  [int]$CropBottom = 0,
   [int]$Erode = 3,
   [int]$WorkMax = 1400
 )
@@ -81,6 +84,21 @@ function Read-AnyImage([string]$path) {
 if (-not (Test-Path -LiteralPath $In)) { throw "No such file: $In" }
 $src = Read-AnyImage $In
 
+# A mirror reflection on a glossy table touches the product itself, so no
+# island rule can tell them apart. Cutting the bottom of the frame before
+# anything else is the only sure way.
+if ($CropBottom -gt 0) {
+  $keepH = [int]($src.Height * (100 - $CropBottom) / 100.0)
+  if ($keepH -lt 10) { throw "CropBottom is too big: nothing left" }
+  $cut = New-Object System.Drawing.Bitmap $src.Width, $keepH, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+  $gc = [System.Drawing.Graphics]::FromImage($cut)
+  $gc.DrawImage($src, (New-Object System.Drawing.Rectangle 0, 0, $src.Width, $keepH),
+                      (New-Object System.Drawing.Rectangle 0, 0, $src.Width, $keepH),
+                      [System.Drawing.GraphicsUnit]::Pixel)
+  $gc.Dispose(); $src.Dispose()
+  $src = $cut
+}
+
 # work at a bounded size: output is 640 anyway, and per-pixel work in
 # PowerShell gets slow fast
 $scale = [Math]::Min(1.0, $WorkMax / [Math]::Max($src.Width, $src.Height))
@@ -100,7 +118,7 @@ $bytes = New-Object byte[] ($stride * $h)
 $n = $w * $h
 
 # -Keep: the picture already has a transparent background, cut elsewhere.
-# Touch nothing but the framing — otherwise we would hunt for a backdrop
+# Touch nothing but the framing: otherwise we would hunt for a backdrop
 # that is not there and eat the product instead.
 if (-not $Keep) {
 
