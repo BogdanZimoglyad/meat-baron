@@ -530,6 +530,23 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
   display:grid;place-items:center;font-size:15px;line-height:1;flex:0 0 auto}
 .up.on .up-add{background:var(--ok)}
 .up.on:hover .up-add{background:var(--ember)}
+/* стрічка допродажу в кошику: картки в рядок, гортається пальцем.
+   Виходить за поля шторки, щоб край останньої картки було видно і
+   стало зрозуміло, що рядок прокручується. */
+.up-ttl{margin:16px 2px 8px;font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--smoke)}
+.up-strip{display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;
+  margin:0 -16px 4px;padding:0 16px 2px;scroll-snap-type:x proximity}
+.up-strip::-webkit-scrollbar{height:0}
+.up-c{position:relative;flex:0 0 112px;scroll-snap-align:start;text-align:left;
+  display:flex;flex-direction:column;
+  background:rgba(30,24,23,.92);border:1px solid var(--line);border-radius:11px;padding:7px;transition:.14s}
+.up-c:hover{border-color:var(--line-2)}
+.up-c .up-ph{width:100%;height:64px;margin-bottom:7px}
+.up-c .nm{display:block;font-size:12.5px;font-weight:500;line-height:1.25}
+/* ціну притискаємо до низу картки: назви бувають у два рядки,
+   і без цього ціни в стрічці стояли б на різній висоті */
+.up-c .pr{display:block;margin-top:auto;padding-top:3px;font-size:11px;color:var(--smoke)}
+.up-c .up-add{position:absolute;top:11px;right:11px;width:22px;height:22px;font-size:15px;line-height:1}
 .inst{position:fixed;left:0;right:0;bottom:0;z-index:50;padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
 .inst-b{max-width:588px;margin:0 auto;background:var(--coal);border:1px solid var(--line-2);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:11px;box-shadow:0 10px 30px rgba(0,0,0,.55)}
 .inst-t{flex:1;min-width:0;line-height:1.35}
@@ -1128,7 +1145,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
 /* ---------- тягнемо шторку вниз ---------- */
 (function(){
   let y0=0, dy=0, dragging=false, may=false;
-  const noDrag=el=>el.closest('input,select,textarea,.up-scroll,.wgrid,.seg,#lines,.pay,.wbox,.rowline,.cart-note,.wcol,.wheel');
+  const noDrag=el=>el.closest('input,select,textarea,.up-scroll,.up-strip,.wgrid,.seg,#lines,.pay,.wbox,.rowline,.cart-note,.wcol,.wheel');
   const start=e=>{
     const t=e.touches?e.touches[0]:e;
     if(noDrag(e.target)) return;
@@ -1204,7 +1221,7 @@ if(SHOPS.length>1){
 function openItem(id, editIdx){
   const it=ITEMS.find(i=>i.id===id);
   const editing=Number.isInteger(editIdx);
-  if(isCount(it)&&!editing){addToCart(it,1); maybeUpsell(it); return}
+  if(isCount(it)&&!editing){addToCart(it,1); return}
   const MAXG=6000;
   const por=portionOf(it);                       // вага однієї штуки, якщо є
   let g=editing? Math.max(cart[editIdx].g,it.minG) : Math.max(1000,it.minG);
@@ -1248,7 +1265,7 @@ function openItem(id, editIdx){
   wv.onfocus=()=>wv.select();
   sIn.querySelector('#addBtn').onclick=()=>{
     if(editing){cart[editIdx].g=g;paintBar();openCart();return}
-    addToCart(it,g); if(!maybeUpsell(it)) close();
+    addToCart(it,g); close();
   };
 }
 function addToCart(it,g){
@@ -1257,15 +1274,56 @@ function addToCart(it,g){
   paintBar();
 }
 
-/* ---------- допродаж: пропозиції до мʼяса ---------- */
+/* ---------- допродаж: пропозиції до мʼяса ----------
+   Раніше пропозиція вискакувала одразу, щойно людина поклала мʼясо,
+   і перебивала набір замовлення. Тепер вона чекає кінця: стрічка внизу
+   кошика, яка нікому не заважає, і один екран по кнопці «Оформити» —
+   та й то лише якщо до мʼяса ще нічого не взяли. */
 const UPSELL_CATS=['extra'];
+/* Екран перед оформленням показуємо раз на замовлення. Прапорець
+   знімає paintBar, коли кошик спорожнів: це вже наступне замовлення. */
 let upsellShown=false;
-function maybeUpsell(it){
-  if(upsellShown) return false;
-  if(!(it.cat==='raw'||it.cat==='saus'||it.cat==='ready')) return false;
+const MAIN_CATS=['raw','saus','ready'];
+/* Пропонуємо лише те, чого в кошику ще немає */
+const upsellPool=()=>{
   const inCart=new Set(cart.map(l=>l.id));
-  const pool=ITEMS.filter(i=>UPSELL_CATS.includes(i.cat)&&!inCart.has(i.id));
-  if(!pool.length) return false;
+  return ITEMS.filter(i=>UPSELL_CATS.includes(i.cat)&&!inCart.has(i.id));
+};
+const hasUpsell=()=>cart.some(l=>UPSELL_CATS.includes(l.cat));
+const hasMain=()=>cart.some(l=>MAIN_CATS.includes(l.cat));
+const upsellPrice=i=>money(i.price)+(i.unit==='шт'?' / шт':' / 100 г')+(i.unit==='пак'?' · упак. 1 кг':'');
+/* Порційні позиції кладемо однією штукою, а не 500 г:
+   півтори картоплини нікому не потрібні. */
+const upsellAdd=i=>addToCart(i, isCount(i)?1:(portionOf(i)||Math.max(500,i.minG)));
+
+/* Стрічка в кошику: горизонтальний рядок карток під списком позицій */
+function upsellStrip(){
+  const pool=upsellPool();
+  if(!pool.length||!hasMain()) return '';
+  return `<p class="up-ttl">Що до мʼяса?</p>
+  <div class="up-strip">${pool.map(i=>`
+    <button class="up-c" data-u="${i.id}" aria-label="Додати ${i.name}">
+      <span class="up-ph">${photoOf(i)?`<img src="${photoOf(i)}" alt="" loading="lazy">`:ph(i)}</span>
+      <span class="nm">${i.name}</span>
+      <span class="pr">${upsellPrice(i)}</span>
+      <span class="up-add">+</span>
+    </button>`).join('')}</div>`;
+}
+function bindUpsellStrip(){
+  const el=sIn.querySelector('.up-strip'); if(!el) return;
+  el.onclick=e=>{
+    const b=e.target.closest('[data-u]'); if(!b) return;
+    upsellAdd(ITEMS.find(i=>i.id===b.dataset.u));
+    openCart();            // перемальовуємо кошик разом із сумою і стрічкою
+  };
+}
+
+/* Екран перед оформленням — для тих, хто стрічку не помітив. Нічого не
+   питаємо, якщо до мʼяса вже щось узяли або якщо в кошику самі гарніри:
+   пропонувати соус до соусу безглуздо. */
+function upsellGate(next){
+  const pool=upsellPool();
+  if(upsellShown||hasUpsell()||!hasMain()||!pool.length) return next();
   upsellShown=true;
   const groups=[...new Set(pool.map(i=>i.grp))];
   open(`<div class="grab-zone"><div class="grab"></div></div>
@@ -1277,10 +1335,13 @@ function maybeUpsell(it){
     <button class="up" data-u="${i.id}">
       <div class="up-ph">${photoOf(i)?`<img src="${photoOf(i)}" alt="" loading="lazy">`:ph(i)}</div>
       <div class="up-b"><span class="nm">${i.name}</span>
-      <span class="pr">${money(i.price)}${i.unit==='шт'?' / шт':' / 100 г'}${i.unit==='пак'?' · упак. 1 кг':''}</span></div>
+      <span class="pr">${upsellPrice(i)}</span></div>
       <span class="up-add">+</span>
     </button>`).join('')}`).join('')}</div>
-  <button class="cta" onclick="close_()">Готово</button>`);
+  <button class="cta" id="upNext">Далі до оформлення</button>`);
+  /* Тут кошик не перемальовуємо: людина в один дотик і додає, і передумує,
+     а список під пальцем не має стрибати. Оновлюємо саму картку й нижню
+     панель, решту побачить на оформленні. */
   sIn.querySelector('.up-scroll').onclick=e=>{
     const b=e.target.closest('[data-u]'); if(!b) return;
     const item=ITEMS.find(i=>i.id===b.dataset.u);
@@ -1288,15 +1349,13 @@ function maybeUpsell(it){
       const i=cart.findIndex(l=>l.id===item.id);
       if(i>-1) cart.splice(i,1);
       b.classList.remove('on'); b.querySelector('.up-add').textContent='+';
+      paintBar();
     } else {
-      /* Порційні позиції кладемо однією штукою, а не 500 г:
-         півтори картоплини нікому не потрібні. */
-      addToCart(item, isCount(item)?1:(portionOf(item)||Math.max(500,item.minG)));
+      upsellAdd(item);
       b.classList.add('on'); b.querySelector('.up-add').textContent='✓';
     }
-    paintBar();
   };
-  return true;
+  sIn.querySelector('#upNext').onclick=next;
 }
 const isCount=l=>l.unit==='шт'||l.unit==='пак';   // додаються поштучно
 const minOf=l=>{
@@ -1360,6 +1419,8 @@ function openCart(){
   </div>
   <p class="cart-hint">Смаження вмикається при оформленні — там і побачите підсумок.</p>`:''}
 
+  ${upsellStrip()}
+
   <span class="lbl">Коментар до замовлення</span>
   <textarea class="fld cart-note" id="note" rows="2" placeholder="Побажання: гостріше, без цибулі, подзвоніть за 10 хв…">${orderNote}</textarea>
 
@@ -1368,9 +1429,12 @@ function openCart(){
   <button class="cta" id="toCheckout">Оформити замовлення</button>
   <button class="cta ghost" onclick="close_()">Додати ще</button>`);
   paintLines();
+  bindUpsellStrip();
   const nt=sIn.querySelector('#note');
   if(nt) nt.oninput=()=>{orderNote=nt.value};
-  sIn.querySelector('#toCheckout').onclick=()=>{if(nt)orderNote=nt.value;openCheckout()};
+  /* Коментар знімаємо до допродажу: екран «Що до мʼяса?» перемалює
+     шторку, і поле з текстом зникне разом зі старою розміткою. */
+  sIn.querySelector('#toCheckout').onclick=()=>{if(nt)orderNote=nt.value;upsellGate(openCheckout)};
 }
 function paintLines(){
   const el=sIn.querySelector('#lines');if(!el)return;
