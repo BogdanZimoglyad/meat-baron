@@ -1,6 +1,6 @@
 /* Мʼясний Барон — service worker */
 
-const CACHE = 'mb-v6';
+const CACHE = 'mb-v7';
 const SHELL = [
   './',
   './index.html',
@@ -60,7 +60,13 @@ self.addEventListener('fetch', e => {
      вже нова. Ніяких ручних підвищень версії кеша для цього не треба. */
   e.respondWith(
     caches.match(e.request).then(hit => {
-      const fromNet = fetch(e.request).then(r => {
+      /* Просимо саме звіритися з сервером, а не брати з кеша браузера.
+         GitHub Pages віддає фото з дозволом тримати їх десять хвилин,
+         і без цього фонова перевірка всі десять хвилин повертала б
+         стару картинку — тобто оновлення знову б не дійшло.
+         Це не повторне вивантаження: якщо файл не змінився, сервер
+         відповідає «те саме» і тіла не надсилає. */
+      const fromNet = fetch(e.request, { cache: 'no-cache' }).then(r => {
         if (r.ok && url.origin === location.origin) {
           const copy = r.clone();
           caches.open(CACHE).then(c => c.put(e.request, copy));
