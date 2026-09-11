@@ -530,14 +530,19 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
   display:grid;place-items:center;font-size:15px;line-height:1;flex:0 0 auto}
 .up.on .up-add{background:var(--ok)}
 .up.on:hover .up-add{background:var(--ember)}
-/* стрічка допродажу в кошику: картки в рядок, гортається пальцем.
-   Виходить за поля шторки, щоб край останньої картки було видно і
-   стало зрозуміло, що рядок прокручується. */
+/* допродаж у кошику: картки сіткою, нічого не ховається за жестом.
+   Спершу рядок гортався вбік, і це не працювало ніде: шторка оголошена
+   як touch-action:pan-y, тож браузер забороняє горизонтальний жест
+   усередині неї, а на комп'ютері смуга прокрутки схована й колесо
+   крутить тільки вертикаль. Тепер видно все, що вміщується, решту
+   відкриває кнопка. */
 .up-ttl{margin:16px 2px 8px;font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--smoke)}
-.up-strip{display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;
-  margin:0 -16px 4px;padding:0 16px 2px;scroll-snap-type:x proximity}
-.up-strip::-webkit-scrollbar{height:0}
-.up-c{position:relative;flex:0 0 112px;scroll-snap-align:start;text-align:left;
+.up-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;margin-bottom:8px}
+.up-c.hid{display:none}
+.up-more{width:100%;margin-bottom:4px;padding:9px;border:1px solid var(--line);border-radius:10px;
+  background:none;color:var(--smoke);font-size:12.5px}
+.up-more:hover{border-color:var(--line-2);color:var(--bone)}
+.up-c{position:relative;text-align:left;
   display:flex;flex-direction:column;
   background:rgba(30,24,23,.92);border:1px solid var(--line);border-radius:11px;padding:7px;transition:.14s}
 .up-c:hover{border-color:var(--line-2)}
@@ -1145,7 +1150,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
 /* ---------- тягнемо шторку вниз ---------- */
 (function(){
   let y0=0, dy=0, dragging=false, may=false;
-  const noDrag=el=>el.closest('input,select,textarea,.up-scroll,.up-strip,.wgrid,.seg,#lines,.pay,.wbox,.rowline,.cart-note,.wcol,.wheel');
+  const noDrag=el=>el.closest('input,select,textarea,.up-scroll,.up-grid,.wgrid,.seg,#lines,.pay,.wbox,.rowline,.cart-note,.wcol,.wheel');
   const start=e=>{
     const t=e.touches?e.touches[0]:e;
     if(noDrag(e.target)) return;
@@ -1296,25 +1301,54 @@ const upsellPrice=i=>money(i.price)+(i.unit==='шт'?' / шт':' / 100 г')+(i.u
    півтори картоплини нікому не потрібні. */
 const upsellAdd=i=>addToCart(i, isCount(i)?1:(portionOf(i)||Math.max(500,i.minG)));
 
-/* Стрічка в кошику: горизонтальний рядок карток під списком позицій */
-function upsellStrip(){
+/* Сітка в кошику під списком позицій. Показуємо два рядки, решту
+   відкриває кнопка: інакше сам кошик тоне під допродажем. Скільки це
+   карток — вирішує fitUpsellGrid, коли розмітку вже поставлено.
+   Тут ховаємо шість наперед, щоб на вузькому екрані нічого не блимнуло. */
+const UPSELL_TOP=6;
+let upsellAll=false;     // «показати ще» памʼятаємо, поки кошик не спорожнів
+function upsellGrid(){
   const pool=upsellPool();
   if(!pool.length||!hasMain()) return '';
   return `<p class="up-ttl">Що до мʼяса?</p>
-  <div class="up-strip">${pool.map(i=>`
-    <button class="up-c" data-u="${i.id}" aria-label="Додати ${i.name}">
+  <div class="up-grid">${pool.map((i,n)=>`
+    <button class="up-c${!upsellAll&&n>=UPSELL_TOP?' hid':''}" data-u="${i.id}" aria-label="Додати ${i.name}">
       <span class="up-ph">${photoOf(i)?`<img src="${photoOf(i)}" alt="" loading="lazy">`:ph(i)}</span>
       <span class="nm">${i.name}</span>
       <span class="pr">${upsellPrice(i)}</span>
       <span class="up-add">+</span>
-    </button>`).join('')}</div>`;
+    </button>`).join('')}</div>
+  ${upsellAll?'':`<button class="up-more" id="upMore">Показати ще</button>`}`;
 }
-function bindUpsellStrip(){
-  const el=sIn.querySelector('.up-strip'); if(!el) return;
+/* Скільки карток лишити видимими. Рахуємо по ширині: рівно два рядки,
+   скільки б колонок не вийшло. Інакше на комп'ютері шість карток лягали
+   як пʼять і одна, а сирітка в другому рядку має вигляд помилки. */
+function fitUpsellGrid(){
+  const el=sIn.querySelector('.up-grid'); if(!el) return;
+  const cards=[...el.querySelectorAll('.up-c')];
+  const cols=getComputedStyle(el).gridTemplateColumns.split(' ').length;
+  const show=upsellAll? cards.length : Math.min(cards.length, cols*2);
+  cards.forEach((c,n)=>c.classList.toggle('hid',n>=show));
+  const more=sIn.querySelector('#upMore');
+  if(!more) return;
+  if(show<cards.length) more.textContent='Показати ще '+(cards.length-show);
+  else more.remove();
+}
+function bindUpsellGrid(){
+  const el=sIn.querySelector('.up-grid'); if(!el) return;
+  fitUpsellGrid();
   el.onclick=e=>{
     const b=e.target.closest('[data-u]'); if(!b) return;
     upsellAdd(ITEMS.find(i=>i.id===b.dataset.u));
-    openCart();            // перемальовуємо кошик разом із сумою і стрічкою
+    openCart();            // перемальовуємо кошик разом із сумою і сіткою
+  };
+  const more=sIn.querySelector('#upMore');
+  /* Розкриваємо на місці, без перемальовування кошика: людина щойно
+     натиснула кнопку внизу списку, і сторінка не має стрибати. */
+  if(more) more.onclick=()=>{
+    upsellAll=true;
+    el.querySelectorAll('.up-c.hid').forEach(c=>c.classList.remove('hid'));
+    more.remove();
   };
 }
 
@@ -1384,7 +1418,7 @@ function paintBar(){
      показатися знову. Раніше прапорець лишався піднятим до кінця
      сесії: людина відмовилась від пропозиції, прибрала все з кошика,
      почала набирати наново — а «Що до мʼяса?» більше не зʼявлялось. */
-  if(!cart.length) upsellShown=false;
+  if(!cart.length){upsellShown=false;upsellAll=false}
   bar.hidden=!cart.length;
   const n=cart.length;
   document.getElementById('barL').textContent=`Кошик · ${n} ${n===1?'позиція':n<5?'позиції':'позицій'}`;
@@ -1419,7 +1453,7 @@ function openCart(){
   </div>
   <p class="cart-hint">Смаження вмикається при оформленні — там і побачите підсумок.</p>`:''}
 
-  ${upsellStrip()}
+  ${upsellGrid()}
 
   <span class="lbl">Коментар до замовлення</span>
   <textarea class="fld cart-note" id="note" rows="2" placeholder="Побажання: гостріше, без цибулі, подзвоніть за 10 хв…">${orderNote}</textarea>
@@ -1429,7 +1463,7 @@ function openCart(){
   <button class="cta" id="toCheckout">Оформити замовлення</button>
   <button class="cta ghost" onclick="close_()">Додати ще</button>`);
   paintLines();
-  bindUpsellStrip();
+  bindUpsellGrid();
   const nt=sIn.querySelector('#note');
   if(nt) nt.oninput=()=>{orderNote=nt.value};
   /* Коментар знімаємо до допродажу: екран «Що до мʼяса?» перемалює
