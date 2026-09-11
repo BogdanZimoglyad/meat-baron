@@ -1321,6 +1321,11 @@ const MEAT=new Set(['raw','saus']);
 function meatGrams(){return cart.reduce((s,l)=>s+(MEAT.has(l.cat)?fryableG(l):0),0)}
 function paintBar(){
   const bar=document.getElementById('bar');
+  /* Порожній кошик — це вже наступне замовлення, і допродаж має право
+     показатися знову. Раніше прапорець лишався піднятим до кінця
+     сесії: людина відмовилась від пропозиції, прибрала все з кошика,
+     почала набирати наново — а «Що до мʼяса?» більше не зʼявлялось. */
+  if(!cart.length) upsellShown=false;
   bar.hidden=!cart.length;
   const n=cart.length;
   document.getElementById('barL').textContent=`Кошик · ${n} ${n===1?'позиція':n<5?'позиції':'позицій'}`;
@@ -1667,7 +1672,7 @@ function openCheckout(){
         }
         order={...payload,no:'—',shop:SHOPS[shop][0],offline:msg};
       }
-      cart=[];upsellShown=false;orderNote='';paintBar();
+      cart=[];orderNote='';paintBar();   // прапорець допродажу зніме paintBar
       if(order.no!=='—'){order.lines=payload.lines;saveLast(order)}
       openStatus(order.st||'new');
     };
@@ -1894,7 +1899,9 @@ function repeatOrder(lines){
     added++;
   });
   paintBar();
-  upsellShown=true;          // не набридаємо допродажем при повторі
+  /* Не набридаємо допродажем при повторі. Але якщо жодна позиція зі
+     старого замовлення не доїхала, кошик порожній — тоді хай питає. */
+  if(added) upsellShown=true;
   openCart();
   if(skipped.length){
     const n=sIn.querySelector('#lines');
