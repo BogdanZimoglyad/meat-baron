@@ -1970,33 +1970,57 @@ function readLast(){
    як «Прийнято», і клієнт думав, що його вже взяли в роботу. */
 const ST_LABEL={new:'Очікує підтвердження',accepted:'Прийнято',
                 cooking:'Готується',ready:'Готове',done:'Видано'};
-async function showActiveBar(){
-  const v=readLast(); const el=document.getElementById('active');
-  if(!v||!el) return;
-  let st='new';
+/* Замовлення, яке зараз готують, — від сервера. Памʼять браузера знає
+   лише про те, що оформили на цьому пристрої: людина замовляла з
+   компʼютера, відкрила сайт у телефоні — і там порожньо. */
+async function serverActive(){
+  if(!me) return null;
   try{
-    const r=await req(API+'/api/order/'+v.no,null,8000);
+    const r=await req(API+'/api/me/active',{headers:authHead()},8000);
+    if(dropMeIf401(r)) return null;
     const d=await r.json();
-    if(d.status) st=d.status;
-  }catch(e){}
-  if(st==='done'){clearLast();el.hidden=true;return}
+    return (d&&d.order)||null;
+  }catch(e){ return null }
+}
+async function showActiveBar(){
+  const el=document.getElementById('active'); if(!el) return;
+  const srv=await serverActive();
+  const v=srv||readLast();
+  if(!v){el.hidden=true;return}
+  const shopName=srv? srv.shopName : v.shop;
+  let st=srv? srv.status : 'new';
+  if(!srv){
+    try{
+      const r=await req(API+'/api/order/'+v.no,null,8000);
+      const d=await r.json();
+      if(d.status) st=d.status;
+    }catch(e){}
+  }
+  if(st==='done'){if(!srv)clearLast();el.hidden=true;return}
   el.hidden=false;
   const ready=st==='ready';
-  const sub=ready? 'Можна забирати · '+v.shop : v.shop+(v.when?' · '+v.when:'');
+  const sub=ready? 'Можна забирати · '+shopName : shopName+(v.when?' · '+v.when:'');
   el.innerHTML=`<button class="act-in${ready?' ready':''}" id="actOpen">
     <span class="act-dot"></span>
     <span class="act-t"><b>Замовлення № ${v.no} · ${ST_LABEL[st]||'Очікує підтвердження'}</b>
-    <span>${sub}</span></span>
+    <span>${esc(sub)}</span></span>
     <span class="act-go">Стежити</span></button>`;
-  el.querySelector('#actOpen').onclick=()=>openOrder(v.no);
+  el.querySelector('#actOpen').onclick=()=>openOrder(v.no,srv);
 }
-async function openOrder(no){
+async function openOrder(no,known){
   try{
+    /* Тому, хто увійшов, склад дає сервер — на будь-якому пристрої.
+       Інакше беремо його з памʼяті браузера, а для чужого посилання
+       памʼяті немає: покажемо лише статус і суму. */
+    if(known&&String(known.no)===String(no)){
+      order={no:known.no, shop:known.shopName, when:known.when||'',
+             total:known.total, mode:known.mode||'pickup',
+             fry:!!known.fry, fg:known.fg||0, lines:known.lines||[]};
+      return openStatus(known.status);
+    }
     const r=await req(API+'/api/order/'+no,null,10000);
     const d=await r.json();
     if(!d.no) throw 0;
-    /* Склад і смаження беремо з памʼяті браузера — сервер їх не віддає.
-       Якщо це чуже посилання, памʼяті немає: покажемо лише статус і суму. */
     const v=readLast()||{};
     const mine=String(v.no)===String(d.no);
     order={no:d.no, shop:(mine&&v.shop)||SHOPS[shop][0], when:(mine&&v.when)||'',
@@ -2034,6 +2058,9 @@ function setMe(v){
   try{ v? localStorage.setItem(AUTH_KEY,JSON.stringify(v)) : localStorage.removeItem(AUTH_KEY) }catch(e){}
   if(v&&v.tel) rememberTel(v.tel);
   paintAuth();
+  /* Увійшли — смужка «стежити» має зʼявитися одразу, навіть якщо
+     замовлення робили з іншого пристрою. Вийшли — зникнути. */
+  showActiveBar();
 }
 const authHead=()=>me&&me.token?{Authorization:'Bearer '+me.token}:{};
 /* Токен протух або його відкликали — виходимо мовчки, без «щось пішло не так» */

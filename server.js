@@ -640,25 +640,48 @@ app.put('/api/me', (req, res) => {
 /* ---------- історія замовлень ---------- */
 /* Раніше історію віддавали будь-кому, хто ввів номер: чужі замовлення
    читалися перебором. Тепер лише своя, за токеном. */
+/* Що з замовлення можна показувати власнику. Імені й адреси тут немає
+   навмисно: вони й так його, але у відповіді їм робити нічого. */
+const pubOrder = o => ({
+  no: o.no,
+  status: o.status,
+  label: LABEL[o.status],
+  createdAt: o.createdAt,
+  shopName: o.shopName,
+  mode: o.mode,
+  fry: o.fry,
+  fg: o.fg || 0,
+  when: o.when || '',
+  total: o.total,
+  lines: Array.isArray(o.lines) ? o.lines : []
+});
+const ordersOf = telKey => Object.values(db.orders)
+  .filter(o => (o.telKey || normTel(o.tel)) === telKey)
+  .sort((a, b) => b.createdAt - a.createdAt);
+
 function historyOf(telKey) {
   const MAX_AGE = 60 * 24 * 3600 * 1000;   // 60 днів
-  return Object.values(db.orders)
-    .filter(o => (o.telKey || normTel(o.tel)) === telKey)
+  return ordersOf(telKey)
     .filter(o => Date.now() - (o.createdAt || 0) < MAX_AGE)
-    .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 10)
-    .map(o => ({
-      no: o.no,
-      status: o.status,
-      label: LABEL[o.status],
-      createdAt: o.createdAt,
-      shopName: o.shopName,
-      mode: o.mode,
-      fry: o.fry,
-      total: o.total,
-      lines: Array.isArray(o.lines) ? o.lines : []
-    }));
+    .map(pubOrder);
 }
+
+/* Замовлення, яке зараз готують. Сайт показує смужку «стежити» вгорі:
+   раніше він знав про неї лише з памʼяті браузера, тож на іншому
+   телефоні — навіть своєму — замовлення не було видно взагалі. */
+app.get('/api/me/active', (req, res) => {
+  if (tooOften('status', ipOf(req), RATE.status)) {
+    return res.status(429).json({ error: 'Забагато запитів. Зачекайте кілька хвилин.' });
+  }
+  const a = authOf(req);
+  if (!a) return res.status(401).json({ error: 'Потрібно увійти' });
+  const DAY = 24 * 3600 * 1000;
+  const o = ordersOf(a.telKey)
+    .filter(o => o.status !== 'done')
+    .filter(o => Date.now() - (o.createdAt || 0) < DAY)[0];
+  res.json({ ok: true, order: o ? pubOrder(o) : null });
+});
 
 app.get('/api/me/orders', (req, res) => {
   if (tooOften('history', ipOf(req), RATE.history)) {
