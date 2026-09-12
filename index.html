@@ -915,6 +915,7 @@ async function req(url,opts,ms){
   finally{ clearTimeout(t) }
 }
 let poll=null;        // статус замовлення
+let pollTick=null;    // один такт опитування, щоб смикнути його руками
 let loginPoll=null;   // очікування підтвердження входу в Telegram
 /* Екранування для вставки в розмітку. Потрібне там, де текст прийшов
    ззовні: збережені замовлення й те, що ввела людина. */
@@ -1181,7 +1182,7 @@ function open(html){
 /* Опитування статусу глушимо тут, а не в обгортці нижче: інакше воно
    лишалося жити після закриття тапом по фону — обробник фону тримав
    посилання на стару функцію і опитував сервер вічно. */
-function close(){clearInterval(poll);clearInterval(loginPoll);veil.classList.remove('on');sheet.classList.remove('on');unlockScroll()}
+function close(){clearInterval(poll);pollTick=null;clearInterval(loginPoll);veil.classList.remove('on');sheet.classList.remove('on');unlockScroll()}
 veil.onclick=close;
 document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
 
@@ -1925,15 +1926,35 @@ function openStatus(startStatus){
     };
   };
   open('');draw(startStatus||'new');
-  clearInterval(poll);
+  clearInterval(poll); pollTick=null;
   if(o.no!=='—'){
-    poll=setInterval(async()=>{
+    /* Тримаємо такт окремою функцією, щоб його можна було смикнути
+       руками — коли людина повертається на вкладку. */
+    pollTick=async()=>{
       try{const r=await req(API+'/api/order/'+o.no,null,8000);const d=await r.json();
         if(d.status){draw(d.status); if(d.status==='done'){clearInterval(poll);clearLast()} showActiveBar()}
       }catch(e){}
-    },15000);
+    };
+    poll=setInterval(pollTick,15000);
   }
 }
+
+/* ---------- повернулися на вкладку ----------
+   Телефон присипляє фонову вкладку разом із таймером: людина йшла в
+   Telegram по кнопці з повідомлення, поверталася — а на екрані старий
+   статус, поки не перезавантажить сторінку. Тепер питаємо одразу.
+   І смужку вгорі оновлюємо раз на хвилину: доти вона мінялася лише
+   при завантаженні сторінки, тож із закритою шторкою не рухалась. */
+let wokeAt=0;
+function wake(){
+  if(document.hidden) return;
+  if(Date.now()-wokeAt<3000) return;     // focus і visibilitychange приходять разом
+  wokeAt=Date.now();
+  if(pollTick) pollTick(); else showActiveBar();
+}
+document.addEventListener('visibilitychange',wake);
+window.addEventListener('focus',wake);
+setInterval(()=>{ if(!document.hidden&&!pollTick) showActiveBar() },60000);
 window.close_=close;
 
 document.getElementById('shopName').textContent=SHOPS[shop][0];
