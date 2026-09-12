@@ -1880,7 +1880,7 @@ function openStatus(startStatus){
     const step=Math.max(0,STK.indexOf(status));
     const steps=[['Прийнято',status==='new'?'чекаємо підтвердження точки':'оператор підтвердив'],
       ['Готується',o.fry?'мʼясо на мангалі':'збираємо замовлення'],
-      ['Готове','надішлемо SMS'],[o.mode==='pickup'?'Видано':'Передано курʼєру','']];
+      ['Готове',me?'напишемо в Telegram':'надішлемо SMS'],[o.mode==='pickup'?'Видано':'Передано курʼєру','']];
     sIn.innerHTML=`<div class="grab-zone"><div class="grab"></div></div>
     <div class="done-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round"><path d="M4 12.5l5.5 5.5L20 7"/></svg></div>
     <h3 style="text-align:center;font-size:23px;text-transform:uppercase">Замовлення прийнято</h3>
@@ -2262,9 +2262,13 @@ if('serviceWorker' in navigator){
 }
 /* стартуємо після того, як усе оголошено */
 showActiveBar();
-(function(){
+/* Посилання «Стежити» з повідомлення бота. Хто увійшов — тому склад
+   дасть сервер, тож спершу питаємо своє активне замовлення. */
+(async function(){
   const q=new URLSearchParams(location.search).get('order');
-  if(q) openOrder(q);
+  if(!q) return;
+  const srv=await serverActive();
+  openOrder(q, srv&&String(srv.no)===String(q)? srv : null);
 })();
 
 let installEvt=null;

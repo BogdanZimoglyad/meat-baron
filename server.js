@@ -730,14 +730,49 @@ bot.on('callback_query', async cq => {
 
   await bot.answerCallbackQuery(cq.id, { text: LABEL[st] });
 
-  // SMS клієнту, коли замовлення готове
-  if (st === 'ready') sendSms(o);
+  notify(o, st);
 });
 
+/* ---------- сповіщення клієнту ----------
+   Хто увійшов на сайті — той уже писав нашому боту, і ми знаємо його
+   чат. Тоді пишемо туди: це безкоштовно, доходить одразу і не губиться
+   серед реклами, як SMS. Решті лишається SMS, поки що лише в лозі.    */
+const SITE = (process.env.SITE_URL || 'https://bogdanzimoglyad.github.io/meat-baron/').replace(/\/+$/, '/');
+
+const NOTE = {
+  accepted: o => `✅ Замовлення № ${o.no} прийнято.\n` +
+    (o.when ? `Орієнтовно: ${o.when}\n` : '') +
+    (o.mode === 'pickup' ? `Точка: ${o.shopName}` : 'Доставка: курʼєр звʼяжеться щодо вартості.'),
+  ready: o => `📦 Замовлення № ${o.no} готове.\n` +
+    (o.mode === 'pickup' ? `Чекаємо на вас: ${o.shopName}` : 'Курʼєр уже виїжджає.')
+};
+
+function notify(o, st) {
+  const make = NOTE[st];
+  if (!make) return;
+  /* Оператор може клацати кнопки туди-сюди — двічі про одне не пишемо. */
+  o.sent = o.sent || {};
+  if (o.sent[st]) return;
+  o.sent[st] = true;
+  save();
+
+  const u = db.users[o.telKey] || {};
+  if (!u.tgId) return sendSms(o, st);
+
+  bot.sendMessage(u.tgId, make(o), {
+    reply_markup: { inline_keyboard: [[{ text: 'Стежити за замовленням', url: SITE + '?order=' + o.no }]] }
+  }).catch(e => {
+    /* Бота заблокували або чат видалено — не наша біда, але знати варто. */
+    console.warn('Сповіщення № ' + o.no + ' не дійшло:', e.message);
+    sendSms(o, st);
+  });
+}
+
 /* ---------- SMS ----------
-   Підключення до TurboSMS / SMSClub робиться тут.
-   Поки що лише лог — щоб було видно, коли має піти повідомлення.        */
-function sendSms(o) {
+   Для тих, хто не входив через Telegram. Підключення до TurboSMS
+   робиться тут; поки лише лог — щоб було видно, коли має піти SMS.   */
+function sendSms(o, st) {
+  if (st !== 'ready') return;              // SMS-ками про кожен крок не сиплемо
   const text = o.mode === 'pickup'
     ? `Мясний Барон: замовлення №${o.no} готове. Чекаємо за адресою ${o.shopName}.`
     : `Мясний Барон: замовлення №${o.no} готове, курєр виїжджає.`;
