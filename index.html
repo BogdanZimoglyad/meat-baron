@@ -539,6 +539,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .info-map:hover{text-decoration:underline}
 .ord-link{margin:14px 0 0;font-size:12px;color:var(--smoke);line-height:1.6;text-align:center}
 .lnk-copy{font-size:12.5px;color:var(--ember-hot);text-decoration:underline;padding:4px}
+/* посилання всередині підказки: «Увійти через Telegram», «Це не я» */
+.lnk{background:none;border:none;padding:0;font:inherit;color:var(--ember-hot);text-decoration:underline;cursor:pointer}
 
 :focus-visible{outline:2px solid var(--ember-hot);outline-offset:2px}
 .up-scroll{max-height:52vh;max-height:52dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;margin:0 -4px 14px;padding:0 4px;
@@ -912,7 +914,8 @@ async function req(url,opts,ms){
   try{ return await fetch(url,{...(opts||{}),signal:ctl.signal}) }
   finally{ clearTimeout(t) }
 }
-let poll=null;
+let poll=null;        // статус замовлення
+let loginPoll=null;   // очікування підтвердження входу в Telegram
 /* Екранування для вставки в розмітку. Потрібне там, де текст прийшов
    ззовні: збережені замовлення й те, що ввела людина. */
 const esc=s=>String(s==null?'':s)
@@ -1178,7 +1181,7 @@ function open(html){
 /* Опитування статусу глушимо тут, а не в обгортці нижче: інакше воно
    лишалося жити після закриття тапом по фону — обробник фону тримав
    посилання на стару функцію і опитував сервер вічно. */
-function close(){clearInterval(poll);veil.classList.remove('on');sheet.classList.remove('on');unlockScroll()}
+function close(){clearInterval(poll);clearInterval(loginPoll);veil.classList.remove('on');sheet.classList.remove('on');unlockScroll()}
 veil.onclick=close;
 document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
 
@@ -1732,7 +1735,10 @@ function openCheckout(){
   /* Контакти тримаємо в змінних, бо draw() перемальовує форму цілком.
      Без цього людина вводила імʼя й телефон, вмикала мангал — і поля
      порожніли. Те саме було при зміні оплати, точки й часу. */
-  let nmV='', telV='', addrV='';
+  /* Хто увійшов — тому підставляємо все відоме: імʼя, номер і адресу
+     минулої доставки. Решті лишається номер із попереднього замовлення
+     в цьому браузері. */
+  let nmV=(me&&me.name)||'', telV=(me&&me.tel)||savedTel(), addrV=(me&&me.addr)||'';
   const draw=()=>{
     const fg=fryGrams(), fry=fg>=MIN_G;
     const fryCost=fry?kop(fg/1000*FRY_RATE):0, total=kop(goodsTotal()+fryCost);
@@ -1777,7 +1783,13 @@ function openCheckout(){
 
     <span class="lbl">Контакти</span>
     <input class="fld" id="nm" placeholder="Імʼя" autocomplete="name" value="${esc(nmV)}">
-    <input class="fld" id="tel" placeholder="+380 __ ___ __ __" inputmode="tel" autocomplete="tel" value="${esc(telV)}">
+    ${me
+      /* Номер підтверджений Telegram, і саме за ним збирається історія.
+         Правити його тут нема сенсу: сервер усе одно візьме свій. */
+      ? `<input class="fld" id="tel" inputmode="tel" value="${esc(me.tel||'')}" readonly>
+         <p class="hint" style="margin:6px 0 0">Номер підтверджено Telegram. <button class="lnk" id="ckOut" type="button">Це не я</button></p>`
+      : `<input class="fld" id="tel" placeholder="+380 __ ___ __ __" inputmode="tel" autocomplete="tel" value="${esc(telV)}">
+         <p class="hint" style="margin:6px 0 0"><button class="lnk" id="ckIn" type="button">Увійти через Telegram</button> — щоб не вводити щоразу і бачити свої замовлення.</p>`}
     <p class="err" id="err">Вкажіть імʼя та номер телефону.</p>
 
     <div class="box" style="margin-top:16px">
@@ -1815,6 +1827,13 @@ function openCheckout(){
       else return;
       validateWhen(mode); draw();
     };
+    const ckIn=sIn.querySelector('#ckIn');
+    if(ckIn) ckIn.onclick=openLogin;
+    const ckOut=sIn.querySelector('#ckOut');
+    if(ckOut) ckOut.onclick=async ()=>{
+      try{ await req(API+'/api/auth/logout',{method:'POST',headers:authHead()},8000) }catch(e){}
+      setMe(null); telV=''; draw();
+    };
     sIn.querySelector('#send').onclick=async ()=>{
       const btn=sIn.querySelector('#send');
       const nm=sIn.querySelector('#nm').value.trim(), telRaw=sIn.querySelector('#tel').value.trim();
@@ -1829,7 +1848,7 @@ function openCheckout(){
       const payload={shop,shopName:SHOPS[shop][0],mode,addr,fry,fg,pay,total,nm,tel,note:orderNote,when:whenLabel(mode),lines:cart.map(l=>({...l,sum:lineSum(l)}))};
       btn.disabled=true;btn.textContent='Відправляємо…';
       try{
-        const r=await req(API+'/api/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)},15000);
+        const r=await req(API+'/api/order',{method:'POST',headers:{'Content-Type':'application/json',...authHead()},body:JSON.stringify(payload)},15000);
         const d=await r.json();
         if(!r.ok) throw new Error(d.error||'Помилка');
         /* сума з сервера головніша: він рахує за прайсом */
@@ -1951,33 +1970,57 @@ function readLast(){
    як «Прийнято», і клієнт думав, що його вже взяли в роботу. */
 const ST_LABEL={new:'Очікує підтвердження',accepted:'Прийнято',
                 cooking:'Готується',ready:'Готове',done:'Видано'};
-async function showActiveBar(){
-  const v=readLast(); const el=document.getElementById('active');
-  if(!v||!el) return;
-  let st='new';
+/* Замовлення, яке зараз готують, — від сервера. Памʼять браузера знає
+   лише про те, що оформили на цьому пристрої: людина замовляла з
+   компʼютера, відкрила сайт у телефоні — і там порожньо. */
+async function serverActive(){
+  if(!me) return null;
   try{
-    const r=await req(API+'/api/order/'+v.no,null,8000);
+    const r=await req(API+'/api/me/active',{headers:authHead()},8000);
+    if(dropMeIf401(r)) return null;
     const d=await r.json();
-    if(d.status) st=d.status;
-  }catch(e){}
-  if(st==='done'){clearLast();el.hidden=true;return}
+    return (d&&d.order)||null;
+  }catch(e){ return null }
+}
+async function showActiveBar(){
+  const el=document.getElementById('active'); if(!el) return;
+  const srv=await serverActive();
+  const v=srv||readLast();
+  if(!v){el.hidden=true;return}
+  const shopName=srv? srv.shopName : v.shop;
+  let st=srv? srv.status : 'new';
+  if(!srv){
+    try{
+      const r=await req(API+'/api/order/'+v.no,null,8000);
+      const d=await r.json();
+      if(d.status) st=d.status;
+    }catch(e){}
+  }
+  if(st==='done'){if(!srv)clearLast();el.hidden=true;return}
   el.hidden=false;
   const ready=st==='ready';
-  const sub=ready? 'Можна забирати · '+v.shop : v.shop+(v.when?' · '+v.when:'');
+  const sub=ready? 'Можна забирати · '+shopName : shopName+(v.when?' · '+v.when:'');
   el.innerHTML=`<button class="act-in${ready?' ready':''}" id="actOpen">
     <span class="act-dot"></span>
     <span class="act-t"><b>Замовлення № ${v.no} · ${ST_LABEL[st]||'Очікує підтвердження'}</b>
-    <span>${sub}</span></span>
+    <span>${esc(sub)}</span></span>
     <span class="act-go">Стежити</span></button>`;
-  el.querySelector('#actOpen').onclick=()=>openOrder(v.no);
+  el.querySelector('#actOpen').onclick=()=>openOrder(v.no,srv);
 }
-async function openOrder(no){
+async function openOrder(no,known){
   try{
+    /* Тому, хто увійшов, склад дає сервер — на будь-якому пристрої.
+       Інакше беремо його з памʼяті браузера, а для чужого посилання
+       памʼяті немає: покажемо лише статус і суму. */
+    if(known&&String(known.no)===String(no)){
+      order={no:known.no, shop:known.shopName, when:known.when||'',
+             total:known.total, mode:known.mode||'pickup',
+             fry:!!known.fry, fg:known.fg||0, lines:known.lines||[]};
+      return openStatus(known.status);
+    }
     const r=await req(API+'/api/order/'+no,null,10000);
     const d=await r.json();
     if(!d.no) throw 0;
-    /* Склад і смаження беремо з памʼяті браузера — сервер їх не віддає.
-       Якщо це чуже посилання, памʼяті немає: покажемо лише статус і суму. */
     const v=readLast()||{};
     const mine=String(v.no)===String(d.no);
     order={no:d.no, shop:(mine&&v.shop)||SHOPS[shop][0], when:(mine&&v.when)||'',
@@ -2002,6 +2045,47 @@ const TEL_KEY='mb-tel';
 function savedTel(){try{return localStorage.getItem(TEL_KEY)||''}catch(e){return ''}}
 function rememberTel(t){try{localStorage.setItem(TEL_KEY,t)}catch(e){}}
 
+/* ---------- вхід через Telegram ----------
+   Номер не вводять руками: сайт відкриває бота з разовим ключем, людина
+   тисне «Поділитися номером», і номер приходить від самого Telegram.
+   Введений номер нічого не доводить — за ним можна було б забрати чужу
+   історію замовлень. Токен лежить у цьому браузері, як і кошик. */
+const AUTH_KEY='mb-auth';
+let me=null;
+try{ me=JSON.parse(localStorage.getItem(AUTH_KEY)||'null') }catch(e){}
+function setMe(v){
+  me=v;
+  try{ v? localStorage.setItem(AUTH_KEY,JSON.stringify(v)) : localStorage.removeItem(AUTH_KEY) }catch(e){}
+  if(v&&v.tel) rememberTel(v.tel);
+  paintAuth();
+  /* Увійшли — смужка «стежити» має зʼявитися одразу, навіть якщо
+     замовлення робили з іншого пристрою. Вийшли — зникнути. */
+  showActiveBar();
+}
+const authHead=()=>me&&me.token?{Authorization:'Bearer '+me.token}:{};
+/* Токен протух або його відкликали — виходимо мовчки, без «щось пішло не так» */
+function dropMeIf401(r){ if(r&&r.status===401){ setMe(null); return true } return false }
+const firstName=n=>String(n||'').trim().split(/\s+/)[0]||'';
+
+function paintAuth(){
+  const b=document.getElementById('histTop'); if(!b) return;
+  const full=b.querySelector('.ht-full'), short=b.querySelector('.ht-short');
+  const nm=me&&firstName(me.name);
+  if(full)  full.textContent  = nm || (me?'Мій кабінет':'Мої замовлення');
+  if(short) short.textContent = nm || (me?'Кабінет':'Замовлення');
+  b.setAttribute('aria-label', me?'Мій кабінет':'Мої замовлення');
+}
+paintAuth();
+/* Токен могли відкликати або він протух. Тихо перевіряємо при старті,
+   щоб людина не тикала в кабінет і не впиралася в помилку. Заразом
+   підтягуємо імʼя й адресу, якщо їх змінили з іншого пристрою. */
+if(me) req(API+'/api/me',{headers:authHead()},8000)
+  .then(r=>{
+    if(r.status===401) return setMe(null);
+    return r.json().then(d=>{ if(d&&d.ok) setMe({...me,tel:d.tel,name:d.name||'',addr:d.addr||''}) });
+  })
+  .catch(()=>{});   // немає звʼязку — лишаємо як є, кабінет відкриється офлайн
+
 function fmtDate(ts){
   const d=new Date(ts), t=new Date(), y=new Date(); y.setDate(t.getDate()-1);
   const hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
@@ -2010,28 +2094,110 @@ function fmtDate(ts){
   return d.getDate()+' '+MON[d.getMonth()]+', '+hm;
 }
 
-function openHistory(){
-  const tel=savedTel();
+/* Кнопка в шапці веде або на вхід, або в кабінет */
+function openHistory(){ me? openCabinet() : openLogin() }
+
+/* ---------- екран входу ---------- */
+function openLogin(){
   open(`<div class="grab-zone"><div class="grab"></div></div>
-  <div class="sh-h"><h3>Мої замовлення</h3><button class="x" onclick="close_()">✕</button></div>
-  <p class="hint" style="margin-top:-4px">Вкажіть номер, з якого робили замовлення.</p>
-  <input class="fld" id="hTel" placeholder="+380 __ ___ __ __" inputmode="tel" autocomplete="tel" value="${tel}">
-  <p class="err" id="hErr">Вкажіть коректний номер телефону.</p>
-  <button class="cta" id="hGo">Показати</button>
-  <div id="hList"></div>`);
-  bindPhone(sIn.querySelector('#hTel'));
-  const go=async()=>{
-    const el=sIn.querySelector('#hTel'), err=sIn.querySelector('#hErr'), box=sIn.querySelector('#hList');
-    const d=normPhone(el.value);
-    if(d.length<9){err.style.display='block';return}
-    err.style.display='none';
-    rememberTel(el.value);
-    box.innerHTML='<p class="hint" style="text-align:center;padding:14px 0">Шукаємо…</p>';
+  <div class="sh-h"><h3>Вхід</h3><button class="x" onclick="close_()">✕</button></div>
+  <p class="hint" style="margin-top:-4px">Щоб бачити свої замовлення й не вводити щоразу імʼя та телефон.</p>
+  <div class="box" style="margin-top:14px">
+    <div class="sum"><span>1</span><span>Відкриється наш бот у Telegram</span></div>
+    <div class="sum"><span>2</span><span>Натисніть «Поділитися номером»</span></div>
+    <div class="sum"><span>3</span><span>Поверніться сюди — ви вже увійшли</span></div>
+  </div>
+  <p class="hint">Номер надсилає сам Telegram. Ми не бачимо ваших переписок і не пишемо першими.</p>
+  <div id="lgBox"><p class="hint" style="text-align:center;padding:14px 0">Готуємо посилання…</p></div>`);
+  startLogin();
+}
+async function startLogin(){
+  const box=sIn.querySelector('#lgBox'); if(!box) return;
+  clearInterval(loginPoll);
+  let j;
+  try{
+    const r=await req(API+'/api/auth/start',{method:'POST'},10000);
+    j=await r.json();
+    if(!j.link) throw new Error(j.error||'');
+  }catch(e){
+    box.innerHTML=`<p class="hint" style="text-align:center;padding:10px 0">Не вдалося звʼязатися з сервером.</p>
+      <button class="cta ghost" id="lgRetry">Спробувати ще раз</button>`;
+    sIn.querySelector('#lgRetry').onclick=startLogin;
+    return;
+  }
+  box.innerHTML=`<a class="cta" id="lgGo" href="${esc(j.link)}" target="_blank" rel="noopener">Увійти через Telegram</a>
+    <p class="hint" id="lgSt" style="text-align:center">Чекаємо на підтвердження…</p>`;
+  const st=sIn.querySelector('#lgSt');
+  const until=Date.now()+(j.ttl||300)*1000;
+  /* Питаємо раз на дві секунди: людина в цей час перемикається в
+     Telegram і назад, довша пауза відчувається як зависання. */
+  loginPoll=setInterval(async()=>{
+    if(Date.now()>until){ clearInterval(loginPoll); expiredLogin(); return }
     try{
-      const r=await req(API+'/api/history/'+d,null,10000);
+      const r=await req(API+'/api/auth/poll/'+j.sid,null,8000);
+      const d=await r.json();
+      if(d.status==='ok'){
+        clearInterval(loginPoll);
+        setMe({token:d.token,tel:d.tel,name:d.name||'',addr:d.addr||''});
+        openCabinet();
+      } else if(d.status==='expired'){ clearInterval(loginPoll); expiredLogin() }
+    }catch(e){ if(st) st.textContent='Звʼязок пропав. Чекаємо…' }
+  },2000);
+}
+function expiredLogin(){
+  const box=sIn.querySelector('#lgBox'); if(!box) return;
+  box.innerHTML=`<p class="hint" style="text-align:center;padding:10px 0">Посилання діяло пʼять хвилин і вже застаріло.</p>
+    <button class="cta ghost" id="lgRetry">Спробувати ще раз</button>`;
+  sIn.querySelector('#lgRetry').onclick=startLogin;
+}
+
+/* ---------- кабінет: профіль і свої замовлення ---------- */
+function openCabinet(){
+  if(!me) return openLogin();
+  open(`<div class="grab-zone"><div class="grab"></div></div>
+  <div class="sh-h"><h3>${esc(firstName(me.name))||'Мій кабінет'}</h3><button class="x" onclick="close_()">✕</button></div>
+  <p class="hint" style="margin-top:-4px">${esc(me.tel||'')} · номер підтверджено Telegram</p>
+
+  <span class="lbl">Імʼя</span>
+  <input class="fld" id="myNm" placeholder="Як до вас звертатися" autocomplete="name" value="${esc(me.name||'')}">
+  <span class="lbl">Адреса для доставки</span>
+  <input class="fld" id="myAddr" placeholder="Вулиця, будинок, квартира" autocomplete="street-address" value="${esc(me.addr||'')}">
+  <button class="cta ghost" id="mySave">Зберегти</button>
+  <p class="hint" id="mySt"></p>
+
+  <div id="hList"></div>
+  <button class="cta ghost" id="myOut" style="margin-top:16px">Вийти</button>`);
+
+  sIn.querySelector('#mySave').onclick=async ()=>{
+    const nm=sIn.querySelector('#myNm').value.trim(), ad=sIn.querySelector('#myAddr').value.trim();
+    const st=sIn.querySelector('#mySt');
+    st.textContent='Зберігаємо…'; st.style.display='block';
+    try{
+      const r=await req(API+'/api/me',{method:'PUT',headers:{'Content-Type':'application/json',...authHead()},
+                                       body:JSON.stringify({name:nm,addr:ad})},10000);
+      if(dropMeIf401(r)) return openLogin();
+      const d=await r.json();
+      setMe({...me,name:d.name||'',addr:d.addr||''});
+      st.textContent='Збережено.';
+      sIn.querySelector('.sh-h h3').textContent=firstName(d.name)||'Мій кабінет';
+    }catch(e){ st.textContent='Не вдалося зберегти. Спробуйте пізніше.' }
+  };
+  sIn.querySelector('#myOut').onclick=async ()=>{
+    try{ await req(API+'/api/auth/logout',{method:'POST',headers:authHead()},8000) }catch(e){}
+    setMe(null); close_();
+  };
+  loadMyOrders();
+}
+
+async function loadMyOrders(){
+  const box=sIn.querySelector('#hList'); if(!box) return;
+  box.innerHTML='<p class="hint" style="text-align:center;padding:14px 0">Шукаємо…</p>';
+  try{
+      const r=await req(API+'/api/me/orders',{headers:authHead()},10000);
+      if(dropMeIf401(r)){ openLogin(); return }
       const j=await r.json();
       if(!j.orders||!j.orders.length){
-        box.innerHTML='<p class="hint" style="text-align:center;padding:18px 0">За цим номером замовлень не знайдено.</p>';
+        box.innerHTML='<p class="hint" style="text-align:center;padding:18px 0">Замовлень поки немає. Наберіть кошик — і вони зʼявляться тут.</p>';
         return;
       }
       box.innerHTML='<span class="lbl">Останні замовлення</span>'+j.orders.map(o=>`
@@ -2048,13 +2214,9 @@ function openHistory(){
           </div>
         </div>`).join('');
       box.querySelectorAll('[data-again]').forEach(b=>b.onclick=()=>repeatOrder(JSON.parse(decodeURIComponent(b.dataset.again))));
-    }catch(e){
-      box.innerHTML='<p class="hint" style="text-align:center;padding:18px 0">Не вдалося завантажити. Спробуйте пізніше.</p>';
-    }
-  };
-  sIn.querySelector('#hGo').onclick=go;
-  sIn.querySelector('#hTel').addEventListener('keydown',e=>{if(e.key==='Enter')go()});
-  if(normPhone(tel).length===9) go();
+  }catch(e){
+    box.innerHTML='<p class="hint" style="text-align:center;padding:18px 0">Не вдалося завантажити. Спробуйте пізніше.</p>';
+  }
 }
 
 function repeatOrder(lines){
