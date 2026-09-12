@@ -262,7 +262,10 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .hint{font-size:12px;color:var(--smoke);margin:10px 0 0;line-height:1.55}
 
 /* cart lines */
-.ln{display:flex;gap:11px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)}
+/* рядок переноситься: позначка «на мангал» іде окремим рядком під
+   назвою. У колонці з назвою для неї немає місця — на телефоні підпис
+   ламався навпіл. */
+.ln{display:flex;flex-wrap:wrap;gap:11px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)}
 .ln-r{display:flex;align-items:center;gap:10px;margin-left:auto}
 .ln-x{width:28px;height:28px;border-radius:50%;flex:0 0 auto;color:var(--smoke);
   display:grid;place-items:center;transition:.14s}
@@ -404,6 +407,20 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .cart-fry b{display:block;font-weight:500;font-size:13.5px}
 .cart-fry span{display:block;font-size:12px;color:var(--smoke)}
 .cf-sum{font-family:'Oswald';font-size:15px;color:var(--ember-hot);flex:0 0 auto}
+/* «на мангал» у рядку кошика: вибір робиться на кожній позиції окремо */
+.fry-chip{margin:-4px 0 0 55px;padding:3px 10px;border:1px solid var(--line-2);border-radius:999px;
+  background:none;color:var(--smoke);font-size:11.5px;line-height:1.5;white-space:nowrap;transition:.14s}
+.fry-chip:hover{color:var(--bone);border-color:var(--smoke)}
+.fry-chip.on{border-color:rgba(196,52,42,.55);background:rgba(196,52,42,.12);color:var(--ember-hot)}
+/* «Посмажити все» — та сама позначка, але на весь кошик */
+.fry-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;
+  font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--smoke)}
+.fry-chip.fry-all{margin:0;text-transform:none;letter-spacing:0}
+/* той самий вибір в оформленні — щоб не вертатися в кошик */
+.fry-row{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:9px 0 0;margin-top:9px;border-top:1px solid var(--line)}
+.fry-row b{display:block;font-weight:500;font-size:13.5px}
+.fry-row span{display:block;font-size:12px;color:var(--smoke)}
 .cart-hint{margin:8px 0 0;font-size:12px;color:var(--smoke);line-height:1.5}
 .cart-note{resize:none;line-height:1.5;font-size:16px}
 
@@ -1250,7 +1267,7 @@ function openItem(id, editIdx){
   </div>
   <div class="tot"><span style="color:var(--smoke);font-size:13px">Разом</span><b id="tv">${money(it.price*g/100)}</b></div>
   <button class="cta" id="addBtn">${editing?'Зберегти':'Додати в кошик'}</button>
-  <p class="hint">Мінімальна вага — ${it.minG} г, можна ввести свою. ${canFry(it)?'Смаження можна обрати при оформленні.':''}</p>`);
+  <p class="hint">Мінімальна вага — ${it.minG} г, можна ввести свою. ${canFry(it)?'Смаження на мангалі позначається в кошику.':''}</p>`);
   const rg=sIn.querySelector('#rg'),wv=sIn.querySelector('#wv'),tv=sIn.querySelector('#tv');
   const paint=(syncField)=>{
     tv.textContent=money(it.price*g/100);
@@ -1408,10 +1425,28 @@ function lineQty(l){
   return wLabel(l.g);
 }
 function goodsTotal(){return kop(cart.reduce((s,l)=>s+lineSum(l),0))}
-function fryGrams(){return cart.reduce((s,l)=>s+fryableG(l),0)}
+/* Рахуємо лише те, що позначили. Раніше смаження було одним вимикачем
+   на все замовлення: людина хотіла мангал для мʼяса, а платила ще й за
+   сир та овочі, які збиралася їсти так. */
+function fryGrams(){return cart.reduce((s,l)=>s+(l.fry?fryableG(l):0),0)}
+const fryCostOf=l=>kop(fryableG(l)/1000*FRY_RATE);
+/* Позиції, які взагалі можна смажити, разом з їхнім місцем у кошику */
+const fryLines=()=>cart.map((l,i)=>({l,i})).filter(x=>canFry(x.l));
+const fryAllOn=()=>{const f=fryLines();return f.length>0&&f.every(x=>x.l.fry)};
+/* «Посмажити все» — одним дотиком, коли розбиратися по позиціях ліньки.
+   Другий дотик знімає все. */
+function toggleFryAll(){
+  const on=!fryAllOn();
+  fryLines().forEach(x=>{x.l.fry=on});
+  fryWanted=fryGrams()>0;
+}
+const fryAllBtn=()=>fryLines().length>1
+  ? `<button class="fry-chip fry-all${fryAllOn()?' on':''}" data-fall aria-pressed="${fryAllOn()}">${fryAllOn()?'Зняти все':'Посмажити все'}</button>`
+  : '';
 /* Ужарка 30–35% стосується лише мʼяса — сир і овочі так не втрачають вагу */
 const MEAT=new Set(['raw','saus']);
-function meatGrams(){return cart.reduce((s,l)=>s+(MEAT.has(l.cat)?fryableG(l):0),0)}
+/* Для попередження про ужарку: скільки мʼяса реально піде на вогонь */
+function meatGrams(){return cart.reduce((s,l)=>s+(l.fry&&MEAT.has(l.cat)?fryableG(l):0),0)}
 function paintBar(){
   const bar=document.getElementById('bar');
   /* Порожній кошик — це вже наступне замовлення, і допродаж має право
@@ -1444,14 +1479,18 @@ function openCart(){
   open(`<div class="grab-zone"><div class="grab"></div></div><div class="sh-h"><h3>Кошик</h3><button class="x" onclick="close_()">✕</button></div>
   <div id="lines"></div>
 
+  ${fryLines().length>1?`<div class="fry-head">
+    <span>Мангал · ${FRY_RATE} ₴/кг</span>${fryAllBtn()}
+  </div>`:''}
   ${fg>=MIN_G?`<div class="cart-fry">
     <div>
       <b>Посмажити на мангалі</b>
-      <span>${FRY_RATE} ₴/кг · до смаження ${wLabel(fg)}</span>
+      <span>до смаження ${wLabel(fg)}</span>
     </div>
     <span class="cf-sum">+${money(fryCost)}</span>
   </div>
-  <p class="cart-hint">Смаження вмикається при оформленні — там і побачите підсумок.</p>`:''}
+  <p class="cart-hint">Підсумок побачите при оформленні.</p>`
+  : fryLines().length?`<p class="cart-hint">Позначте, що смажити: усе одразу або кожну позицію окремо.</p>`:''}
 
   ${upsellGrid()}
 
@@ -1463,6 +1502,8 @@ function openCart(){
   <button class="cta" id="toCheckout">Оформити замовлення</button>
   <button class="cta ghost" onclick="close_()">Додати ще</button>`);
   paintLines();
+  const fa=sIn.querySelector('[data-fall]');
+  if(fa) fa.onclick=()=>{toggleFryAll(); paintBar(); openCart()};
   bindUpsellGrid();
   const nt=sIn.querySelector('#note');
   if(nt) nt.oninput=()=>{orderNote=nt.value};
@@ -1483,16 +1524,19 @@ function paintLines(){
     </div>
     <button class="ln-x" data-x="${i}" aria-label="Прибрати ${l.name}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-    </button></div>`).join('');
+    </button>
+    ${canFry(l)?`<button class="fry-chip${l.fry?' on':''}" data-f="${i}" aria-pressed="${!!l.fry}">${l.fry?'На мангалі':'На мангал'} · +${money(fryCostOf(l))}</button>`:''}</div>`).join('');
   el.onclick=e=>{
     const ed=e.target.closest('[data-e]');
     if(ed){const i=+ed.dataset.e;openItem(cart[i].id,i);return}
     const x=e.target.closest('[data-x]');
     const m=e.target.closest('[data-m]'),p=e.target.closest('[data-p]');
+    const f=e.target.closest('[data-f]');
     /* У позицій, які просять штуками, крок дорівнює вазі однієї штуки —
        інакше 900 г картоплі перетворювалися б на 800, тобто 2⅔ штуки. */
     const stepOf=l=>isCount(l)?1:(portionOf(l)||100);
-    if(x){cart.splice(+x.dataset.x,1)}
+    if(f){const l=cart[+f.dataset.f]; l.fry=!l.fry; fryWanted=fryGrams()>0}
+    else if(x){cart.splice(+x.dataset.x,1)}
     else if(m){
       const l=cart[+m.dataset.m];
       const lo=isCount(l)?1:minOf(l);
@@ -1663,14 +1707,16 @@ function pickTimeSheet(mode,back){
 function openCheckout(){
   /* Онлайн-оплати поки немає. Поки її не підключено, не пропонуємо:
      інакше оператор бачив би «оплачено», а грошей ніхто не брав. */
-  let mode=getMode,fry=false,pay='cash';
-  fryWanted=false;                       // без мангала можна забирати з відкриття
+  let mode=getMode,pay='cash';
+  /* Що смажити — вирішено ще в кошику, на кожній позиції окремо.
+     Тут це можна переграти, не вертаючись назад. */
+  fryWanted=fryGrams()>0;                // без мангала можна забирати з відкриття
   /* Контакти тримаємо в змінних, бо draw() перемальовує форму цілком.
      Без цього людина вводила імʼя й телефон, вмикала мангал — і поля
      порожніли. Те саме було при зміні оплати, точки й часу. */
   let nmV='', telV='', addrV='';
-  const fg=fryGrams();
   const draw=()=>{
+    const fg=fryGrams(), fry=fg>=MIN_G;
     const fryCost=fry?kop(fg/1000*FRY_RATE):0, total=kop(goodsTotal()+fryCost);
     open(`<div class="grab-zone"><div class="grab"></div></div><div class="sh-h"><h3>Оформлення</h3><button class="x" onclick="close_()">✕</button></div>
 
@@ -1693,13 +1739,17 @@ function openCheckout(){
       <span class="ps-a">Обрати</span>
     </button>
 
-    ${fg>=MIN_G?`<div class="box">
+    ${fryLines().length?`<div class="box" id="fryBox">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
         <div><b style="font-weight:500">Посмажити на мангалі</b>
-        <div style="font-size:12px;color:var(--smoke)">${FRY_RATE} ₴ за кг · до смаження ${wLabel(fg)}</div></div>
-        <button class="sw" id="sw" role="switch" aria-checked="${fry}"><i></i></button>
+        <div style="font-size:12px;color:var(--smoke)">${FRY_RATE} ₴ за кг</div></div>
+        ${fryAllBtn()}
       </div>
-      ${fry&&meatGrams()?`<div class="warn">При смаженні мʼясо втрачає 30–35% ваги. З ${wLabel(meatGrams())} сирого вийде приблизно ${wLabel(Math.round(meatGrams()*.67/50)*50)}–${wLabel(Math.round(meatGrams()*.7/50)*50)} готового.</div>`:''}
+      ${fryLines().map(({l,i})=>`<div class="fry-row">
+        <div><b>${esc(l.name)}</b><span>${lineQty(l)} · +${money(fryCostOf(l))}</span></div>
+        <button class="sw" data-f="${i}" role="switch" aria-checked="${!!l.fry}" aria-label="Смажити ${esc(l.name)}"><i></i></button>
+      </div>`).join('')}
+      ${meatGrams()?`<div class="warn">При смаженні мʼясо втрачає 30–35% ваги. З ${wLabel(meatGrams())} сирого вийде приблизно ${wLabel(Math.round(meatGrams()*.67/50)*50)}–${wLabel(Math.round(meatGrams()*.7/50)*50)} готового.</div>`:''}
     </div>`:''}
 
     <span class="lbl">Оплата</span>
@@ -1738,8 +1788,14 @@ function openCheckout(){
     sIn.querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>{pay=b.dataset.pay;draw()});
     /* Увімкнули мангал — найраніший час зсувається на 10:00,
        і вже обраний ранній слот може стати неможливим. */
-    const sw=sIn.querySelector('#sw');
-    if(sw) sw.onclick=()=>{fry=!fry; fryWanted=fry; validateWhen(mode); draw()};
+    const fryBox=sIn.querySelector('#fryBox');
+    if(fryBox) fryBox.onclick=e=>{
+      const all=e.target.closest('[data-fall]'), b=e.target.closest('[data-f]');
+      if(all) toggleFryAll();
+      else if(b){const l=cart[+b.dataset.f]; l.fry=!l.fry; fryWanted=fryGrams()>0}
+      else return;
+      validateWhen(mode); draw();
+    };
     sIn.querySelector('#send').onclick=async ()=>{
       const btn=sIn.querySelector('#send');
       const nm=sIn.querySelector('#nm').value.trim(), telRaw=sIn.querySelector('#tel').value.trim();
@@ -1806,7 +1862,7 @@ function openStatus(startStatus){
 
     <div class="box">
       ${o.lines.length
-        ? o.lines.map(l=>`<div class="sum"><span>${l.name} · ${lineQty(l)}</span><span>${money(l.sum)}</span></div>`).join('')
+        ? o.lines.map(l=>`<div class="sum"><span>${l.name} · ${lineQty(l)}${l.fry?' · на мангалі':''}</span><span>${money(l.sum)}</span></div>`).join('')
         : `<p class="hint" style="margin:0 0 6px">Склад замовлення видно лише на тому пристрої, з якого його оформили.</p>`}
       ${o.fry?`<div class="sum"><span>Смаження · ${wLabel(o.fg)}</span><span>${money(kop(o.fg/1000*FRY_RATE))}</span></div>`:''}
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:10px;border-top:1px solid var(--line)">
@@ -1859,7 +1915,7 @@ function saveLast(o){
   try{localStorage.setItem(LAST_KEY,JSON.stringify({
     no:o.no, shop:o.shop, total:o.total, when:o.when, mode:o.mode,
     fry:!!o.fry, fg:o.fg||0,
-    lines:(o.lines||[]).map(l=>({name:l.name,grp:l.grp,unit:l.unit,g:l.g,sum:l.sum})),
+    lines:(o.lines||[]).map(l=>({name:l.name,grp:l.grp,unit:l.unit,g:l.g,sum:l.sum,fry:!!l.fry})),
     at:Date.now()
   }))}catch(e){}
 }
@@ -1993,7 +2049,8 @@ function repeatOrder(lines){
     const g=isCount(it)? Math.max(1,l.g) : Math.max(it.minG,l.g);
     const ex=cart.find(c=>c.id===it.id);
     if(ex) ex.g+=g;
-    else cart.push({id:it.id,name:it.name,grp:it.grp,price:it.price,unit:it.unit,cat:it.cat,minG:it.minG,g});
+    else cart.push({id:it.id,name:it.name,grp:it.grp,price:it.price,unit:it.unit,cat:it.cat,minG:it.minG,g,
+                    fry:!!l.fry&&canFry(it)});   // що смажили минулого разу
     added++;
   });
   paintBar();

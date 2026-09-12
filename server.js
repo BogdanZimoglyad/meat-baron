@@ -24,7 +24,7 @@ const path = require('path');
 /* Прайс, правила рахунку і список точок — той самий файл, що підключає
    сайт. Сервер не вірить ні сумі, ні назві точки з браузера. */
 const CATALOG = require('./catalog.js');
-const { FRY_RATE, MIN_G, kop, lineSum, fryableG } = CATALOG;
+const { FRY_RATE, MIN_G, kop, lineSum, fryableG, canFry } = CATALOG;
 const CATALOG_SHOPS = CATALOG.SHOPS;
 const byId = new Map(CATALOG.ITEMS.map(it => [it.id, it]));
 
@@ -201,11 +201,14 @@ function orderText(o) {
     const qty = l.unit === 'шт' ? l.g + ' шт'
               : l.unit === 'пак' ? l.g + ' × 1 кг'
               : wLabel(l.g);
-    return `• ${esc(l.name)} — ${qty} — ${money(l.sum)}`;
+    /* Вогник біля позиції — щоб оператор бачив, що саме на мангал.
+       Смаження тепер обирають на кожній позиції окремо, і одного
+       підсумку внизу вже не досить. */
+    return `• ${esc(l.name)} — ${qty} — ${money(l.sum)}${l.fry ? ' 🔥' : ''}`;
   }).join('\n');
 
   const fry = o.fry
-    ? `\n🔥 СМАЖИТИ: ${wLabel(o.fg)} — ${money(o.fg / 1000 * FRY_RATE)}\n   (ужарка 30–35%)`
+    ? `\n🔥 НА МАНГАЛ (позначені вогником): ${wLabel(o.fg)} — ${money(o.fg / 1000 * FRY_RATE)}\n   (ужарка 30–35%)`
     : '';
 
   const delivery = o.mode === 'delivery'
@@ -306,6 +309,10 @@ app.post('/api/order', async (req, res) => {
   /* Склад і суму рахуємо самі, за прайсом. З браузера беремо лише
      номер позиції та кількість — ціну він міг би підмінити. */
   const lines = [];
+  /* Смаження тепер позначають на кожній позиції. Сторінка зі старого
+     кеша надсилає один прапорець на все замовлення — тоді розуміємо
+     його по-старому: смажимо все, що смажиться. */
+  const perLine = b.lines.some(l => l && l.fry !== undefined);
   for (const raw of b.lines.slice(0, 40)) {
     const it = byId.get(String(raw.id || ''));
     if (!it) {
@@ -319,13 +326,14 @@ app.post('/api/order', async (req, res) => {
     }
     lines.push({
       name: it.name, grp: it.grp, cat: it.cat, unit: it.unit, id: it.id,
-      g: q, sum: lineSum({ unit: it.unit, price: it.price, g: q })
+      g: q, sum: lineSum({ unit: it.unit, price: it.price, g: q }),
+      fry: canFry(it) && (perLine ? !!raw.fry : !!b.fry)
     });
   }
 
   const goods = kop(lines.reduce((s, l) => s + l.sum, 0));
-  const fg = lines.reduce((s, l) => s + fryableG(l), 0);
-  const fry = !!b.fry && fg >= MIN_G;          // смаження лише коли є що смажити
+  const fg = lines.reduce((s, l) => s + (l.fry ? fryableG(l) : 0), 0);
+  const fry = fg >= MIN_G;                     // смаження лише коли є що смажити
   const fryCost = fry ? kop(fg / 1000 * FRY_RATE) : 0;
   const total = kop(goods + fryCost);
   if (total <= 0 || total > 200000) {
