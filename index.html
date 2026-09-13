@@ -298,6 +298,14 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .ln-b .un{font-size:11.5px;color:var(--smoke)}
 .qty{display:flex;align-items:center;gap:9px}
 .qbtn{width:26px;height:26px;border-radius:50%;border:1px solid var(--line-2);color:var(--smoke);display:grid;place-items:center;font-size:15px;line-height:1}
+/* вибір різновиду: соуси списком, у кожного −/+ */
+.var-list{margin:4px 0 14px}
+.var-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.var-row:first-child{border-top:none}
+.var-b{flex:1;min-width:0}
+.var-b b{display:block;font-weight:500;font-size:14px}
+.var-b span{display:block;margin-top:2px;font-size:12px;color:var(--smoke);line-height:1.4}
+.var-n{min-width:18px;text-align:center;font-family:'Oswald';font-size:15px;color:var(--bone)}
 .ln-p{font-family:'Oswald';font-size:15px;min-width:58px;text-align:right}
 
 /* checkout */
@@ -782,9 +790,9 @@ const DESC={
  'Ковбаски/Куряча з пивом':'З пивом у фарші — мʼякша й ароматніша. Одна важить приблизно 400–600 г.',
  'Ковбаски/Індича':'Пісна ковбаска з індички — легша за свинячу. Одна важить приблизно 400–600 г.',
  'Ковбаски/Ковбаски гриль асорті':'Мікс наших ковбасок — скуштуйте все й знайдіть свою. Асорті важить приблизно 300–400 г.',
- 'Чевапчічі/Класичні':'Рублене мʼясо свинини й телятини, загорнуте в тонкі слайси бекону.',
- 'Чевапчічі/З сиром':'Курятина з ніжним сиром, що дає особливий смак, — у тонких слайсах бекону.',
- 'Чевапчічі/З грибами':'Курятина з дрібно нарубаними грибами — у тонких слайсах бекону.',
+ 'Чевапчічі/Класичні':'Рублене мʼясо свинини й телятини, загорнуте в тонкі слайси бекону. Пачка важить приблизно 600–800 г.',
+ 'Чевапчічі/З сиром':'Курятина з ніжним сиром, що дає особливий смак, — у тонких слайсах бекону. Пачка важить приблизно 600–800 г.',
+ 'Чевапчічі/З грибами':'Курятина з дрібно нарубаними грибами — у тонких слайсах бекону. Пачка важить приблизно 600–800 г.',
  'Смокер/Курка bbq':'Ціла курка, томлена у смокері під соусом bbq.',
  'Смокер/Рулька свиняча':'Томлена рулька з хрусткою скоринкою.',
  'Смокер/Ребро свиняче':'Ребра з димком, мʼясо відходить від кістки.',
@@ -823,7 +831,7 @@ const DESC={
  'Картопля':'Вже зі спеціями та олією — одразу на мангал чи в духовку. Упаковка на кілограм.',
  'Матнакаш':'Пишний вірменський хліб — ідеальна пара до мʼяса.',
  'Лаваш тонкий':'Тонкий лаваш — загорнути мʼясо чи подати до столу.',
- 'Соуси в асортименті':'Фірмові соуси до мʼяса — асортимент питайте на точці.'
+ 'Соуси в асортименті':'Соуси власного виробництва — до мʼяса, сиру й фритюру.'
 };
 const GRP_NOTE={
  'Смокер':'Готуємо за американською технологією low and slow — мʼясо томиться годинами на низькій температурі, до димної скоринки й ніжних волокон.',
@@ -1022,7 +1030,8 @@ function ixOf(it){
   let x=SEARCH_IX.get(it.id);
   if(!x){
     const c=CATS.find(c=>c.id===it.cat);
-    const main=fold(it.name+' '+it.grp);
+    /* різновиди теж шукаються: «ткемалі» знаходить соуси */
+    const main=fold(it.name+' '+it.grp+' '+((variantsOf(it)||{list:[]}).list.map(x=>x[0]).join(' ')));
     const all=main+' '+fold((c?c.t:'')+' '+descOf(it));
     x={main:main,mainW:tokens(main),allW:tokens(all)};
     SEARCH_IX.set(it.id,x);
@@ -1205,7 +1214,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
 /* ---------- тягнемо шторку вниз ---------- */
 (function(){
   let y0=0, dy=0, dragging=false, may=false;
-  const noDrag=el=>el.closest('input,select,textarea,.up-scroll,.up-grid,.wgrid,.seg,#lines,.pay,.wbox,.rowline,.cart-note,.wcol,.wheel');
+  const noDrag=el=>el.closest('input,select,textarea,.up-scroll,.up-grid,.var-list,.wgrid,.seg,#lines,.pay,.wbox,.rowline,.cart-note,.wcol,.wheel');
   const start=e=>{
     const t=e.touches?e.touches[0]:e;
     if(noDrag(e.target)) return;
@@ -1281,6 +1290,7 @@ if(SHOPS.length>1){
 function openItem(id, editIdx){
   const it=ITEMS.find(i=>i.id===id);
   const editing=Number.isInteger(editIdx);
+  if(variantsOf(it)&&!editing){openVariants(it); return}      // соуси: спершу який саме
   if(isCount(it)&&!editing){addToCart(it,1); return}
   const MAXG=6000;
   const por=portionOf(it);                       // вага однієї штуки, якщо є
@@ -1328,10 +1338,46 @@ function openItem(id, editIdx){
     addToCart(it,g); close();
   };
 }
-function addToCart(it,g){
-  const ex=cart.find(l=>l.id===it.id);
-  if(ex) ex.g+=g; else cart.push({id:it.id,name:it.name,grp:it.grp,price:it.price,unit:it.unit,cat:it.cat,minG:it.minG,g});
+/* v — різновид, наприклад соус «Ткемалі». Різні соуси — різні рядки
+   кошика, інакше оператор не знав би, скільки якого класти. */
+function addToCart(it,g,v){
+  v=v||'';
+  const ex=cart.find(l=>l.id===it.id&&(l.v||'')===v);
+  if(ex) ex.g+=g;
+  else cart.push({id:it.id,name:it.name,grp:it.grp,price:it.price,unit:it.unit,cat:it.cat,minG:it.minG,g,...(v?{v}:{})});
   paintBar();
+}
+
+/* ---------- вибір різновиду ----------
+   Одна картка в каталозі — «Соуси», а тут список різновидів із описами
+   і кнопками −/+. Кошик міняється одразу, «Готово» лише закриває. */
+function openVariants(it,onDone){
+  const vs=variantsOf(it); if(!vs) return;
+  const done=onDone||close;
+  const countOf=v=>{const l=cart.find(x=>x.id===it.id&&x.v===v);return l?l.g:0};
+  const row=([v,d])=>`<div class="var-row" data-v="${esc(v)}">
+      <div class="var-b"><b>${esc(v)}</b><span>${esc(d)}</span></div>
+      <div class="qty"><button class="qbtn" data-dv="-1" aria-label="Менше">−</button>
+      <span class="var-n">${countOf(v)||''}</span>
+      <button class="qbtn" data-dv="1" aria-label="Більше">+</button></div>
+    </div>`;
+  open(`<div class="grab-zone"><div class="grab"></div></div>
+  <div class="sh-h"><h3>${esc(it.name)}</h3><button class="x" onclick="close_()">✕</button></div>
+  <p class="hint" style="margin-top:-6px">${descOf(it)?esc(descOf(it))+' ':''}${money(it.price)} за ${countUnitOf(it)?countUnitOf(it).za:'штуку'}.</p>
+  <div class="var-list">${vs.list.map(row).join('')}</div>
+  <button class="cta" id="varDone">Готово</button>`);
+  sIn.querySelector('.var-list').onclick=e=>{
+    const b=e.target.closest('[data-dv]'); if(!b) return;
+    const r=b.closest('[data-v]'), v=r.dataset.v;
+    if(+b.dataset.dv>0) addToCart(it,1,v);
+    else{
+      const i=cart.findIndex(x=>x.id===it.id&&x.v===v);
+      if(i>-1){ if(cart[i].g>1) cart[i].g--; else cart.splice(i,1); }
+      paintBar();
+    }
+    r.querySelector('.var-n').textContent=countOf(v)||'';
+  };
+  sIn.querySelector('#varDone').onclick=()=>done();
 }
 
 /* ---------- допродаж: пропозиції до мʼяса ----------
@@ -1355,6 +1401,9 @@ const upsellPrice=i=>money(i.price)+(i.unit==='шт'?' / '+(countUnitOf(i)?count
 /* Порційні позиції кладемо однією штукою, а не 500 г:
    півтори картоплини нікому не потрібні. */
 const upsellAdd=i=>addToCart(i, isCount(i)?1:(portionOf(i)||Math.max(500,i.minG)));
+/* Позицію з різновидами одним дотиком не додати — треба обрати який.
+   Після вибору повертаємо в кошик: звідти людина й прийшла. */
+const upsellPick=i=>{ if(variantsOf(i)){ openVariants(i,openCart); return true } upsellAdd(i); return false };
 
 /* Сітка в кошику під списком позицій. Показуємо два рядки, решту
    відкриває кнопка: інакше сам кошик тоне під допродажем. Скільки це
@@ -1394,7 +1443,7 @@ function bindUpsellGrid(){
   fitUpsellGrid();
   el.onclick=e=>{
     const b=e.target.closest('[data-u]'); if(!b) return;
-    upsellAdd(ITEMS.find(i=>i.id===b.dataset.u));
+    if(upsellPick(ITEMS.find(i=>i.id===b.dataset.u))) return;   // пішли обирати соус
     openCart();            // перемальовуємо кошик разом із сумою і сіткою
   };
   const more=sIn.querySelector('#upMore');
@@ -1434,6 +1483,7 @@ function upsellGate(next){
   sIn.querySelector('.up-scroll').onclick=e=>{
     const b=e.target.closest('[data-u]'); if(!b) return;
     const item=ITEMS.find(i=>i.id===b.dataset.u);
+    if(variantsOf(item)){ openVariants(item,openCart); return }   // соус — спершу який
     if(b.classList.contains('on')){
       const i=cart.findIndex(l=>l.id===item.id);
       if(i>-1) cart.splice(i,1);
@@ -1580,14 +1630,14 @@ function paintLines(){
   const el=sIn.querySelector('#lines');if(!el)return;
   el.innerHTML=cart.map((l,i)=>`<div class="ln">
     <div class="ln-th">${photoOf(l)?`<img src="${photoOf(l)}" alt="">`:ph(l)}</div>
-    <div class="ln-b"><div class="nm">${l.name}</div>
+    <div class="ln-b"><div class="nm">${esc(lineTitle(l))}</div>
       ${isCount(l)?`<div class="un">${lineQty(l)}</div>`
         :`<button class="un un-edit" data-e="${i}">${lineQty(l)} <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z"/></svg></button>`}</div>
     <div class="ln-r">
       <div class="qty"><button class="qbtn" data-m="${i}" aria-label="Менше">−</button><button class="qbtn" data-p="${i}" aria-label="Більше">+</button></div>
       <div class="ln-p">${money(lineSum(l))}</div>
     </div>
-    <button class="ln-x" data-x="${i}" aria-label="Прибрати ${l.name}">
+    <button class="ln-x" data-x="${i}" aria-label="Прибрати ${esc(lineTitle(l))}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
     ${canFry(l)?`<button class="fry-chip${l.fry?' on':''}" data-f="${i}" aria-pressed="${!!l.fry}">${l.fry?'На мангалі':'На мангал'} · +${money(fryCostOf(l))}</button>`:''}</div>`).join('');
@@ -1944,7 +1994,7 @@ function openStatus(startStatus){
 
     <div class="box">
       ${o.lines.length
-        ? o.lines.map(l=>`<div class="sum"><span>${l.name} · ${lineQty(l)}${l.fry?' · на мангалі':''}</span><span>${money(l.sum)}</span></div>`).join('')
+        ? o.lines.map(l=>`<div class="sum"><span>${esc(lineTitle(l))} · ${lineQty(l)}${l.fry?' · на мангалі':''}</span><span>${money(l.sum)}</span></div>`).join('')
         : `<p class="hint" style="margin:0 0 6px">Склад замовлення видно лише на тому пристрої, з якого його оформили.</p>`}
       ${o.fry?`<div class="sum"><span>Смаження · ${wLabel(o.fg)}</span><span>${money(kop(o.fg/1000*FRY_RATE))}</span></div>`:''}
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:10px;border-top:1px solid var(--line)">
@@ -2017,7 +2067,7 @@ function saveLast(o){
   try{localStorage.setItem(LAST_KEY,JSON.stringify({
     no:o.no, shop:o.shop, total:o.total, when:o.when, mode:o.mode,
     fry:!!o.fry, fg:o.fg||0,
-    lines:(o.lines||[]).map(l=>({name:l.name,grp:l.grp,unit:l.unit,g:l.g,sum:l.sum,fry:!!l.fry})),
+    lines:(o.lines||[]).map(l=>({name:l.name,grp:l.grp,unit:l.unit,g:l.g,sum:l.sum,fry:!!l.fry,...(l.v?{v:l.v}:{})})),
     at:Date.now()
   }))}catch(e){}
 }
@@ -2271,7 +2321,7 @@ async function loadMyOrders(){
             <span class="ho-st${o.status==='done'?' done':''}">${o.label||''}</span>
             <span class="ho-d">${fmtDate(o.createdAt)}</span>
           </div>
-          <div class="ho-l">${(o.lines||[]).map(l=>esc(l.name)+' · '+lineQty(l)).join('<br>')}</div>
+          <div class="ho-l">${(o.lines||[]).map(l=>esc(lineTitle(l))+' · '+lineQty(l)).join('<br>')}</div>
           <div class="ho-f">
             <span class="ho-sum">${money(o.total)}</span>
             <button class="ho-again" ${(o.lines||[]).length?'':'disabled'} data-again='${encodeURIComponent(JSON.stringify(o.lines||[]))}'>Повторити</button>
@@ -2292,10 +2342,14 @@ function repeatOrder(lines){
     const it=ITEMS.find(i=>i.name===l.name&&i.grp===l.grp)||ITEMS.find(i=>i.id===l.id);
     if(!it){skipped.push(l.name);return}
     const g=isCount(it)? Math.max(1,l.g) : Math.max(it.minG,l.g);
-    const ex=cart.find(c=>c.id===it.id);
+    /* Той самий соус, що й минулого разу — якщо він досі є в списку */
+    const vs=variantsOf(it);
+    const v=vs&&l.v&&vs.list.some(x=>x[0]===l.v)? l.v : '';
+    const ex=cart.find(c=>c.id===it.id&&(c.v||'')===v);
     if(ex) ex.g+=g;
     else cart.push({id:it.id,name:it.name,grp:it.grp,price:it.price,unit:it.unit,cat:it.cat,minG:it.minG,g,
-                    fry:!!l.fry&&canFry(it)});   // що смажили минулого разу
+                    fry:!!l.fry&&canFry(it),     // що смажили минулого разу
+                    ...(v?{v}:{})});
     added++;
   });
   paintBar();
