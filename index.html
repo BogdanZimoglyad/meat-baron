@@ -30,7 +30,10 @@
 }
 *{box-sizing:border-box}
 html{background:#0b0909}
-html,body{margin:0;padding:0;overflow-x:hidden;min-height:100%}
+/* clip, а не hidden: hidden робить body окремим контейнером прокрутки,
+   і position:sticky переставав працювати — шапка й бічні колонки
+   їхали разом зі сторінкою. hidden лишається для старих браузерів. */
+html,body{margin:0;padding:0;overflow-x:hidden;overflow-x:clip;min-height:100%}
 html{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
 body{overflow-wrap:anywhere;word-break:normal}
 /* Дим на всю сторінку: картки непрозорі, тож він видний лише по краях
@@ -132,7 +135,7 @@ a{color:inherit}
 .tag{border:1px solid var(--line-2);border-radius:999px;padding:5px 12px;font-size:12px;color:var(--bone)}
 
 /* search + nav */
-.tools{position:sticky;top:59px;z-index:30;padding:12px 0 0;
+.tools{position:relative;z-index:30;padding:12px 0 0;   /* не прилипає: на телефоні зайняла б пʼяту частину екрана */
   background:none}   /* була темна підкладка — лишалась прямокутником поверх диму */
 .search{display:flex;align-items:center;gap:9px;background:var(--coal);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
 .search input{border:none;background:none;outline:none;flex:1;min-width:0}
@@ -1286,7 +1289,17 @@ function open(html){
 /* Опитування статусу глушимо тут, а не в обгортці нижче: інакше воно
    лишалося жити після закриття тапом по фону — обробник фону тримав
    посилання на стару функцію і опитував сервер вічно. */
-function close(){clearInterval(poll);pollTick=null;clearInterval(loginPoll);veil.classList.remove('on');sheet.classList.remove('on');unlockScroll()}
+function close(){clearInterval(poll);pollTick=null;clearInterval(loginPoll);veil.classList.remove('on');sheet.classList.remove('on');unlockScroll();
+  if(reloadPending&&!cart.length) location.reload();   // нова версія сайту чекала, поки людина закінчить
+}
+/* Вийшла нова версія сайту. Перезавантажуємо сторінку лише коли людина
+   нічого не робить: раніше це траплялося посеред оформлення, і кошик,
+   який живе лише в памʼяті сторінки, зникав. */
+let reloadPending=false;
+function reloadWhenIdle(){
+  if(sheet.classList.contains('on')||cart.length) reloadPending=true;
+  else location.reload();
+}
 veil.onclick=close;
 document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
 
@@ -1911,6 +1924,9 @@ function openCheckout(){
   /* Що смажити — вирішено ще в кошику, на кожній позиції окремо.
      Тут це можна переграти, не вертаючись назад. */
   fryWanted=fryGrams()>0;                // без мангала можна забирати з відкриття
+  /* Час могли обрати годину тому, а вкладка весь цей час була відкрита —
+     слот уже минув. Раніше на точку йшло «Сьогодні · 16:00–17:00» о 19:00. */
+  validateWhen(mode);
   /* Контакти тримаємо в змінних, бо draw() перемальовує форму цілком.
      Без цього людина вводила імʼя й телефон, вмикала мангал — і поля
      порожніли. Те саме було при зміні оплати, точки й часу. */
@@ -2024,6 +2040,17 @@ function openCheckout(){
         e.textContent=nm.length<2?'Вкажіть імʼя.':'Вкажіть коректний номер телефону.';
         e.style.display='block';return}
       if(mode==='delivery'&&addr.length<5){const e=sIn.querySelector('#err');e.textContent='Вкажіть адресу доставки.';e.style.display='block';return}
+      /* Поки заповнювали форму, обраний слот міг минути — не відправляємо
+         мовчки інший час, а показуємо, що змінилось */
+      if(pickWhen){
+        const was=pickWhen; validateWhen(mode);
+        if(!pickWhen){
+          draw();
+          const e=sIn.querySelector('#err');
+          if(e){e.textContent=`Час «${was.label}» уже минув — ставимо «Якнайшвидше». Або оберіть інший час.`;e.style.display='block'}
+          return;
+        }
+      }
       const payload={shop,shopName:SHOPS[shop][0],mode,addr,fry,fg,pay,total,nm,tel,note:orderNote,when:whenLabel(mode),lines:cart.map(l=>({...l,sum:lineSum(l)}))};
       btn.disabled=true;btn.textContent='Відправляємо…';
       /* Замовлення не пішло — кошик лишається, людина бачить чому.
@@ -2495,7 +2522,7 @@ if('serviceWorker' in navigator){
       reg.addEventListener('updatefound',()=>{
         const sw=reg.installing;
         sw&&sw.addEventListener('statechange',()=>{
-          if(sw.state==='activated'&&navigator.serviceWorker.controller) location.reload();
+          if(sw.state==='activated'&&navigator.serviceWorker.controller) reloadWhenIdle();
         });
       });
       setInterval(()=>reg.update(), 60*60*1000);
