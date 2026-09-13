@@ -25,7 +25,7 @@ const crypto = require('crypto');
 /* Прайс, правила рахунку і список точок — той самий файл, що підключає
    сайт. Сервер не вірить ні сумі, ні назві точки з браузера. */
 const CATALOG = require('./catalog.js');
-const { FRY_RATE, MIN_G, kop, lineSum, fryableG, canFry } = CATALOG;
+const { FRY_RATE, MIN_G, kop, lineSum, fryableG, canFry, countUnitOf } = CATALOG;
 const CATALOG_SHOPS = CATALOG.SHOPS;
 const byId = new Map(CATALOG.ITEMS.map(it => [it.id, it]));
 
@@ -330,7 +330,10 @@ bot.onText(/\/whoami/, msg => {
 /* ---------- текст замовлення ---------- */
 function orderText(o) {
   const lines = o.lines.map(l => {
-    const qty = l.unit === 'шт' ? l.g + ' шт'
+    /* Фритюр — порціями з вагою: кухні треба знати, скільки грамів
+       відпускати, а «2 шт» цього не каже. */
+    const u = countUnitOf(l);
+    const qty = l.unit === 'шт' ? (u ? `${l.g} ${u.s}${u.g ? ` (${l.g * u.g} г)` : ''}` : l.g + ' шт')
               : l.unit === 'пак' ? l.g + ' × 1 кг'
               : wLabel(l.g);
     /* Вогник біля позиції — щоб оператор бачив, що саме на мангал.
