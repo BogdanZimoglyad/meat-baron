@@ -519,6 +519,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .cart-fry b{display:block;font-weight:500;font-size:13.5px}
 .cart-fry span{display:block;font-size:12px;color:var(--smoke)}
 .cf-sum{font-family:'Oswald';font-size:15px;color:var(--ember-hot);flex:0 0 auto}
+.tot-sub{display:block;font-size:12px;color:var(--smoke);margin-top:2px}
 /* «на мангал» у рядку кошика: вибір робиться на кожній позиції окремо */
 .fry-chip{margin:-4px 0 0 55px;padding:3px 10px;border:1px solid var(--line-2);border-radius:999px;
   background:none;color:var(--smoke);font-size:11.5px;line-height:1.5;white-space:nowrap;transition:.14s}
@@ -1680,6 +1681,12 @@ function lineQty(l){
   return wLabel(l.g);
 }
 function goodsTotal(){return kop(cart.reduce((s,l)=>s+lineSum(l),0))}
+/* Смаження рахується, лише коли набралось що смажити (від 200 г) — як і на сервері */
+const fryTotal=()=>{const g=fryGrams();return g>=MIN_G?kop(g/1000*FRY_RATE):0};
+/* Разом у кошику й на кнопці знизу — товари разом зі смаженням. Раніше там була
+   лише сума товарів, а смаження окремо з приміткою «підсумок при оформленні». */
+const cartTotal=()=>kop(goodsTotal()+fryTotal());
+const cartSub=()=>fryTotal()?`товари ${money(goodsTotal())} + смаження ${money(fryTotal())}`:'';
 /* Рахуємо лише те, що позначили. Раніше смаження було одним вимикачем
    на все замовлення: людина хотіла мангал для мʼяса, а платила ще й за
    сир та овочі, які збиралася їсти так. */
@@ -1715,7 +1722,7 @@ function paintBar(){
   bar.hidden=!cart.length;
   const n=cart.length;
   document.getElementById('barL').textContent=`Кошик · ${n} ${plural(n,['позиція','позиції','позицій'])}`;   // 21 позиція, а не «21 позицій»
-  document.getElementById('barR').textContent=money(goodsTotal());
+  document.getElementById('barR').textContent=money(cartTotal());
   saveCart();            // paintBar кличуть після кожної зміни кошика — тут і зберігаємо
 }
 
@@ -1782,11 +1789,11 @@ function openCart(){
   ${fg>=MIN_G?`<div class="cart-fry">
     <div>
       <b>Посмажити на мангалі</b>
-      <span>до смаження ${wLabel(fg)}</span>
+      <span id="cartFryG">до смаження ${wLabel(fg)}</span>
     </div>
-    <span class="cf-sum">+${money(fryCost)}</span>
+    <span class="cf-sum" id="cartFry">+${money(fryCost)}</span>
   </div>
-  <p class="cart-hint">Підсумок побачите при оформленні.</p>`
+  `
   : fryLines().length?`<p class="cart-hint">Смаження вимкнене — поставте галочку, і посмажимо на мангалі.</p>`:''}
 
   ${upsellGrid()}
@@ -1794,7 +1801,7 @@ function openCart(){
   <span class="lbl">Коментар до замовлення</span>
   <textarea class="fld cart-note" id="note" rows="2" placeholder="Побажання: гостріше, без цибулі, подзвоніть за 10 хв…">${orderNote}</textarea>
 
-  <div class="tot"><span style="color:var(--smoke);font-size:13px">Товари</span><b id="cartTot">${money(goodsTotal())}</b></div>
+  <div class="tot"><span style="color:var(--smoke);font-size:13px">Разом<small class="tot-sub" id="cartSub">${cartSub()}</small></span><b id="cartTot">${money(cartTotal())}</b></div>
   <p class="weight-note">${WEIGHT_NOTE}</p>
   <button class="cta" id="toCheckout">Оформити замовлення</button>
   <button class="cta ghost" onclick="close_()">Додати ще</button>`);
@@ -1851,7 +1858,10 @@ function paintLines(){
       row.querySelector('.ln-q').textContent=lineQty(l);
       row.querySelector('.ln-p').textContent=money(lineSum(l));
       const fc=row.querySelector('.fry-t b'); if(fc) fc.textContent=`+${money(fryCostOf(l))}`;
-      const t=sIn.querySelector('#cartTot'); if(t) t.textContent=money(goodsTotal());
+      const t=sIn.querySelector('#cartTot'); if(t) t.textContent=money(cartTotal());
+      const ts=sIn.querySelector('#cartSub'); if(ts) ts.textContent=cartSub();
+      const cf=sIn.querySelector('#cartFry'); if(cf) cf.textContent='+'+money(fryTotal());
+      const cg=sIn.querySelector('#cartFryG'); if(cg) cg.textContent='до смаження '+wLabel(fryGrams());
       paintBar();
     };
     rg.onchange=()=>{ paintBar(); openCart() };
