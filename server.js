@@ -25,7 +25,7 @@ const crypto = require('crypto');
 /* Прайс, правила рахунку і список точок — той самий файл, що підключає
    сайт. Сервер не вірить ні сумі, ні назві точки з браузера. */
 const CATALOG = require('./catalog.js');
-const { FRY_RATE, MIN_G, kop, lineSum, fryableG, canFry, countUnitOf } = CATALOG;
+const { FRY_RATE, MIN_G, kop, lineSum, fryableG, canFry, countUnitOf, variantsOf, priceOf, lineTitle } = CATALOG;
 const CATALOG_SHOPS = CATALOG.SHOPS;
 const byId = new Map(CATALOG.ITEMS.map(it => [it.id, it]));
 
@@ -339,7 +339,7 @@ function orderText(o) {
     /* Вогник біля позиції — щоб оператор бачив, що саме на мангал.
        Смаження тепер обирають на кожній позиції окремо, і одного
        підсумку внизу вже не досить. */
-    return `• ${esc(l.name)} — ${qty} — ${money(l.sum)}${l.fry ? ' 🔥' : ''}`;
+    return `• ${esc(lineTitle(l))} — ${qty} — ${money(l.sum)}${l.fry ? ' 🔥' : ''}`;
   }).join('\n');
 
   const fry = o.fry
@@ -466,10 +466,22 @@ app.post('/api/order', async (req, res) => {
     if (!(q >= minQ) || q > maxQ) {
       return res.status(400).json({ error: `Некоректна кількість: ${it.name}` });
     }
+    /* Різновид (який саме соус) — лише зі списку в catalog.js. Сторінка
+       зі старого кеша різновиду не надсилає: такий рядок приймаємо, як
+       і раніше, просто без назви соусу. */
+    let v = '';
+    const vs = variantsOf(it);
+    if (vs && raw.v) {
+      v = String(raw.v);
+      if (!vs.list.some(x => x[0] === v)) {
+        return res.status(400).json({ error: `Такого різновиду немає: ${it.name}` });
+      }
+    }
     lines.push({
       name: it.name, grp: it.grp, cat: it.cat, unit: it.unit, id: it.id,
-      g: q, sum: lineSum({ unit: it.unit, price: it.price, g: q }),
-      fry: canFry(it) && (perLine ? !!raw.fry : !!b.fry)
+      g: q, sum: lineSum({ unit: it.unit, price: priceOf(it, v), g: q }),   // у соусів ціна своя
+      fry: canFry(it) && (perLine ? !!raw.fry : !!b.fry),
+      ...(v ? { v } : {})
     });
   }
 
