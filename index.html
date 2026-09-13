@@ -257,6 +257,11 @@ a{color:inherit}
    Поле 16 px — щоб страва не впиралася в край: вирізані знімки
    обрізані по товару майже впритул. */
 .hero-img img{width:100%;aspect-ratio:4/3;padding:16px;object-fit:contain;display:block}
+/* Фото з власним фоном (jpg): підкладка чорна, як сам фон, і без полів —
+   інакше чорний квадрат знімка сидить у коричневій рамці. Вирізаним png
+   поля потрібні, щоб страва не впиралась у край. */
+.hero-img.has-bg{background:#000}
+.hero-img.has-bg img{padding:0}
 .hero-img svg{width:44px;height:44px;opacity:.28}
 .lbl{font-size:12px;color:var(--smoke);margin:16px 0 8px;display:block}
 .wgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
@@ -882,7 +887,14 @@ const PHOTO={
  'Ковбаски/Ковбаски гриль асорті':'kovb-asorti.png',
  'Ковбаски/Куряча з пивом':'kovb-kur-pyvo.png',
  'Фритюр меню/Картопля по-селянськи':'kartoplya-po-selyansky.png',
- 'Овочі/Гриби печериці':'hryby.png'
+ 'Овочі/Гриби печериці':'hryby.png',
+ /* Фото з фоном, без вирізання — так попросив власник. jpg, бо фон
+    непрозорий і png важив би вдесятеро більше. Квадрат 640 зробив
+    tools/square.ps1: доставляє полотно кольором фону, нічого не ріже. */
+ 'Качка/Качка гриль':'kachka-hryl.jpg',
+ 'Сири/Халумі':'halumi.jpg',
+ 'Чевапчічі/З сиром':'chevap-syr.jpg',
+ 'Чевапчічі/З грибами':'chevap-hryby.jpg'
 };
 const photoOf=it=>{
   const k=PHOTO[it.grp+'/'+it.name]||PHOTO[it.name];
@@ -1281,7 +1293,7 @@ function openItem(id, editIdx){
     : [0,1,2,3].map(k=>it.minG+k*step)
         .map(v=>v<1000?Math.round(v/50)*50:Math.round(v/100)*100);
   open(`<div class="grab-zone"><div class="grab"></div></div>
-  <div class="hero-img">${photoOf(it)?`<img src="${photoOf(it)}" alt="${it.name}">`:ph(it,1)}</div>
+  <div class="hero-img${/\.jpe?g$/.test(photoOf(it)||'')?' has-bg':''}">${photoOf(it)?`<img src="${photoOf(it)}" alt="${it.name}">`:ph(it,1)}</div>
   <div class="sh-h"><h3>${it.name}</h3><button class="x" onclick="close_()">✕</button></div>
   <p class="hint" style="margin-top:-6px">${it.cat==='ready'?'Готовий продукт. Ціна за 100 г.':(it.cat==='extra'?'Ціна за 100 г — '+money(it.price)+'.':'Мариноване мʼясо. Ціна за 100 г — '+money(it.price)+'.')}</p>
   ${descOf(it)?`<p class="hint sh-desc">${descOf(it)}</p>`:''}
