@@ -1649,6 +1649,8 @@ function lineQty(l){
     return `${l.g} ${plural(l.g,u.w)}${u.g?' · '+(l.g*u.g)+' г':''}`;
   }
   if(l.unit==='пак') return l.g+' × '+packLabel(l);
+  /* Штучне на вагу (картопля з салом): просять штуками, платять за вагу */
+  const por=portionOf(l); if(por) return `${Math.round(l.g/por)} шт · ≈${wLabel(l.g)}`;
   return wLabel(l.g);
 }
 function goodsTotal(){return kop(cart.reduce((s,l)=>s+lineSum(l),0))}
@@ -1738,13 +1740,14 @@ function openCart(){
      шторку, і поле з текстом зникне разом зі старою розміткою. */
   sIn.querySelector('#toCheckout').onclick=()=>{if(nt)orderNote=nt.value;upsellGate(openCheckout)};
 }
-/* Повзунок ваги в рядку кошика. Крок — 50 г, у штучних на вагу
-   (картопля з салом) — вага однієї штуки. Межі — як у картці товару;
-   якщо вже набрали більше за 6 кг, верхня межа — поточна вага. */
+/* Повзунок ваги в рядку кошика, крок 50 г. Межі — як у картці товару;
+   якщо вже набрали більше за 6 кг, верхня межа — поточна вага.
+   Штучному на вагу (картопля з салом) повзунка немає: його просять
+   штуками, тож лишаються −/+ по одній штуці. */
 function sliderOf(l,i){
-  const por=portionOf(l), lo=minOf(l), hi=Math.max(6000,l.g);
+  const lo=minOf(l), hi=Math.max(6000,l.g);
   return `<div class="ln-rg"><span>${wLabel(lo)}</span>
-    <input type="range" data-r="${i}" min="${lo}" max="${hi}" step="${por||50}" value="${l.g}"
+    <input type="range" data-r="${i}" min="${lo}" max="${hi}" step="50" value="${l.g}"
       aria-label="Вага: ${esc(lineTitle(l))}" style="${sliderFill(l.g,lo,hi)}">
     <span>${wLabel(hi)}</span></div>`;
 }
@@ -1766,7 +1769,7 @@ function paintLines(){
     <button class="ln-x" data-x="${i}" aria-label="Прибрати ${esc(lineTitle(l))}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
-    ${isCount(l)?'':sliderOf(l,i)}
+    ${isCount(l)||portionOf(l)?'':sliderOf(l,i)}
     ${canFry(l)?`<button class="fry-chip${l.fry?' on':''}" data-f="${i}" aria-pressed="${!!l.fry}">${l.fry?'На мангалі':'На мангал'} · +${money(fryCostOf(l))}</button>`:''}</div>`).join('');
   /* Повзунок ваги прямо в кошику: «+» додає лише по 100 г, і набрати 3 кг
      було довго. Поки тягнуть — міняємо лише цифри рядка й суму, без

@@ -25,7 +25,7 @@ const crypto = require('crypto');
 /* Прайс, правила рахунку і список точок — той самий файл, що підключає
    сайт. Сервер не вірить ні сумі, ні назві точки з браузера. */
 const CATALOG = require('./catalog.js');
-const { FRY_RATE, MIN_G, kop, lineSum, fryableG, canFry, countUnitOf, variantsOf, priceOf, lineTitle, packLabel } = CATALOG;
+const { FRY_RATE, MIN_G, kop, lineSum, fryableG, canFry, countUnitOf, variantsOf, priceOf, lineTitle, packLabel, portionOf } = CATALOG;
 const CATALOG_SHOPS = CATALOG.SHOPS;
 const byId = new Map(CATALOG.ITEMS.map(it => [it.id, it]));
 
@@ -367,6 +367,7 @@ function orderText(o) {
     const u = countUnitOf(l);
     const qty = l.unit === 'шт' ? (u ? `${l.g} ${u.s}${u.g ? ` (${l.g * u.g} г)` : ''}` : l.g + ' шт')
               : l.unit === 'пак' ? l.g + ' × ' + packLabel(l)
+              : portionOf(l) ? `${Math.round(l.g / portionOf(l))} шт (≈${wLabel(l.g)})`   // картопля з салом: штуками, але на вагу
               : wLabel(l.g);
     /* Вогник біля позиції — щоб оператор бачив, що саме на мангал.
        Смаження тепер обирають на кожній позиції окремо, і одного
