@@ -1403,6 +1403,10 @@ function openItem(id, editIdx){
   const MAXG=6000;
   const por=portionOf(it);                       // вага однієї штуки, якщо є
   let g=editing? Math.max(cart[editIdx].g,it.minG) : Math.max(1000,it.minG);
+  /* Штучне на вагу (картопля з салом): поле й повзунок рахують штуками,
+     інакше можна було ввести 1000 г і отримати «3 шт · ≈1 кг». */
+  const k=por||1, lo=por?Math.max(1,Math.ceil(it.minG/por)):it.minG, hiQ=Math.floor(MAXG/k);
+  if(editing&&por) g=Math.max(por,Math.round(g/por)*por);
   if(!editing&&it.minG>1000) g=it.minG;
   if(!editing&&por) g=Math.max(por,Math.round(1000/por)*por);   // найближче ціле число штук
   const step=por||(it.minG>=1000?500:(it.minG>=500?250:200));
@@ -1415,20 +1419,20 @@ function openItem(id, editIdx){
   <div class="sh-h"><h3>${it.name}</h3><button class="x" onclick="close_()">✕</button></div>
   <p class="hint" style="margin-top:-6px">${sheetLead(it)}${it.cat==='raw'?`Ціна за 100 г сирого мʼяса — ${money(it.price)}. Посмажимо на мангалі за ${FRY_RATE} ₴/кг.`:`Ціна за 100 г — ${money(it.price)}.`}</p>
   ${descOf(it)?`<p class="hint sh-desc">${descOf(it)}</p>`:''}
-  <span class="lbl">Оберіть вагу</span>
+  <span class="lbl">${por?'Оберіть кількість':'Оберіть вагу'}</span>
   <div class="wgrid">${quick.map(v=>`<button class="w" data-g="${v}" aria-pressed="${v===g}">${wLabel(v)}${por?`<i>${v/por} шт</i>`:''}</button>`).join('')}</div>
   <div class="rowline">
-    <input type="range" id="rg" min="${it.minG}" max="${MAXG}" step="50" value="${g}" aria-label="Вага">
-    <span class="wbox"><input id="wv" type="number" inputmode="numeric" min="${it.minG}" max="${MAXG}" step="10" value="${g}" aria-label="Вага у грамах"><i>г</i></span>
+    <input type="range" id="rg" min="${lo*k}" max="${hiQ*k}" step="${por||50}" value="${g}" aria-label="${por?'Кількість':'Вага'}">
+    <span class="wbox"><input id="wv" type="number" inputmode="numeric" min="${lo}" max="${hiQ}" step="${por?1:10}" value="${g/k}" aria-label="${por?'Кількість, шт':'Вага у грамах'}"><i>${por?'шт':'г'}</i></span>
   </div>
   <div class="tot"><span style="color:var(--smoke);font-size:13px">Разом</span><b id="tv">${money(it.price*g/100)}</b></div>
   <button class="cta" id="addBtn">${editing?'Зберегти':'Додати в кошик'}</button>
-  <p class="hint">Мінімальна вага — ${it.minG} г, можна ввести свою. ${canFry(it)?'Смаження на мангалі позначається в кошику.':''}</p>`);
+  <p class="hint">${por?`Продається штуками, ціна — за вагу: одна приблизно ${por} г. Точну суму порахуємо, коли зважимо.`:`Мінімальна вага — ${it.minG} г, можна ввести свою.`} ${canFry(it)?'Смаження на мангалі позначається в кошику.':''}</p>`);
   const rg=sIn.querySelector('#rg'),wv=sIn.querySelector('#wv'),tv=sIn.querySelector('#tv');
   const paint=(syncField)=>{
     tv.textContent=money(it.price*g/100);
     rg.value=Math.min(g,MAXG);
-    if(syncField!==false) wv.value=g;
+    if(syncField!==false) wv.value=g/k;
     sIn.querySelectorAll('.w').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.g===g));
   };
   sIn.querySelectorAll('.w').forEach(b=>b.onclick=()=>{g=+b.dataset.g;paint()});
@@ -1436,7 +1440,7 @@ function openItem(id, editIdx){
   wv.oninput=()=>{
     const v=parseInt(wv.value,10);
     if(!Number.isFinite(v)) return;
-    g=Math.min(Math.max(v,it.minG),MAXG);
+    g=por? Math.min(Math.max(v,lo),hiQ)*por : Math.min(Math.max(v,it.minG),MAXG);
     paint(false);
   };
   wv.onblur=()=>{paint()};
@@ -1591,7 +1595,7 @@ function upsellGate(next){
   sIn.querySelector('.up-scroll').onclick=e=>{
     const b=e.target.closest('[data-u]'); if(!b) return;
     const item=ITEMS.find(i=>i.id===b.dataset.u);
-    if(variantsOf(item)){ openVariants(item,openCart); return }   // соус — спершу який
+    if(variantsOf(item)){ openVariants(item,next); return }   // соус — спершу який; «Готово» веде далі до оформлення, куди людина й ішла
     if(b.classList.contains('on')){
       const i=cart.findIndex(l=>l.id===item.id);
       if(i>-1) cart.splice(i,1);
@@ -1719,6 +1723,7 @@ function restoreCart(){
     if(vs&&!v) continue;                                // соус, якого вже немає
     let g=Math.floor(Number(x.g)||0);
     g=isCount(it)? Math.min(99,Math.max(1,g)) : Math.min(20000,Math.max(it.minG,g));   // новий мінімум ваги
+    if(portionOf(it)) g=Math.max(portionOf(it),Math.round(g/portionOf(it))*portionOf(it));   // картопля з салом — цілими штуками
     cart.push({id:it.id,name:it.name,grp:it.grp,price:priceOf(it,v),unit:it.unit,cat:it.cat,minG:it.minG,g,
                ...(x.fry&&canFry(it)?{fry:true}:{}),...(v?{v}:{})});
   }
@@ -1966,7 +1971,7 @@ function pickTimeSheet(mode,back){
   const draw=()=>{
     const d=days[sel], list=slotsFor(d,mode);
     sIn.innerHTML=`<div class="grab-zone"><div class="grab"></div></div>
-    <div class="sh-h"><h3>Коли забрати</h3><button class="x" onclick="close_()">✕</button></div>
+    <div class="sh-h"><h3>${mode==='delivery'?'Коли доставити':'Коли забрати'}</h3><button class="x" onclick="close_()">✕</button></div>
 
     <button class="asap-btn" data-asap="1" aria-pressed="${!pickWhen}">
       <span class="bolt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M13 3 5.5 13.5H11l-1 7.5L18.5 10H13z"/></svg></span>
@@ -2070,7 +2075,7 @@ function openCheckout(){
     ${me
       /* Номер підтверджений Telegram, і саме за ним збирається історія.
          Правити його тут нема сенсу: сервер усе одно візьме свій. */
-      ? `<input class="fld" id="tel" inputmode="tel" value="${esc(me.tel||'')}" readonly>
+      ? `<input class="fld" id="tel" inputmode="tel" value="${esc(fmtPhone(me.tel)||me.tel||'')}" readonly>
          <p class="hint" style="margin:6px 0 0">Номер підтверджено Telegram. <button class="lnk" id="ckOut" type="button">Це не я</button></p>`
       : `<input class="fld" id="tel" placeholder="+380 __ ___ __ __" inputmode="tel" autocomplete="tel" value="${esc(telV)}">
          <p class="hint" style="margin:6px 0 0"><button class="lnk" id="ckIn" type="button">Увійти через Telegram</button> — щоб не вводити щоразу і бачити свої замовлення.</p>`}
@@ -2506,7 +2511,7 @@ function openCabinet(){
   if(!me) return openLogin();
   open(`<div class="grab-zone"><div class="grab"></div></div>
   <div class="sh-h"><h3>${esc(firstName(me.name))||'Мій кабінет'}</h3><button class="x" onclick="close_()">✕</button></div>
-  <p class="hint" style="margin-top:-4px">${esc(me.tel||'')} · номер підтверджено Telegram</p>
+  <p class="hint" style="margin-top:-4px">${esc(fmtPhone(me.tel)||me.tel||'')} · номер підтверджено Telegram</p>
 
   <span class="lbl">Імʼя</span>
   <input class="fld" id="myNm" placeholder="Як до вас звертатися" autocomplete="name" value="${esc(me.name||'')}">
