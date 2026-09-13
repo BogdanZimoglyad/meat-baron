@@ -377,6 +377,12 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .var-n{min-width:18px;text-align:center;font-family:'Oswald';font-size:15px;color:var(--bone)}
 .var-pr{margin-left:8px;font-style:normal;font-family:'Oswald';font-size:14px;font-weight:400;color:var(--ember-hot)}
 .ln-p{font-family:'Oswald';font-size:15px;min-width:58px;text-align:right}
+/* повзунок ваги під рядком кошика — під назвою, як і чип мангала */
+.ln-rg{flex:0 0 calc(100% - 55px);display:flex;align-items:center;gap:10px;margin:0 0 0 55px;padding:4px 0 2px;
+  font-size:11px;color:var(--smoke);white-space:nowrap}
+.ln-rg input{flex:1;min-width:0;height:5px;touch-action:none}
+.ln-rg input::-webkit-slider-thumb{width:24px;height:24px;box-shadow:0 0 0 4px rgba(196,52,42,.25)}
+.ln-rg input::-moz-range-thumb{width:24px;height:24px;box-shadow:0 0 0 4px rgba(196,52,42,.25)}
 
 /* checkout */
 .seg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px}
@@ -1034,7 +1040,8 @@ const money=n=>kop(n).toFixed(2).replace(/\.00$/,'')+' ₴';
 const WEIGHT_NOTE='Сума орієнтовна — точну порахуємо, коли зважимо замовлення. Ціна за 100 г не зміниться.';
 /* Чи змінював оператор суму (коментар без суми — не зміна) */
 const adjChanged=o=>(o.adjust||[]).some(a=>a.kind!=='note');
-const wLabel=g=>g>=1000?(g/1000).toFixed(g%1000?1:0)+' кг':g+' г';
+/* 2.55 кг, а не 2.5: вага йде кроком 50 г, і один знак після коми з'їдав 50 г */
+const wLabel=g=>g>=1000?(g/1000).toFixed(g%100?2:g%1000?1:0)+' кг':g+' г';
 /* заглушки: іконка за типом продукту + дим і силует бика */
 const GLYPH={
   meat:'<path d="M17.5 6.5c2 2 2 5.5-.5 8s-6 2.5-8 .5-2-5.5.5-8 6-2.5 8-.5z"/><path d="M9.5 15c-1-1-1-2.8.3-4S13 9.6 14 10.6"/><circle cx="18.6" cy="5.4" r="2.1"/>',
@@ -1717,7 +1724,7 @@ function openCart(){
   <span class="lbl">Коментар до замовлення</span>
   <textarea class="fld cart-note" id="note" rows="2" placeholder="Побажання: гостріше, без цибулі, подзвоніть за 10 хв…">${orderNote}</textarea>
 
-  <div class="tot"><span style="color:var(--smoke);font-size:13px">Товари</span><b>${money(goodsTotal())}</b></div>
+  <div class="tot"><span style="color:var(--smoke);font-size:13px">Товари</span><b id="cartTot">${money(goodsTotal())}</b></div>
   <p class="weight-note">${WEIGHT_NOTE}</p>
   <button class="cta" id="toCheckout">Оформити замовлення</button>
   <button class="cta ghost" onclick="close_()">Додати ще</button>`);
@@ -1731,13 +1738,27 @@ function openCart(){
      шторку, і поле з текстом зникне разом зі старою розміткою. */
   sIn.querySelector('#toCheckout').onclick=()=>{if(nt)orderNote=nt.value;upsellGate(openCheckout)};
 }
+/* Повзунок ваги в рядку кошика. Крок — 50 г, у штучних на вагу
+   (картопля з салом) — вага однієї штуки. Межі — як у картці товару;
+   якщо вже набрали більше за 6 кг, верхня межа — поточна вага. */
+function sliderOf(l,i){
+  const por=portionOf(l), lo=minOf(l), hi=Math.max(6000,l.g);
+  return `<div class="ln-rg"><span>${wLabel(lo)}</span>
+    <input type="range" data-r="${i}" min="${lo}" max="${hi}" step="${por||50}" value="${l.g}"
+      aria-label="Вага: ${esc(lineTitle(l))}" style="${sliderFill(l.g,lo,hi)}">
+    <span>${wLabel(hi)}</span></div>`;
+}
+/* Заливка доріжки до повзунка — щоб було видно, скільки набрано */
+const sliderFill=(v,lo,hi)=>{const p=hi>lo?Math.round((v-lo)/(hi-lo)*100):0;
+  return `background:linear-gradient(to right,var(--ember) ${p}%,rgba(240,233,222,.14) ${p}%)`};
+const paintSlider=rg=>rg.setAttribute('style',sliderFill(+rg.value,+rg.min,+rg.max));
 function paintLines(){
   const el=sIn.querySelector('#lines');if(!el)return;
   el.innerHTML=cart.map((l,i)=>`<div class="ln">
     <div class="ln-th">${photoOf(l)?`<img src="${photoOf(l)}" alt="">`:ph(l)}</div>
     <div class="ln-b"><div class="nm">${esc(lineTitle(l))}</div>
       ${isCount(l)?`<div class="un">${lineQty(l)}</div>`
-        :`<button class="un un-edit" data-e="${i}">${lineQty(l)} <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z"/></svg></button>`}</div>
+        :`<button class="un un-edit" data-e="${i}"><span class="ln-q">${lineQty(l)}</span> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z"/></svg></button>`}</div>
     <div class="ln-r">
       <div class="qty"><button class="qbtn" data-m="${i}" aria-label="Менше">−</button><button class="qbtn" data-p="${i}" aria-label="Більше">+</button></div>
       <div class="ln-p">${money(lineSum(l))}</div>
@@ -1745,7 +1766,25 @@ function paintLines(){
     <button class="ln-x" data-x="${i}" aria-label="Прибрати ${esc(lineTitle(l))}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
+    ${isCount(l)?'':sliderOf(l,i)}
     ${canFry(l)?`<button class="fry-chip${l.fry?' on':''}" data-f="${i}" aria-pressed="${!!l.fry}">${l.fry?'На мангалі':'На мангал'} · +${money(fryCostOf(l))}</button>`:''}</div>`).join('');
+  /* Повзунок ваги прямо в кошику: «+» додає лише по 100 г, і набрати 3 кг
+     було довго. Поки тягнуть — міняємо лише цифри рядка й суму, без
+     перемальовування шторки (інакше повзунок вислизав би з-під пальця);
+     коли відпустили — перемальовуємо кошик: смаження, допродаж, підсумок. */
+  el.querySelectorAll('[data-r]').forEach(rg=>{
+    const i=+rg.dataset.r, row=rg.closest('.ln');
+    rg.oninput=()=>{
+      const l=cart[i]; l.g=+rg.value;
+      paintSlider(rg);
+      row.querySelector('.ln-q').textContent=lineQty(l);
+      row.querySelector('.ln-p').textContent=money(lineSum(l));
+      const fc=row.querySelector('.fry-chip'); if(fc) fc.textContent=`${l.fry?'На мангалі':'На мангал'} · +${money(fryCostOf(l))}`;
+      const t=sIn.querySelector('#cartTot'); if(t) t.textContent=money(goodsTotal());
+      paintBar();
+    };
+    rg.onchange=()=>{ paintBar(); openCart() };
+  });
   el.onclick=e=>{
     const ed=e.target.closest('[data-e]');
     if(ed){const i=+ed.dataset.e;openItem(cart[i].id,i);return}
