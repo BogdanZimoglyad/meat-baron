@@ -26,20 +26,50 @@ meat-baron/
 
 ## Два деплої, один код
 
-| Що | Звідки | Що робить |
-|---|---|---|
-| GitHub Pages | корінь гілки `main` | сайт для клієнтів |
-| Railway | той самий корінь через `server.js` | API, Telegram-бот, дзеркало сайту |
+| Що | Адреса | Звідки | Що робить |
+|---|---|---|---|
+| GitHub Pages | https://meat-baron.kh.ua | корінь гілки `main` | сайт для клієнтів |
+| Railway | https://api.meat-baron.kh.ua | той самий корінь через `server.js` | API, Telegram-бот, дзеркало сайту |
 
 `server.js` роздає корінь репозиторію і ховає службові файли
 (`server.js`, `package.json`, `data/`, `node_modules/`) — вони віддають 404.
 
 У браузері адреса API задана в `index.html`:
 ```js
-const API='https://meat-baron-production.up.railway.app';
+const API='https://api.meat-baron.kh.ua';
 ```
-Абсолютна адреса потрібна, бо з GitHub Pages запит іде на інший домен.
-З самого Railway вона теж працює — це його ж домен.
+Абсолютна адреса потрібна, бо сайт і API живуть на різних доменах.
+Стара адреса `meat-baron-production.up.railway.app` працює й далі —
+на неї досі ходять сторінки з кешу браузера.
+
+## Домен
+
+`meat-baron.kh.ua` зареєстровано в NIC.UA, сервери імен теж NIC.UA
+(`ns10–12.uadns.com`). Записи:
+
+```
+@                    A      185.199.108.153   ┐
+@                    A      185.199.109.153   │ GitHub Pages
+@                    A      185.199.110.153   │
+@                    A      185.199.111.153   ┘
+www                  CNAME  bogdanzimoglyad.github.io.
+api                  CNAME  xjuas1uq.up.railway.app.
+_railway-verify.api  TXT    railway-verify=…  (підтвердження для Railway)
+```
+
+Файл `CNAME` у корені репозиторію каже GitHub Pages, на якому домені
+сайт. Без нього GitHub відповідає на домені 404. Старе посилання
+`bogdanzimoglyad.github.io/meat-baron/` саме перенаправляє на домен.
+
+На Railway у змінних проєкту стоїть `SITE_URL=https://meat-baron.kh.ua/`:
+з неї бот будує кнопку «Стежити» в сповіщеннях.
+
+**Сервери імен NIC.UA — окреме замовлення зі своїм терміном.** Домен
+оплачено до 2028 року, а DNS-хостинг — до 13 грудня 2026, і без
+продовження домен перестане відкриватися.
+
+Вхід, кошик і останнє замовлення браузер зберігає окремо для кожного
+домену: після переїзду всі, хто входив на github.io, входять заново.
 
 ## Запуск
 

@@ -740,7 +740,7 @@ bot.on('callback_query', async cq => {
    Хто увійшов на сайті — той уже писав нашому боту, і ми знаємо його
    чат. Тоді пишемо туди: це безкоштовно, доходить одразу і не губиться
    серед реклами, як SMS. Решті лишається SMS, поки що лише в лозі.    */
-const SITE = (process.env.SITE_URL || 'https://bogdanzimoglyad.github.io/meat-baron/').replace(/\/+$/, '/');
+const SITE = (process.env.SITE_URL || 'https://meat-baron.kh.ua/').replace(/\/+$/, '/');
 
 const NOTE = {
   accepted: o => `✅ Замовлення № ${o.no} прийнято.\n` +
