@@ -405,7 +405,10 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .pay[aria-pressed=true] .dot{border-color:var(--ember)}
 .pay[aria-pressed=true] .dot::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--ember)}
 .sum{display:flex;justify-content:space-between;font-size:13.5px;color:var(--smoke);margin-bottom:7px}
-.err{color:#F09A92;font-size:12.5px;margin-top:7px;display:none}
+.err{color:#F09A92;font-size:14px;line-height:1.45;margin-top:8px;display:none}
+/* пропущене поле на оформленні — червона рамка й підказка просто під ним */
+.fld.bad,.box.bad{border-color:var(--ember-hot);box-shadow:0 0 0 3px rgba(224,74,60,.22)}
+.fld-err{margin:7px 2px 0;color:#F09A92;font-size:14px;font-weight:500;line-height:1.45}
 
 /* status */
 .done-ic{width:56px;height:56px;border-radius:50%;background:rgba(123,168,79,.16);display:grid;place-items:center;margin:6px auto 12px}
@@ -2142,19 +2145,31 @@ function openCheckout(){
       const telDigits=normPhone(telRaw);
       const tel=telDigits.length===9?'+380'+telDigits:telRaw;
       const addr=sIn.querySelector('#addr')?sIn.querySelector('#addr').value.trim():'';
-      if(nm.length<2||telDigits.length<9){
-        const e=sIn.querySelector('#err');
-        e.textContent=nm.length<2?'Вкажіть імʼя.':'Вкажіть коректний номер телефону.';
-        e.style.display='block';return}
-      if(mode==='delivery'&&addr.length<5){const e=sIn.querySelector('#err');e.textContent='Вкажіть адресу доставки.';e.style.display='block';return}
+      /* Пропущене поле: підкидаємо до нього, обводимо червоним і пишемо
+         під ним. Раніше дрібний напис стояв унизу форми, і на телефоні
+         людина не бачила, що саме не заповнила. Порядок — як у формі. */
+      const bad=(id,text)=>{
+        sIn.querySelectorAll('.fld-err').forEach(x=>x.remove());
+        sIn.querySelectorAll('.bad').forEach(x=>x.classList.remove('bad'));
+        const f=sIn.querySelector(id); if(!f) return;
+        f.classList.add('bad');
+        const m=document.createElement('p'); m.className='fld-err'; m.textContent=text;
+        f.insertAdjacentElement('afterend',m);
+        const clear=()=>{f.classList.remove('bad');m.remove()};
+        f.addEventListener('input',clear,{once:true}); f.addEventListener('click',clear,{once:true});
+        try{f.scrollIntoView({block:'center',behavior:'smooth'})}catch(e){f.scrollIntoView()}
+        if(f.tagName==='INPUT'&&!f.readOnly) setTimeout(()=>{try{f.focus({preventScroll:true})}catch(e){}},400);
+      };
+      if(mode==='delivery'&&addr.length<5) return bad('#addr','Вкажіть адресу доставки: вулиця, будинок, квартира.');
+      if(nm.length<2) return bad('#nm','Вкажіть імʼя — так оператор знатиме, як до вас звертатися.');
+      if(telDigits.length<9) return bad('#tel','Вкажіть номер телефону повністю — оператор може передзвонити щодо замовлення.');
       /* Поки заповнювали форму, обраний слот міг минути — не відправляємо
          мовчки інший час, а показуємо, що змінилось */
       if(pickWhen){
         const was=pickWhen; validateWhen(mode);
         if(!pickWhen){
           draw();
-          const e=sIn.querySelector('#err');
-          if(e){e.textContent=`Час «${was.label}» уже минув — ставимо «Якнайшвидше». Або оберіть інший час.`;e.style.display='block'}
+          bad('#pickWhen',`Час «${was.label}» уже минув — ставимо «Якнайшвидше». Або оберіть інший час.`);
           return;
         }
       }
