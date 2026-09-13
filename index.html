@@ -906,7 +906,7 @@ const MAP_GEO={
 const mapQuery=name=>MAP_GEO[name]||encodeURIComponent(MAP_ADDR[name]||(name+', Харків'));
 const mapLink=name=>'https://www.google.com/maps/search/?api=1&query='+mapQuery(name);
 const routeLink=name=>'https://www.google.com/maps/dir/?api=1&destination='+mapQuery(name);
-const API='https://meat-baron-production.up.railway.app'; // сервер прийому замовлень
+const API='https://api.meat-baron.kh.ua'; // сервер прийому замовлень (Railway)
 /* запит із таймаутом — щоб на поганому звʼязку не висло назавжди */
 async function req(url,opts,ms){
   const ctl=new AbortController();
