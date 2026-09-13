@@ -528,6 +528,12 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .fry-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;
   font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--smoke)}
 .fry-chip.fry-all{margin:0;text-transform:none;letter-spacing:0}
+/* галочка «Посмажити» в рядку кошика — велика, щоб не проґавили */
+.fry-cb{flex:0 0 calc(100% - 55px);margin:2px 0 0 55px;display:flex;align-items:center;gap:10px;padding:4px 0;text-align:left;color:var(--bone);font-size:14px;font-weight:500}
+.fry-cb .cb{width:26px;height:26px;flex:0 0 auto;border-radius:7px;border:2px solid var(--ember-hot);display:grid;place-items:center;color:#fff;font-size:16px;line-height:1;transition:.14s}
+.fry-cb.on .cb{background:var(--ember);border-color:var(--ember)}
+.fry-cb b{font-weight:500;color:var(--ember-hot)}
+.fry-cb:not(.on) .fry-t{color:var(--smoke)}
 /* той самий вибір в оформленні — щоб не вертатися в кошик */
 .fry-row{display:flex;align-items:center;gap:11px;
   padding:9px 0 0;margin-top:9px;border-top:1px solid var(--line)}
@@ -1470,7 +1476,9 @@ function addToCart(it,g,v){
   v=v||'';
   const ex=cart.find(l=>l.id===it.id&&(l.v||'')===v);
   if(ex) ex.g+=g;
-  else cart.push({id:it.id,name:it.name,grp:it.grp,price:priceOf(it,v),unit:it.unit,cat:it.cat,minG:it.minG,g,...(v?{v}:{})});
+  /* Смаження за замовчуванням увімкнене — галочку можна зняти в кошику.
+     Раніше його треба було вмикати, і люди пропускали: забирали сире. */
+  else cart.push({id:it.id,name:it.name,grp:it.grp,price:priceOf(it,v),unit:it.unit,cat:it.cat,minG:it.minG,g,...(canFry(it)?{fry:true}:{}),...(v?{v}:{})});
   paintBar();
 }
 
@@ -1677,6 +1685,9 @@ function goodsTotal(){return kop(cart.reduce((s,l)=>s+lineSum(l),0))}
    сир та овочі, які збиралася їсти так. */
 function fryGrams(){return cart.reduce((s,l)=>s+(l.fry?fryableG(l):0),0)}
 const fryCostOf=l=>kop(fryableG(l)/1000*FRY_RATE);
+/* Підпис галочки — що саме смажимо. «Посмажити мʼясо» біля халумі звучало б дивно. */
+const FRY_WORD={'Ковбаски':'ковбаску','Чевапчічі':'чевапчічі','Сири':'сир','Овочі/Кукурудза':'кукурудзу','Овочі/Гриби печериці':'гриби','Овочі/Перець':'перець','Овочі/Картопля':'картоплю'};
+const fryLabel=l=>'Посмажити '+(l.cat==='raw'?'мʼясо':(FRY_WORD[l.grp+'/'+l.name]||FRY_WORD[l.grp]||'на мангалі'));
 /* Позиції, які взагалі можна смажити, разом з їхнім місцем у кошику */
 const fryLines=()=>cart.map((l,i)=>({l,i})).filter(x=>canFry(x.l));
 const fryAllOn=()=>{const f=fryLines();return f.length>0&&f.every(x=>x.l.fry)};
@@ -1776,7 +1787,7 @@ function openCart(){
     <span class="cf-sum">+${money(fryCost)}</span>
   </div>
   <p class="cart-hint">Підсумок побачите при оформленні.</p>`
-  : fryLines().length?`<p class="cart-hint">Позначте, що смажити: усе одразу або кожну позицію окремо.</p>`:''}
+  : fryLines().length?`<p class="cart-hint">Смаження вимкнене — поставте галочку, і посмажимо на мангалі.</p>`:''}
 
   ${upsellGrid()}
 
@@ -1827,7 +1838,7 @@ function paintLines(){
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
     ${isCount(l)||portionOf(l)?'':sliderOf(l,i)}
-    ${canFry(l)?`<button class="fry-chip${l.fry?' on':''}" data-f="${i}" aria-pressed="${!!l.fry}">${l.fry?'На мангалі':'На мангал'} · +${money(fryCostOf(l))}</button>`:''}</div>`).join('');
+    ${canFry(l)?`<button class="fry-cb${l.fry?' on':''}" data-f="${i}" role="checkbox" aria-checked="${!!l.fry}"><span class="cb" aria-hidden="true">${l.fry?'✓':''}</span><span class="fry-t">${fryLabel(l)} · <b>+${money(fryCostOf(l))}</b></span></button>`:''}</div>`).join('');
   /* Повзунок ваги прямо в кошику: «+» додає лише по 100 г, і набрати 3 кг
      було довго. Поки тягнуть — міняємо лише цифри рядка й суму, без
      перемальовування шторки (інакше повзунок вислизав би з-під пальця);
@@ -1839,7 +1850,7 @@ function paintLines(){
       paintSlider(rg);
       row.querySelector('.ln-q').textContent=lineQty(l);
       row.querySelector('.ln-p').textContent=money(lineSum(l));
-      const fc=row.querySelector('.fry-chip'); if(fc) fc.textContent=`${l.fry?'На мангалі':'На мангал'} · +${money(fryCostOf(l))}`;
+      const fc=row.querySelector('.fry-t b'); if(fc) fc.textContent=`+${money(fryCostOf(l))}`;
       const t=sIn.querySelector('#cartTot'); if(t) t.textContent=money(goodsTotal());
       paintBar();
     };
