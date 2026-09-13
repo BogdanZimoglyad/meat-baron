@@ -136,8 +136,8 @@ const LABEL = {
 };
 const NEXT_BTN = {
   new: [['accepted', '✅ Прийняти в роботу']],
-  accepted: [['cooking', '🔥 Готується']],
-  cooking: [['ready', '📦 Готове']],
+  accepted: [['cooking', '👨‍🍳 Готується']],   // 🔥 тепер у «Готове», як на сайті
+  cooking: [['ready', '🔥 Готове']],
   ready: [['done', '🤝 Видано']],
   done: []
 };
@@ -1012,7 +1012,7 @@ const NOTE = {
   accepted: o => `✅ Замовлення № ${o.no} прийнято.\n` +
     (o.when ? `Орієнтовно: ${o.when}\n` : '') +
     (o.mode === 'pickup' ? `Точка: ${o.shopName}` : 'Доставка: курʼєр звʼяжеться щодо вартості.'),
-  ready: o => `📦 Замовлення № ${o.no} готове.\n` +
+  ready: o => `🔥 Замовлення № ${o.no} готове.\n` +
     (o.mode === 'pickup' ? `Чекаємо на вас: ${o.shopName}` : 'Курʼєр уже виїжджає.')
 };
 
