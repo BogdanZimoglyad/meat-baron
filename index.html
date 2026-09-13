@@ -203,13 +203,16 @@ a{color:inherit}
   .info-row small{display:block;font-size:11px;color:var(--smoke)}
   .info-row b{display:block;font-size:13px;font-weight:500;line-height:1.4}
   .ig-sm{margin-top:10px;width:100%;justify-content:center;padding:9px 12px;font-size:13px}
-  .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  /* На ноутбуці до 1300 px середня колонка лише 490–720 px: у дві картки
+     на текст лишалось 100–140 px, і слова рвалися посередині.
+     Тож тут одна картка в ряд, дві — з 1300 px. */
+  .grid{grid-template-columns:minmax(0,1fr)}
   .ph{width:104px;height:104px}
   .about{max-width:none}
   body{padding-bottom:40px}
   .bar{max-width:none}
 }
-@media(min-width:1180px){
+@media(min-width:1300px){   /* дві картки в ряд — лише коли текстові лишається ~190 px */
   .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 /* Великий екран компʼютера. Розміри рахувалися від телефона, і на
