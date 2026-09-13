@@ -291,8 +291,9 @@ a{color:inherit}
 
 /* cart bar */
 .bar{position:fixed;left:0;right:0;bottom:0;z-index:45;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(to top,var(--char) 62%,transparent)}
-.bar-in{max-width:588px;margin:0 auto;background:var(--ember);border-radius:12px;padding:13px 16px;display:flex;align-items:center;justify-content:space-between;color:#fff;font-weight:500;box-shadow:0 10px 30px rgba(0,0,0,.5)}
-.bar-in span:last-child{font-family:'Oswald';font-size:17px}
+/* width:100% — кнопка інакше стискалась до ширини тексту, і «Кошик · 10 позицій» налазив на суму */
+.bar-in{width:100%;max-width:588px;margin:0 auto;background:var(--ember);border-radius:12px;padding:13px 16px;display:flex;align-items:center;justify-content:space-between;gap:14px;color:#fff;font-weight:500;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.bar-in span:last-child{font-family:'Oswald';font-size:17px;white-space:nowrap}
 .bar[hidden]{display:none}
 
 /* sheet */
@@ -1675,7 +1676,7 @@ function paintBar(){
   if(!cart.length){upsellShown=false;upsellAll=false}
   bar.hidden=!cart.length;
   const n=cart.length;
-  document.getElementById('barL').textContent=`Кошик · ${n} ${n===1?'позиція':n<5?'позиції':'позицій'}`;
+  document.getElementById('barL').textContent=`Кошик · ${n} ${plural(n,['позиція','позиції','позицій'])}`;   // 21 позиція, а не «21 позицій»
   document.getElementById('barR').textContent=money(goodsTotal());
 }
 
