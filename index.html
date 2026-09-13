@@ -951,6 +951,8 @@ const money=n=>kop(n).toFixed(2).replace(/\.00$/,'')+' ₴';
    стеження — погоджено з власником. Обіцянка про ціну за 100 г свідома:
    оператор міняє суму через вагу, а додане телефоном пояснює коментарем. */
 const WEIGHT_NOTE='Сума орієнтовна — точну порахуємо, коли зважимо замовлення. Ціна за 100 г не зміниться.';
+/* Чи змінював оператор суму (коментар без суми — не зміна) */
+const adjChanged=o=>(o.adjust||[]).some(a=>a.kind!=='note');
 const wLabel=g=>g>=1000?(g/1000).toFixed(g%1000?1:0)+' кг':g+' г';
 /* заглушки: іконка за типом продукту + дим і силует бика */
 const GLYPH={
@@ -2006,13 +2008,14 @@ function openStatus(startStatus){
         ? o.lines.map(l=>`<div class="sum"><span>${esc(lineTitle(l))} · ${lineQty(l)}${l.fry?' · на мангалі':''}</span><span>${money(l.sum)}</span></div>`).join('')
         : `<p class="hint" style="margin:0 0 6px">Склад замовлення видно лише на тому пристрої, з якого його оформили.</p>`}
       ${o.fry?`<div class="sum"><span>Смаження · ${wLabel(o.fg)}</span><span>${money(kop(o.fg/1000*FRY_RATE))}</span></div>`:''}
-      ${o.totalOrig!=null?`<div class="sum"><span>Було на сайті</span><span style="text-decoration:line-through">${money(o.totalOrig)}</span></div>`:''}
+      ${/* Зміни оператора: кожна окремим рядком — «+39 ₴ · додали соус», коментарі текстом */''}
+      ${adjChanged(o)?`<div class="sum"><span>На сайті</span><span>${money(o.totalOrig)}</span></div>`:''}
+      ${(o.adjust||[]).filter(a=>a.kind!=='note').map(a=>`<div class="sum"><span>${a.kind==='add'?'+':'−'} ${esc(a.note||'уточнили після зважування')}</span><span>${a.kind==='add'?'+':'−'}${money(a.amount)}</span></div>`).join('')}
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:10px;border-top:1px solid var(--line)">
-        <span style="font-size:13px">${o.totalOrig!=null?'До сплати':'Разом'}</span><b style="font-family:Oswald;font-size:21px">${money(o.total)}</b></div>
-      ${o.totalOrig!=null
-        /* Оператор уже зважив: орієнтовної суми більше немає. Якщо він
-           щось дописав — показуємо його словами, без обіцянки про вагу. */
-        ? `<p class="hint">${o.totalNote?'Оператор: '+esc(o.totalNote):'Замовлення зважили — це точна сума. Ціна за 100 г не змінилась.'}${o.mode==='delivery'?' Вартість доставки уточнить оператор.':''}</p>`
+        <span style="font-size:13px">${adjChanged(o)?'До сплати':'Разом'}</span><b style="font-family:Oswald;font-size:21px">${money(o.total)}</b></div>
+      ${(o.adjust||[]).filter(a=>a.kind==='note').map(a=>`<p class="hint" style="margin:8px 0 0">💬 Оператор: ${esc(a.note)}</p>`).join('')}
+      ${adjChanged(o)
+        ? `<p class="hint">Суму уточнив оператор.${o.mode==='delivery'?' Вартість доставки уточнить окремо.':''}</p>`
         : `<p class="hint">${o.mode==='delivery'?'Оператор зателефонує і уточнить вартість доставки. ':''}${WEIGHT_NOTE}</p>`}
     </div>
 
@@ -2040,7 +2043,7 @@ function openStatus(startStatus){
     pollTick=async()=>{
       try{const r=await req(API+'/api/order/'+o.no,null,8000);const d=await r.json();
         /* сума могла змінитись: оператор зважив замовлення */
-        if(Number.isFinite(d.total)){o.total=d.total; o.totalOrig=d.totalOrig; o.totalNote=d.totalNote||''}
+        if(Number.isFinite(d.total)){o.total=d.total; o.totalOrig=d.totalOrig; o.adjust=d.adjust||[]}
         if(d.status){draw(d.status); if(d.status==='done'){clearInterval(poll);clearLast()} showActiveBar()}
       }catch(e){}
     };
@@ -2144,7 +2147,7 @@ async function openOrder(no,known){
        памʼяті немає: покажемо лише статус і суму. */
     if(known&&String(known.no)===String(no)){
       order={no:known.no, shop:known.shopName, when:known.when||'',
-             total:known.total, totalOrig:known.totalOrig, totalNote:known.totalNote||'', mode:known.mode||'pickup',
+             total:known.total, totalOrig:known.totalOrig, adjust:known.adjust||[], mode:known.mode||'pickup',
              fry:!!known.fry, fg:known.fg||0, lines:known.lines||[]};
       return openStatus(known.status);
     }
@@ -2154,7 +2157,7 @@ async function openOrder(no,known){
     const v=readLast()||{};
     const mine=String(v.no)===String(d.no);
     order={no:d.no, shop:(mine&&v.shop)||SHOPS[shop][0], when:(mine&&v.when)||'',
-           total:d.total, totalOrig:d.totalOrig, totalNote:d.totalNote||'', mode:d.mode||'pickup',
+           total:d.total, totalOrig:d.totalOrig, adjust:d.adjust||[], mode:d.mode||'pickup',
            fry:mine&&!!v.fry, fg:(mine&&v.fg)||0, lines:(mine&&v.lines)||[]};
     openStatus(d.status);
   }catch(e){
@@ -2339,7 +2342,7 @@ async function loadMyOrders(){
           </div>
           <div class="ho-l">${(o.lines||[]).map(l=>esc(lineTitle(l))+' · '+lineQty(l)).join('<br>')}</div>
           <div class="ho-f">
-            <span class="ho-sum">${money(o.total)}${o.totalOrig!=null?`<small style="display:block;font-size:11px;color:var(--smoke);font-family:inherit">після зважування</small>`:''}</span>
+            <span class="ho-sum">${money(o.total)}${adjChanged(o)?`<small style="display:block;font-size:11px;color:var(--smoke);font-family:inherit">уточнено оператором</small>`:''}</span>
             <button class="ho-again" ${(o.lines||[]).length?'':'disabled'} data-again='${encodeURIComponent(JSON.stringify(o.lines||[]))}'>Повторити</button>
           </div>
         </div>`).join('');
