@@ -454,6 +454,10 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .fry-row b{display:block;font-weight:500;font-size:13.5px}
 .fry-row span{display:block;font-size:12px;color:var(--smoke)}
 .cart-hint{margin:8px 0 0;font-size:12px;color:var(--smoke);line-height:1.5}
+/* Попередження про орієнтовну суму — червоним і більшим: це єдине, що
+   клієнт має помітити до оформлення, інакше різниця на касі стане
+   неприємною несподіванкою. Одне на кошик, оформлення й стеження. */
+.weight-note{margin:10px 0 0;font-size:14px;font-weight:500;line-height:1.45;color:var(--ember-hot)}
 .cart-note{resize:none;line-height:1.5;font-size:16px}
 
 /* вибір дати й часу */
@@ -1627,7 +1631,7 @@ function openCart(){
   <textarea class="fld cart-note" id="note" rows="2" placeholder="Побажання: гостріше, без цибулі, подзвоніть за 10 хв…">${orderNote}</textarea>
 
   <div class="tot"><span style="color:var(--smoke);font-size:13px">Товари</span><b>${money(goodsTotal())}</b></div>
-  <p class="cart-hint">${WEIGHT_NOTE}</p>
+  <p class="weight-note">${WEIGHT_NOTE}</p>
   <button class="cta" id="toCheckout">Оформити замовлення</button>
   <button class="cta ghost" onclick="close_()">Додати ще</button>`);
   paintLines();
@@ -1907,7 +1911,7 @@ function openCheckout(){
       ${mode==='delivery'?`<div class="sum"><span>Доставка</span><span>уточнить оператор</span></div>`:''}
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:10px;border-top:1px solid var(--line)">
         <span style="font-size:13px">Разом</span><b style="font-family:Oswald;font-size:23px">${money(total)}</b></div>
-      <p class="hint">${WEIGHT_NOTE}</p>
+      <p class="weight-note">${WEIGHT_NOTE}</p>
     </div>
     <button class="cta" id="send">Підтвердити замовлення</button>`);
 
@@ -2022,7 +2026,7 @@ function openStatus(startStatus){
       ${(o.adjust||[]).filter(a=>a.kind==='note').map(a=>`<p class="hint" style="margin:8px 0 0">💬 Оператор: ${esc(a.note)}</p>`).join('')}
       ${adjChanged(o)
         ? `<p class="hint">Суму уточнив оператор.${o.mode==='delivery'?' Вартість доставки уточнить окремо.':''}</p>`
-        : `<p class="hint">${o.mode==='delivery'?'Оператор зателефонує і уточнить вартість доставки. ':''}${WEIGHT_NOTE}</p>`}
+        : `${o.mode==='delivery'?'<p class="hint">Оператор зателефонує і уточнить вартість доставки.</p>':''}<p class="weight-note">${WEIGHT_NOTE}</p>`}
     </div>
 
     <p class="ord-link">Посилання на замовлення можна зберегти або переслати:<br>
