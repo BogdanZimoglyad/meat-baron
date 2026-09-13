@@ -7,7 +7,7 @@
 
 /* рядок: [категорія, група, назва, ціна, одиниця?, мін.вага?]
    одиниця: undefined — вага (ціна за 100 г); 'шт' — фікс. ціна за штуку;
-            'пак' — упаковка 1 кг, ціна вказана за 100 г */
+            'пак' — упаковка (1 кг, якщо не вказано в PACK_SIZE), ціна за 100 г */
 const P=[
  ['raw','Свинина','Ошийок',36.19],['raw','Свинина','Мʼякоть',26.60],['raw','Свинина','Вирізка',38.00],
  ['raw','Свинина','Реберця',25.49],['raw','Свинина','Грудинка',22.49,0,350],['raw','Свинина','Стейк з ошийка',36.49,0,300],
@@ -44,7 +44,12 @@ const P=[
 
 const FRY_RATE=50;        // ₴ за кг смаження
 const MIN_G=200;          // мінімальна вага позиції
-const PACK_G=1000;        // упаковка овочів — 1 кг
+const PACK_G=1000;        // звичайна упаковка овочів — 1 кг
+/* Упаковки іншої ваги. Ключ — «Група/Назва», значення — грами.
+   Кількість у кошику рахується упаковками, «+» додає ще одну. */
+const PACK_SIZE={'Овочі/Перець':500};
+const packOf=l=>PACK_SIZE[l.grp+'/'+l.name]||PACK_G;
+const packLabel=l=>{const g=packOf(l);return g>=1000?(g/1000)+' кг':g+' г'};
 
 /* Номер позиції рахуємо від категорії, групи і назви, а не від місця
    в списку. Раніше id був 'p'+індекс: варто вставити рядок у середину —
@@ -93,10 +98,11 @@ const SHOPS=SHOPS_ALL.filter(s=>s[2]);
 
 const kop=n=>Math.round((Number(n)+Number.EPSILON)*100)/100;
 
-/* Ціна позиції. l — рядок кошика або товар із вагою: {unit, price, g} */
+/* Ціна позиції. l — рядок кошика або товар із вагою: {unit, price, g, grp, name}
+   (група й назва потрібні упаковкам: від них залежить вага упаковки) */
 function lineSum(l){
   if(l.unit==='шт')  return kop(l.price*l.g);                 // фікс. ціна за штуку
-  if(l.unit==='пак') return kop(l.price*PACK_G/100*l.g);      // ціна за 100 г × 1 кг × к-сть
+  if(l.unit==='пак') return kop(l.price*packOf(l)/100*l.g);   // ціна за 100 г × вага упаковки × к-сть
   return kop(l.price*l.g/100);                                // за вагою
 }
 
@@ -172,14 +178,14 @@ const canFry=it=>!NO_FRY.has(it.cat)
               && it.unit!=='шт';              // хліб і соуси
 function fryableG(l){
   if(!canFry(l)) return 0;
-  if(l.unit==='пак') return l.g*PACK_G;       // g — кількість упаковок по 1 кг
+  if(l.unit==='пак') return l.g*packOf(l);    // g — кількість упаковок
   return l.g;                                 // g — грами
 }
 
 /* Для сервера. У браузері файл підключається тегом <script>,
    і все вище стає доступним головному скрипту як є. */
 if(typeof module!=='undefined'&&module.exports){
-  module.exports={P,ITEMS,itemId,CATS_OFF,SHOPS_ALL,SHOPS,FRY_RATE,MIN_G,PACK_G,kop,lineSum,
+  module.exports={P,ITEMS,itemId,CATS_OFF,SHOPS_ALL,SHOPS,FRY_RATE,MIN_G,PACK_G,PACK_SIZE,packOf,packLabel,kop,lineSum,
                   NO_FRY,READY_MADE,PORTION,portionOf,COUNT_UNIT,countUnitOf,servingOf,
                   VARIANTS,variantsOf,priceOf,lineTitle,canFry,fryableG};
 }

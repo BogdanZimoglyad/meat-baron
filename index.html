@@ -880,7 +880,7 @@ const DESC={
  'Кукурудза':'Солодка кукурудза для гриля — упаковка на кілограм.',
  'Картопля з салом':'Картопля, шпигована салом, — гарнір із димком. Приїжджає готовою, продається на вагу: одна картоплина приблизно 300 г.',
  'Гриби печериці':'Мариновані печериці для гриля — упаковка на кілограм.',
- 'Перець':'Солодкий перець для гриля — упаковка на кілограм.',
+ 'Перець':'Солодкий перець для гриля — упаковка на 500 г.',
  'Смокер/Відбивна свиняча':'Товста корейка з димною скоринкою.',
  'Смокер/Ребро яловиче':'Масивне ребро, мʼясо тане в роті.',
  'Смокер/Буженіна куряча':'Куряче філе, запечене цілим шматком.',
@@ -1230,7 +1230,7 @@ function openPhoto(node){
     <div class="lb-b">
       <h3>${it.name}</h3>
       <p class="lb-pr">${variantsOf(it)? variantsNote(it) : money(it.price)+`<span class="lb-un">${it.unit==='шт'?(countUnitOf(it)?' / '+countUnitOf(it).w[0]+(unitInside(countUnitOf(it))?' · '+unitInside(countUnitOf(it)):''):' / шт'):' / 100 г'}</span>`}</p>
-      ${it.unit==='пак'?`<p class="lb-pk">Упаковка 1 кг — ${money(it.price*PACK_G/100)}</p>`:''}
+      ${it.unit==='пак'?`<p class="lb-pk">Упаковка ${packLabel(it)} — ${money(it.price*packOf(it)/100)}</p>`:''}
       ${it.cat==='raw'?`<p class="lb-pk">Ціна за 100 г сирого мʼяса. Посмажимо на мангалі за ${FRY_RATE} ₴/кг.</p>`:''}
       ${descOf(it)?`<p class="lb-ds">${descOf(it)}</p>`:''}
       <button class="cta lb-add" data-add="${it.id}">Додати в кошик</button>
@@ -1489,7 +1489,7 @@ const upsellPool=()=>{
 };
 const hasUpsell=()=>cart.some(l=>UPSELL_CATS.includes(l.cat));
 const hasMain=()=>cart.some(l=>MAIN_CATS.includes(l.cat));
-const upsellPrice=i=>variantsOf(i)? variantsNote(i) : money(i.price)+(i.unit==='шт'?' / '+(countUnitOf(i)?countUnitOf(i).w[0]:'шт'):' / 100 г')+(i.unit==='пак'?' · упак. 1 кг':'');
+const upsellPrice=i=>variantsOf(i)? variantsNote(i) : money(i.price)+(i.unit==='шт'?' / '+(countUnitOf(i)?countUnitOf(i).w[0]:'шт'):' / 100 г')+(i.unit==='пак'?' · упак. '+packLabel(i):'');
 /* Порційні позиції кладемо однією штукою, а не 500 г:
    півтори картоплини нікому не потрібні. */
 const upsellAdd=i=>addToCart(i, isCount(i)?1:(portionOf(i)||Math.max(500,i.minG)));
@@ -1621,7 +1621,7 @@ function unitNote(it){
     const u=countUnitOf(it);
     return u? `за ${u.za}${unitInside(u)?' · '+unitInside(u):''}` : 'за штуку';
   }
-  if(it.unit==='пак') return `упаковка 1 кг — ${money(it.price*PACK_G/100)}`;
+  if(it.unit==='пак') return `упаковка ${packLabel(it)} — ${money(it.price*packOf(it)/100)}`;
   return 'за 100 г';
 }
 /* Скільки в рядку: «2 порції · 300 г», «1 упаковка», а не «2 шт» —
@@ -1632,7 +1632,7 @@ function lineQty(l){
     if(!u) return l.g+' шт';
     return `${l.g} ${plural(l.g,u.w)}${u.g?' · '+(l.g*u.g)+' г':''}`;
   }
-  if(l.unit==='пак') return l.g+' × 1 кг';
+  if(l.unit==='пак') return l.g+' × '+packLabel(l);
   return wLabel(l.g);
 }
 function goodsTotal(){return kop(cart.reduce((s,l)=>s+lineSum(l),0))}
