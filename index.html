@@ -1294,8 +1294,17 @@ function syncScrollLock(){
   document.body.style.overscrollBehavior=anyOpen?'none':'';
 }
 const lockScroll=syncScrollLock, unlockScroll=syncScrollLock;
+/* Шторка одна на всі екрани, і прокрутка лишалась від попереднього:
+   догортав кошик до «Оформити замовлення» — і оформлення відкривалось
+   одразу внизу. Тепер новий екран (інший заголовок або шторка була
+   закрита) починається згори, а перемальовування того самого екрана
+   (повзунок, −/+, мангал) прокрутку не чіпає. */
+const sheetTitle=()=>((sIn.querySelector('h3')||{}).textContent||'').trim();
 function open(html){
-  sIn.innerHTML=html;veil.classList.add('on');sheet.classList.add('on');lockScroll();
+  const was=sheetTitle(), wasOpen=sheet.classList.contains('on');
+  sIn.innerHTML=html;
+  if(!wasOpen||sheetTitle()!==was) sheet.scrollTop=0;
+  veil.classList.add('on');sheet.classList.add('on');lockScroll();
   sIn.querySelectorAll('input,textarea').forEach(el=>{
     el.addEventListener('focus',()=>{
       setTimeout(()=>{
