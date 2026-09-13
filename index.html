@@ -1306,14 +1306,14 @@ function open(html){
    лишалося жити після закриття тапом по фону — обробник фону тримав
    посилання на стару функцію і опитував сервер вічно. */
 function close(){clearInterval(poll);pollTick=null;clearInterval(loginPoll);veil.classList.remove('on');sheet.classList.remove('on');unlockScroll();
-  if(reloadPending&&!cart.length) location.reload();   // нова версія сайту чекала, поки людина закінчить
+  if(reloadPending) location.reload();   // нова версія сайту чекала, поки закриють шторку
 }
 /* Вийшла нова версія сайту. Перезавантажуємо сторінку лише коли людина
-   нічого не робить: раніше це траплялося посеред оформлення, і кошик,
-   який живе лише в памʼяті сторінки, зникав. */
+   нічого не робить: раніше це траплялося посеред оформлення. Кошик
+   тепер переживає перезавантаження, тож чекаємо лише закриття шторки. */
 let reloadPending=false;
 function reloadWhenIdle(){
-  if(sheet.classList.contains('on')||cart.length) reloadPending=true;
+  if(sheet.classList.contains('on')) reloadPending=true;
   else location.reload();
 }
 veil.onclick=close;
@@ -1687,6 +1687,44 @@ function paintBar(){
   const n=cart.length;
   document.getElementById('barL').textContent=`Кошик · ${n} ${plural(n,['позиція','позиції','позицій'])}`;   // 21 позиція, а не «21 позицій»
   document.getElementById('barR').textContent=money(goodsTotal());
+  saveCart();            // paintBar кличуть після кожної зміни кошика — тут і зберігаємо
+}
+
+/* ---------- кошик переживає перезавантаження ----------
+   Раніше кошик жив лише в памʼяті сторінки: оновив, закрив вкладку чи
+   телефон вивантажив браузер — і все набране зникало. Тепер він лежить
+   у сховищі цього браузера на цьому пристрої. На сервер не йде.
+   Зберігаємо лише що і скільки — ціни, назви й мінімуми при відновленні
+   беремо з каталогу, щоб не показати ціну «з минулого». */
+const CART_TTL=3*24*3600*1000;   // три дні без змін — забуваємо
+let restoringCart=false;         // відновлення — не зміна: строк не продовжуємо
+function saveCart(){
+  if(restoringCart) return;
+  try{
+    if(!cart.length&&!orderNote) return localStorage.removeItem('mb-cart');
+    localStorage.setItem('mb-cart',JSON.stringify({at:Date.now(),note:orderNote,
+      items:cart.map(l=>({id:l.id,g:l.g,...(l.fry?{fry:1}:{}),...(l.v?{v:l.v}:{})}))}));
+  }catch(e){}
+}
+function restoreCart(){
+  let s=null;
+  try{ s=JSON.parse(localStorage.getItem('mb-cart')||'null') }catch(e){}
+  if(!s||!Array.isArray(s.items)) return;
+  if(Date.now()-(s.at||0)>CART_TTL){ try{localStorage.removeItem('mb-cart')}catch(e){} return }
+  for(const x of s.items){
+    const it=ITEMS.find(i=>i.id===x.id);
+    if(!it) continue;                                   // товар зняли з продажу
+    const vs=variantsOf(it);
+    const v=vs&&x.v&&vs.list.some(r=>r[0]===x.v)? x.v : '';
+    if(vs&&!v) continue;                                // соус, якого вже немає
+    let g=Math.floor(Number(x.g)||0);
+    g=isCount(it)? Math.min(99,Math.max(1,g)) : Math.min(20000,Math.max(it.minG,g));   // новий мінімум ваги
+    cart.push({id:it.id,name:it.name,grp:it.grp,price:priceOf(it,v),unit:it.unit,cat:it.cat,minG:it.minG,g,
+               ...(x.fry&&canFry(it)?{fry:true}:{}),...(v?{v}:{})});
+  }
+  orderNote=String(s.note||'').slice(0,400);
+  fryWanted=fryGrams()>0;
+  restoringCart=true; paintBar(); restoringCart=false;
 }
 
 /* ---------- cart ---------- */
@@ -1735,7 +1773,7 @@ function openCart(){
   if(fa) fa.onclick=()=>{toggleFryAll(); paintBar(); openCart()};
   bindUpsellGrid();
   const nt=sIn.querySelector('#note');
-  if(nt) nt.oninput=()=>{orderNote=nt.value};
+  if(nt) nt.oninput=()=>{orderNote=nt.value;saveCart()};
   /* Коментар знімаємо до допродажу: екран «Що до мʼяса?» перемалює
      шторку, і поле з текстом зникне разом зі старою розміткою. */
   sIn.querySelector('#toCheckout').onclick=()=>{if(nt)orderNote=nt.value;upsellGate(openCheckout)};
@@ -2242,6 +2280,7 @@ document.getElementById('shopName').textContent=SHOPS[shop][0];
   const m=document.getElementById('infoMap'); if(m) m.href=routeLink(SHOPS[shop][0]);
 })();
 renderCats();renderCatalog();syncScrollLock();
+restoreCart();
 ['histTop'].forEach(id=>{const b=document.getElementById(id); if(b) b.onclick=()=>openHistory()});
 
 /* ---------- активне замовлення ---------- */
