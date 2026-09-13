@@ -814,7 +814,7 @@ const DESC={
  'Фритюр меню/Хеш-браун':'Золотисті картопляні оладки з хрусткою скоринкою.',
  'Фритюр меню/Сирні палички':'Сир у паніровці, що тягнеться при розломі.',
  'Фритюр меню/Батат фрі':'Батат у хрусткій скоринці — мʼякий і солодкуватий усередині.',
- 'Фритюр меню/Сет на компанію + 2 соуси':'Великий сет із фритюру на всю компанію — і два соуси до нього.',
+ 'Фритюр меню/Сет на компанію + 2 соуси':'Усі 7 позицій фритюр-меню в одному сеті на компанію — і два соуси до них.',
  'Картопля':'Вже зі спеціями та олією — одразу на мангал чи в духовку. Упаковка на кілограм.',
  'Матнакаш':'Пишний вірменський хліб — ідеальна пара до мʼяса.',
  'Лаваш тонкий':'Тонкий лаваш, 5 листів в упаковці — загорнути мʼясо чи подати до столу.',
@@ -1127,7 +1127,7 @@ function openPhoto(node){
     </div>
     <div class="lb-b">
       <h3>${it.name}</h3>
-      <p class="lb-pr">${money(it.price)}<span class="lb-un">${it.unit==='шт'?' / шт':' / 100 г'}</span></p>
+      <p class="lb-pr">${money(it.price)}<span class="lb-un">${it.unit==='шт'?(servingOf(it)?(isSet(it)?' / сет · ':' / порція · ')+servingOf(it)+' г':' / шт'):' / 100 г'}</span></p>
       ${it.unit==='пак'?`<p class="lb-pk">Упаковка 1 кг — ${money(it.price*PACK_G/100)}</p>`:''}
       ${descOf(it)?`<p class="lb-ds">${descOf(it)}</p>`:''}
       <button class="cta lb-add" data-add="${it.id}">Додати в кошик</button>
@@ -1440,13 +1440,27 @@ const minOf=l=>{
   const it=ITEMS.find(i=>i.id===l.id);
   return (it&&it.minG)||MIN_G;
 };
+/* 1 порція, 2 порції, 5 порцій */
+function plural(n,f){
+  const a=n%10, b=n%100;
+  return a===1&&b!==11? f[0] : a>=2&&a<=4&&(b<12||b>14)? f[1] : f[2];
+}
+const PORTIONS=['порція','порції','порцій'];
+/* Сет — теж порція за вагою, але «1 порція · 1050 г» звучить дивно */
+const isSet=it=>/^Сет /.test(it.name||'');
+const portionWords=it=>isSet(it)? ['сет','сети','сетів'] : PORTIONS;
 function unitNote(it){
-  if(it.unit==='шт')  return 'за штуку';
+  if(it.unit==='шт')  return servingOf(it)? (isSet(it)?'за сет':'за порцію')+' · '+servingOf(it)+' г' : 'за штуку';
   if(it.unit==='пак') return `упаковка 1 кг — ${money(it.price*PACK_G/100)}`;
   return 'за 100 г';
 }
+/* Скільки в рядку. Фритюр — порціями з вагою, щоб було видно, скільки
+   це їжі: «2 порції · 300 г», а не «2 шт». */
 function lineQty(l){
-  if(l.unit==='шт')  return l.g+' шт';
+  if(l.unit==='шт'){
+    const sv=servingOf(l);
+    return sv? `${l.g} ${plural(l.g,portionWords(l))} · ${l.g*sv} г` : l.g+' шт';
+  }
   if(l.unit==='пак') return l.g+' × 1 кг';
   return wLabel(l.g);
 }
@@ -2232,7 +2246,7 @@ async function loadMyOrders(){
             <span class="ho-st${o.status==='done'?' done':''}">${o.label||''}</span>
             <span class="ho-d">${fmtDate(o.createdAt)}</span>
           </div>
-          <div class="ho-l">${(o.lines||[]).map(l=>esc(l.name)+' · '+(l.unit==='шт'?l.g+' шт':l.unit==='пак'?l.g+' × 1 кг':wLabel(l.g))).join('<br>')}</div>
+          <div class="ho-l">${(o.lines||[]).map(l=>esc(l.name)+' · '+lineQty(l)).join('<br>')}</div>
           <div class="ho-f">
             <span class="ho-sum">${money(o.total)}</span>
             <button class="ho-again" ${(o.lines||[]).length?'':'disabled'} data-again='${encodeURIComponent(JSON.stringify(o.lines||[]))}'>Повторити</button>

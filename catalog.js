@@ -112,6 +112,14 @@ const READY_MADE=new Set(['Овочі/Картопля з салом']);
    і підпис «скільки це штук» на кнопках. */
 const PORTION={'Овочі/Картопля з салом':300};
 const portionOf=it=>PORTION[it.grp+'/'+it.name]||0;
+/* Фритюр продається не штуками, а порціями фіксованої ваги. Ціна й
+   кількість рахуються як і для штучних (ціна × кількість), міняється
+   лише те, що бачить людина й оператор: «2 порції · 300 г» замість
+   «2 шт». Ключ — «Група» для всієї групи або «Група/Назва» для
+   окремої позиції; значення — грами в одній порції.
+   Сет на компанію — усі 7 позицій фритюру по 150 г. */
+const SERVING={'Фритюр меню':150,'Фритюр меню/Сет на компанію + 2 соуси':1050};
+const servingOf=it=>SERVING[it.grp+'/'+it.name]||SERVING[it.grp]||0;
 /* Одне джерело правди: і підказка в картці товару, і підрахунок ваги */
 const canFry=it=>!NO_FRY.has(it.cat)
               && !READY_MADE.has(it.grp+'/'+it.name)
@@ -126,5 +134,5 @@ function fryableG(l){
    і все вище стає доступним головному скрипту як є. */
 if(typeof module!=='undefined'&&module.exports){
   module.exports={P,ITEMS,itemId,CATS_OFF,SHOPS_ALL,SHOPS,FRY_RATE,MIN_G,PACK_G,kop,lineSum,
-                  NO_FRY,READY_MADE,PORTION,portionOf,canFry,fryableG};
+                  NO_FRY,READY_MADE,PORTION,portionOf,SERVING,servingOf,canFry,fryableG};
 }
