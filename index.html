@@ -339,6 +339,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .st-d{width:19px;height:19px;border-radius:50%;border:2px solid var(--line-2);display:grid;place-items:center;font-size:10px}
 .st.on .st-d{background:var(--ember);border-color:var(--ember);color:#fff}
 .st.done .st-d{background:var(--ok);border-color:var(--ok);color:#fff}
+/* кроки зі значком: «Готове» 🔥, «Видано» 🤝; ще не настали — приглушені */
+.st-d.ic{font-size:11px;line-height:1}
+.st:not(.on):not(.done) .st-d.ic{opacity:.45}
 .st-bar{width:2px;flex:1;min-height:24px;background:var(--line)}
 .st.done .st-bar{background:var(--ok)}
 .st-b{padding-bottom:14px}
@@ -1985,7 +1988,8 @@ function openStatus(startStatus){
     const step=Math.max(0,STK.indexOf(status));
     const steps=[['Прийнято',status==='new'?'чекаємо підтвердження точки':'оператор підтвердив'],
       ['Готується',o.fry?'мʼясо на мангалі':'збираємо замовлення'],
-      ['Готове',me?'напишемо в Telegram':'надішлемо SMS'],[o.mode==='pickup'?'Видано':'Передано курʼєру','']];
+      /* третій елемент — значок у кружечку замість галочки */
+      ['Готове',me?'напишемо в Telegram':'надішлемо SMS','🔥'],[o.mode==='pickup'?'Видано':'Передано курʼєру','','🤝']];
     sIn.innerHTML=`<div class="grab-zone"><div class="grab"></div></div>
     <div class="done-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round"><path d="M4 12.5l5.5 5.5L20 7"/></svg></div>
     <h3 style="text-align:center;font-size:23px;text-transform:uppercase">Замовлення прийнято</h3>
@@ -1999,7 +2003,7 @@ function openStatus(startStatus){
     </div>`:''}
     <div class="box steps">${steps.map((s,i)=>`
       <div class="st ${i<step?'done':i===step?'on':''}">
-        <div class="st-l"><div class="st-d">${i<step?'✓':''}</div>${i<3?'<div class="st-bar"></div>':''}</div>
+        <div class="st-l"><div class="st-d${s[2]?' ic':''}">${s[2]||(i<step?'✓':'')}</div>${i<3?'<div class="st-bar"></div>':''}</div>
         <div class="st-b"><div class="t">${s[0]}</div>${s[1]?`<div class="s">${s[1]}</div>`:''}</div>
       </div>`).join('')}</div>
 
