@@ -416,6 +416,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 
 .grp-note{margin:-4px 2px 12px;font-size:13px;color:var(--smoke);line-height:1.55;max-width:60ch;
   padding-left:11px;border-left:2px solid rgba(196,52,42,.5)}
+.cat-note{margin:16px 2px 0}
 
 /* введення ваги */
 .wbox{display:inline-flex;align-items:baseline;gap:3px;flex:0 0 auto;
@@ -750,7 +751,9 @@ body:has(.inst) .bar{bottom:66px}
 /* Категорії, зняті з продажу, відсіює CATS_OFF із catalog.js —
    вкладка зникає разом із товарами. */
 const CATS=[
- {id:'raw',t:'Мариноване мʼясо',u:'ціна за 100 г',fry:1},
+ {id:'raw',t:'Мариноване мʼясо',u:'ціна за 100 г',fry:1,
+  /* Ціна — за вагу до смаження; погоджено з власником */
+  note:`Ціни — за сире мʼясо в маринаді. Посмажимо на мангалі за ${FRY_RATE} ₴ за кг.`},   //   — тире не переноситься на новий рядок
  {id:'saus',t:'Ковбаски',u:'власне виробництво, за 100 г',fry:1},
  {id:'ready',t:'Готова продукція',u:'смокер, за 100 г',fry:0},
  {id:'grill',t:'Кури гриль',u:'готове, ціна за 100 г',fry:0},
@@ -1119,7 +1122,9 @@ function renderCatalog(){
 
   const list=(!searching&&sub)?all.filter(i=>i.grp===sub):all;
   const groups=[...new Set(list.map(i=>i.grp))];
-  box.innerHTML=groups.map(g=>{
+  /* Пояснення до всієї категорії — над товарами, лише коли не шукаємо */
+  const catNote=!searching&&(CATS.find(c=>c.id===cat)||{}).note;
+  box.innerHTML=(catNote?`<p class="grp-note cat-note">${catNote}</p>`:'')+groups.map(g=>{
     const c=CATS.find(c=>c.id===list.find(i=>i.grp===g).cat);
     return `<section class="grp"><div class="grp-h"><h2>${g}</h2><em>${c.u}</em></div>
     ${GRP_NOTE[g]?`<p class="grp-note">${GRP_NOTE[g]}</p>`:''}
@@ -1169,6 +1174,7 @@ function openPhoto(node){
       <h3>${it.name}</h3>
       <p class="lb-pr">${variantsOf(it)? variantsNote(it) : money(it.price)+`<span class="lb-un">${it.unit==='шт'?(countUnitOf(it)?' / '+countUnitOf(it).w[0]+(unitInside(countUnitOf(it))?' · '+unitInside(countUnitOf(it)):''):' / шт'):' / 100 г'}</span>`}</p>
       ${it.unit==='пак'?`<p class="lb-pk">Упаковка 1 кг — ${money(it.price*PACK_G/100)}</p>`:''}
+      ${it.cat==='raw'?`<p class="lb-pk">Ціна за 100 г сирого мʼяса. Посмажимо на мангалі за ${FRY_RATE} ₴/кг.</p>`:''}
       ${descOf(it)?`<p class="lb-ds">${descOf(it)}</p>`:''}
       <button class="cta lb-add" data-add="${it.id}">Додати в кошик</button>
     </div>`;
@@ -1324,7 +1330,7 @@ function openItem(id, editIdx){
   open(`<div class="grab-zone"><div class="grab"></div></div>
   <div class="hero-img${/\.jpe?g$/.test(photoOf(it)||'')?' has-bg':''}">${photoOf(it)?`<img src="${photoOf(it)}" alt="${it.name}">`:ph(it,1)}</div>
   <div class="sh-h"><h3>${it.name}</h3><button class="x" onclick="close_()">✕</button></div>
-  <p class="hint" style="margin-top:-6px">${sheetLead(it)}Ціна за 100 г — ${money(it.price)}.</p>
+  <p class="hint" style="margin-top:-6px">${sheetLead(it)}${it.cat==='raw'?`Ціна за 100 г сирого мʼяса — ${money(it.price)}. Посмажимо на мангалі за ${FRY_RATE} ₴/кг.`:`Ціна за 100 г — ${money(it.price)}.`}</p>
   ${descOf(it)?`<p class="hint sh-desc">${descOf(it)}</p>`:''}
   <span class="lbl">Оберіть вагу</span>
   <div class="wgrid">${quick.map(v=>`<button class="w" data-g="${v}" aria-pressed="${v===g}">${wLabel(v)}${por?`<i>${v/por} шт</i>`:''}</button>`).join('')}</div>
