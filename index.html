@@ -940,6 +940,9 @@ const MAP_GEO={
 const mapQuery=name=>MAP_GEO[name]||encodeURIComponent(MAP_ADDR[name]||(name+', Харків'));
 const mapLink=name=>'https://www.google.com/maps/search/?api=1&query='+mapQuery(name);
 const routeLink=name=>'https://www.google.com/maps/dir/?api=1&destination='+mapQuery(name);
+/* Телефон точки за назвою. Замовлення памʼятає свою точку, а вибрана в
+   шапці могла вже змінитися — дзвонити треба туди, куди пішло замовлення. */
+const shopTel=name=>((SHOPS_ALL.find(s=>s[0]===name)||[])[1])||SHOPS[shop][1]||'';
 const API='https://api.meat-baron.kh.ua'; // сервер прийому замовлень (Railway)
 /* запит із таймаутом — щоб на поганому звʼязку не висло назавжди */
 async function req(url,opts,ms){
@@ -1680,7 +1683,9 @@ function paintLines(){
     else if(p){
       const l=cart[+p.dataset.p];
       const hi=isCount(l)?99:6000;
-      l.g=Math.min(hi, l.g+stepOf(l));
+      /* Більше межі вже набрали (двічі додали по 5 кг) — «+» не має
+         зменшувати до 6 кг, просто не додає. */
+      if(l.g<hi) l.g=Math.min(hi, l.g+stepOf(l));
     }
     else return;
     paintBar(); openCart();
@@ -1852,7 +1857,7 @@ function openCheckout(){
   /* Хто увійшов — тому підставляємо все відоме: імʼя, номер і адресу
      минулої доставки. Решті лишається номер із попереднього замовлення
      в цьому браузері. */
-  let nmV=(me&&me.name)||'', telV=(me&&me.tel)||savedTel(), addrV=(me&&me.addr)||'';
+  let nmV=(me&&me.name)||'', telV=(me&&me.tel)||fmtPhone(savedTel()), addrV=(me&&me.addr)||'';
   const draw=()=>{
     const fg=fryGrams(), fry=fg>=MIN_G;
     const fryCost=fry?kop(fg/1000*FRY_RATE):0, total=kop(goodsTotal()+fryCost);
@@ -1961,26 +1966,39 @@ function openCheckout(){
       if(mode==='delivery'&&addr.length<5){const e=sIn.querySelector('#err');e.textContent='Вкажіть адресу доставки.';e.style.display='block';return}
       const payload={shop,shopName:SHOPS[shop][0],mode,addr,fry,fg,pay,total,nm,tel,note:orderNote,when:whenLabel(mode),lines:cart.map(l=>({...l,sum:lineSum(l)}))};
       btn.disabled=true;btn.textContent='Відправляємо…';
+      /* Замовлення не пішло — кошик лишається, людина бачить чому.
+         Раніше будь-яка помилка показувала «Замовлення прийнято» з
+         галочкою і чистила кошик, хоча точка нічого не отримала. */
+      const fail=(text,maybeSent)=>{
+        btn.disabled=false; btn.textContent=maybeSent?'Надіслати ще раз':'Спробувати ще раз';
+        const e=sIn.querySelector('#err'), t=SHOPS[shop][1];
+        if(!e) return;
+        e.innerHTML=esc(text)+(t?` ${maybeSent?'Телефон точки':'Або зателефонуйте'}: <a href="tel:${t}" style="color:inherit">${t.replace('+38','')}</a>`:'');
+        e.style.display='block';
+      };
+      let r,d;
       try{
-        const r=await req(API+'/api/order',{method:'POST',headers:{'Content-Type':'application/json',...authHead()},body:JSON.stringify(payload)},15000);
-        const d=await r.json();
-        if(!r.ok) throw new Error(d.error||'Помилка');
-        /* сума з сервера головніша: він рахує за прайсом */
-        order={...payload,no:d.no,shop:SHOPS[shop][0],st:d.status||'new',
-               total:Number.isFinite(d.total)?d.total:payload.total};
+        r=await req(API+'/api/order',{method:'POST',headers:{'Content-Type':'application/json',...authHead()},body:JSON.stringify(payload)},15000);
       }catch(err){
-        const msg=String(err&&err.message||'');
-        if(/Забагато/.test(msg)){
-          btn.disabled=false; btn.textContent='Підтвердити замовлення';
-          const e=sIn.querySelector('#err');
-          if(e){e.textContent=msg;e.style.display='block'}
-          return;
-        }
-        order={...payload,no:'—',shop:SHOPS[shop][0],offline:msg};
+        /* Відповіді не дочекались. Якщо сервер просто довго думав,
+           замовлення могло дійти — попереджаємо, щоб не задублювали. */
+        return err&&err.name==='AbortError'
+          ? fail('Сервер не відповів вчасно — замовлення могло дійти. Щоб не задублювати, перш ніж надсилати ще раз, '+
+                 (me?'перевірте «Мої замовлення» або уточніть на точці.':'уточніть на точці.'),true)
+          : fail('Немає звʼязку з сервером, замовлення не надіслано. Перевірте інтернет і спробуйте ще раз.');
       }
+      try{ d=await r.json() }catch(e){ d={} }
+      /* Сервер відмовив — отже, нічого не записав і на точку не надіслав */
+      /* 503 — точку не підключено до бота; «Telegram» покупцю нічого не каже */
+      if(r.status===503) return fail('Точка зараз не приймає замовлення онлайн, замовлення не надіслано.');
+      if(!r.ok||!d.no) return fail((d.error||'Замовлення не надіслано.')+(/\.$/.test(d.error||'.')?'':'.'));
+      /* сума з сервера головніша: він рахує за прайсом */
+      order={...payload,no:d.no,shop:SHOPS[shop][0],st:d.status||'new',lines:payload.lines,
+             total:Number.isFinite(d.total)?d.total:payload.total};
+      if(!me) rememberTel(tel);          // наступного разу номер уже буде в полі
       cart=[];orderNote='';paintBar();   // прапорець допродажу зніме paintBar
-      if(order.no!=='—'){order.lines=payload.lines;saveLast(order)}
-      openStatus(order.st||'new');
+      saveLast(order);
+      openStatus(order.st);
     };
   };
   draw();
@@ -2001,7 +2019,6 @@ function openStatus(startStatus){
     <h3 style="text-align:center;font-size:23px;text-transform:uppercase">Замовлення прийнято</h3>
     <p style="text-align:center;color:var(--smoke);font-size:13px;margin:5px 0 4px">№ ${o.no} · ${o.shop}</p>
     <p style="text-align:center;color:var(--ember-hot);font-size:13.5px;margin:0 0 18px">${o.when||''}</p>
-    ${o.offline?`<div class="warn">Не вдалося звʼязатися з точкою автоматично. Зателефонуйте, будь ласка: ${SHOPS[shop][1]||SHOPS[0][1]}</div>`:''}
 
     ${status==='ready'?`<div class="ready-note">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5.5 5.5L20 7"/></svg>
@@ -2034,7 +2051,7 @@ function openStatus(startStatus){
     <p class="ord-link">Посилання на замовлення можна зберегти або переслати:<br>
       <button class="lnk-copy" id="copyLink">Скопіювати посилання</button></p>
     <div class="two">
-      <a class="cta ghost" style="text-align:center;text-decoration:none;display:block" href="tel:${SHOPS[shop][1]||''}">Зателефонувати</a>
+      <a class="cta ghost" style="text-align:center;text-decoration:none;display:block" href="tel:${shopTel(o.shop)}">Зателефонувати</a>
       ${o.mode==='pickup'
         ? `<a class="cta ghost" style="text-align:center;text-decoration:none;display:block" href="${routeLink(o.shop)}" target="_blank" rel="noopener">Прокласти маршрут</a>`
         : `<button class="cta ghost" onclick="close_()">Готово</button>`}
@@ -2137,6 +2154,9 @@ async function showActiveBar(){
   if(!srv){
     try{
       const r=await req(API+'/api/order/'+v.no,null,8000);
+      /* Сервер точно не знає такого замовлення — забуваємо. Інші помилки
+         (немає звʼязку, забагато запитів) смужку не прибирають. */
+      if(r.status===404){clearLast();el.hidden=true;return}
       const d=await r.json();
       if(d.status) st=d.status;
     }catch(e){}
@@ -2153,36 +2173,44 @@ async function showActiveBar(){
   el.querySelector('#actOpen').onclick=()=>openOrder(v.no,srv);
 }
 async function openOrder(no,known){
-  try{
-    /* Тому, хто увійшов, склад дає сервер — на будь-якому пристрої.
-       Інакше беремо його з памʼяті браузера, а для чужого посилання
-       памʼяті немає: покажемо лише статус і суму. */
-    if(known&&String(known.no)===String(no)){
-      order={no:known.no, shop:known.shopName, when:known.when||'',
-             total:known.total, totalOrig:known.totalOrig, adjust:known.adjust||[], mode:known.mode||'pickup',
-             fry:!!known.fry, fg:known.fg||0, lines:known.lines||[]};
-      return openStatus(known.status);
-    }
-    const r=await req(API+'/api/order/'+no,null,10000);
-    const d=await r.json();
-    if(!d.no) throw 0;
-    const v=readLast()||{};
-    const mine=String(v.no)===String(d.no);
+  /* Тому, хто увійшов, склад дає сервер — на будь-якому пристрої.
+     Інакше беремо його з памʼяті браузера, а для чужого посилання
+     памʼяті немає: покажемо лише статус і суму. */
+  if(known&&String(known.no)===String(no)){
+    order={no:known.no, shop:known.shopName, when:known.when||'',
+           total:known.total, totalOrig:known.totalOrig, adjust:known.adjust||[], mode:known.mode||'pickup',
+           fry:!!known.fry, fg:known.fg||0, lines:known.lines||[]};
+    return openStatus(known.status);
+  }
+  const v=readLast()||{};
+  const mine=String(v.no)===String(no);
+  let r=null,d=null;
+  try{ r=await req(API+'/api/order/'+no,null,10000); d=await r.json() }catch(e){}
+  if(r&&r.ok&&d&&d.no){
     order={no:d.no, shop:(mine&&v.shop)||SHOPS[shop][0], when:(mine&&v.when)||'',
            total:d.total, totalOrig:d.totalOrig, adjust:d.adjust||[], mode:d.mode||'pickup',
            fry:mine&&!!v.fry, fg:(mine&&v.fg)||0, lines:(mine&&v.lines)||[]};
-    openStatus(d.status);
-  }catch(e){
-    clearLast();
-    const el=document.getElementById('active'); if(el) el.hidden=true;
-    open(`<div class="grab-zone"><div class="grab"></div></div>
-    <div class="sh-h"><h3>Замовлення не знайдено</h3><button class="x" onclick="close_()">✕</button></div>
-    <p class="hint" style="margin-top:-4px">Можливо, воно вже видане або минуло багато часу.
-    Якщо замовлення актуальне — зателефонуйте на точку.</p>
-    <a class="cta ghost" style="text-align:center;text-decoration:none;display:block"
-       href="tel:${SHOPS[shop][1]||''}">Зателефонувати</a>
-    <button class="cta" onclick="close_()">Зрозуміло</button>`);
+    return openStatus(d.status);
   }
+  /* «Не знайдено» — лише коли так сказав сервер. Раніше будь-яка
+     помилка, навіть секундний обрив звʼязку, стирала замовлення з
+     памʼяті браузера, і стежити за ним було вже ніяк. */
+  const gone=!!r&&r.status===404;
+  if(gone){
+    if(mine) clearLast();
+    const el=document.getElementById('active'); if(el) el.hidden=true;
+  }
+  open(`<div class="grab-zone"><div class="grab"></div></div>
+  <div class="sh-h"><h3>${gone?'Замовлення не знайдено':'Не вдалося завантажити'}</h3><button class="x" onclick="close_()">✕</button></div>
+  <p class="hint" style="margin-top:-4px">${gone
+    ? 'Можливо, воно вже видане або минуло багато часу. Якщо замовлення актуальне — зателефонуйте на точку.'
+    : 'Немає звʼязку з сервером. Перевірте інтернет і спробуйте ще раз — замовлення нікуди не зникло.'}</p>
+  ${gone?'':`<button class="cta" id="ordRetry">Спробувати ще раз</button>`}
+  <a class="cta ghost" style="text-align:center;text-decoration:none;display:block"
+     href="tel:${shopTel(mine?v.shop:'')}">Зателефонувати</a>
+  ${gone?`<button class="cta" onclick="close_()">Зрозуміло</button>`:''}`);
+  const rt=sIn.querySelector('#ordRetry');
+  if(rt) rt.onclick=()=>{rt.disabled=true;rt.textContent='Завантажуємо…';openOrder(no,known)};
 }
 
 /* ---------- мої замовлення ---------- */

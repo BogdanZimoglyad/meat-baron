@@ -68,13 +68,38 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const DB = path.join(DATA_DIR, 'data.json');
 try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
 let db = { orders: {}, shops: {}, counter: 1000, users: {}, tokens: {} };
-try { db = JSON.parse(fs.readFileSync(DB, 'utf8')); } catch (e) {}
+try {
+  db = JSON.parse(fs.readFileSync(DB, 'utf8'));
+} catch (e) {
+  /* Файлу немає — перший запуск, усе гаразд. А от зіпсований файл
+     не можна мовчки замінити порожньою базою: перший же запис затер би
+     його назавжди разом із замовленнями й покупцями, а номери пішли б
+     знову з 1001. Відкладаємо копію, щоб дані можна було підняти. */
+  if (e.code !== 'ENOENT') {
+    const keep = DB.replace(/\.json$/, '') + '.broken-' + Date.now() + '.json';
+    try { fs.copyFileSync(DB, keep); } catch (err) {}
+    console.error('!!! База не читається (' + e.message + '). Копію збережено:', keep,
+                  '— починаємо з порожньої. Відновіть дані з копії.');
+  }
+}
 /* Стара база нічого не знала про покупців: дописуємо теки, щоб код
    нижче не перевіряв їхню наявність на кожному рядку. */
 db.users = db.users || {};
 db.tokens = db.tokens || {};
 
-const writeNow = () => { try { fs.writeFileSync(DB, JSON.stringify(db, null, 2)); } catch (e) {} };
+/* Пишемо в сусідній файл і підміняємо одним кроком. Раніше файл
+   переписувався поверх: якщо сервер вимикали посеред запису, лишався
+   обрізаний JSON — і після перезапуску база була порожня. Перейменування
+   атомарне: на диску завжди або стара версія, або нова, цілком. */
+const writeNow = () => {
+  const tmp = DB + '.tmp';
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
+    fs.renameSync(tmp, DB);
+  } catch (e) {
+    console.error('Не вдалося записати базу:', e.message);
+  }
+};
 
 /* Кожен запис — це перезапис усього файлу. Оператор може натиснути
    три кнопки поспіль, тож збираємо їх в один запис. */
@@ -776,6 +801,17 @@ bot.on('callback_query', async cq => {
   const o = db.orders[noStr];
   if (!o) return bot.answerCallbackQuery(cq.id, { text: 'Замовлення не знайдено' });
   if (!STATUSES.includes(st)) return bot.answerCallbackQuery(cq.id, { text: 'Невідомий статус' });
+  /* Лише в чаті тієї точки, куди прийшло замовлення */
+  if (cq.message && cq.message.chat.id !== o.chatId) {
+    return bot.answerCallbackQuery(cq.id, { text: 'Це замовлення іншої точки' });
+  }
+  /* Статус іде лише вперед, на один крок. Старе повідомлення чи швидкий
+     подвійний дотик натискали кнопку, якої вже не мало бути, — і
+     «Готове» відкочувалось назад у «Готується», у клієнта теж. */
+  if (!NEXT_BTN[o.status].some(([next]) => next === st)) {
+    await bot.editMessageReplyMarkup(keyboard(o), { chat_id: o.chatId, message_id: o.msgId }).catch(() => {});
+    return bot.answerCallbackQuery(cq.id, { text: `Уже «${LABEL[o.status]}» — кнопки оновлено` });
+  }
 
   o.status = st;
   o.updatedAt = Date.now();
