@@ -362,10 +362,11 @@ function orderText(o) {
   /* Зміни оператора — кожна окремим рядком, щоб на точці було видно, з
      чого склалась сума і хто що вніс. */
   const adj = adjustmentsOf(o);
+  const who = a => (a.by ? ` <i>(${esc(a.by)})</i>` : '');
   const adjLines = adj.map(a =>
-    a.kind === 'note'
-      ? `💬 ${esc(a.note)}` + (a.by ? ` <i>(${esc(a.by)})</i>` : '')
-      : `${a.kind === 'add' ? '➕' : '➖'} ${money(a.amount)}` + (a.note ? ` — ${esc(a.note)}` : '') + (a.by ? ` <i>(${esc(a.by)})</i>` : '')
+    a.kind === 'note' ? `💬 ${esc(a.note)}` + who(a)
+    : a.kind === 'fact' ? `🧾 Фактична сума з каси: ${money(a.amount)} (було ${money(a.from)})` + who(a)
+    : `${a.kind === 'add' ? '➕' : '➖'} ${money(a.amount)}` + (a.note ? ` — ${esc(a.note)}` : '') + who(a)
   ).join('\n');
   const changed = adj.some(a => a.kind !== 'note');
   const sum = adj.length
@@ -397,15 +398,17 @@ function adjustmentsOf(o) {
   return [{ kind: d < 0 ? 'sub' : 'add', amount: Math.abs(d), note: o.totalNote || '', by: o.totalBy || '', at: o.totalAt || 0 }];
 }
 /* Для клієнта: без імен операторів */
-const pubAdjust = o => adjustmentsOf(o).map(a => ({ kind: a.kind, amount: a.amount || 0, note: a.note || '' }));
+const pubAdjust = o => adjustmentsOf(o).map(a => ({ kind: a.kind, amount: a.amount || 0, note: a.note || '', ...(a.kind === 'fact' ? { from: a.from } : {}) }));
 
 function keyboard(o) {
   const btns = NEXT_BTN[o.status].map(([st, txt]) => ([{ text: txt, callback_data: `s:${o.no}:${st}` }]));
-  if (EDITABLE.has(o.status)) btns.push([
-    { text: '➕ Додати', callback_data: `a:${o.no}:add` },
-    { text: '➖ Відняти', callback_data: `a:${o.no}:sub` },
-    { text: '💬 Коментар', callback_data: `a:${o.no}:note` }
-  ]);
+  if (EDITABLE.has(o.status)) btns.push(
+    [{ text: '🧾 Фактична сума', callback_data: `a:${o.no}:fact` }],
+    [
+      { text: '➕ Додати', callback_data: `a:${o.no}:add` },
+      { text: '➖ Відняти', callback_data: `a:${o.no}:sub` },
+      { text: '💬 Коментар', callback_data: `a:${o.no}:note` }
+    ]);
   return { inline_keyboard: btns };
 }
 
@@ -793,6 +796,8 @@ bot.on('callback_query', async cq => {
 /* ---------- оператор уточнює суму ----------
    Сума на сайті орієнтовна: мʼясо важать під замовлення, а клієнт може
    щось додати телефоном. Суму оператор міняє лише кнопками:
+     🧾 Фактична сума — число з каси, де замовлення пробили й зважили;
+                       без коментаря: додане телефоном — через ➕ / ➖
      ➕ Додати  — «39 додали соус Ткемалі»: до суми додається 39
      ➖ Відняти — «20 вага менша»: від суми віднімається 20
      💬 Коментар — лише текст для клієнта, сума не міняється
@@ -812,6 +817,18 @@ setInterval(() => {
 }, 60 * 1000).unref();
 
 const opName = u => [u && u.first_name, u && u.last_name].filter(Boolean).join(' ') || 'оператор';
+
+/* Нова сума після зміни: факт — як є, ➕ / ➖ — від поточної, коментар — без змін */
+const nextTotal = (cur, kind, amount) =>
+  kind === 'fact' ? kop(amount) : kind === 'add' ? kop(cur + amount) : kind === 'sub' ? kop(cur - amount) : cur;
+/* «+4.40 ₴» / «−15.90 ₴» / «без змін» */
+const diffText = (from, to) => {
+  const d = kop(to - from);
+  return d ? `${d > 0 ? '+' : '−'}${money(Math.abs(d))}` : 'без змін';
+};
+/* Касова сума, що відрізняється від поточної більше ніж на 30%, — майже
+   напевно опечатка: 38380 замість 383.80. Перепитуємо з попередженням. */
+const FACT_WARN = 0.3;
 const LOCKED_TEXT = 'Замовлення вже готується — суму й коментарі змінити не можна';
 
 /* «39», «39,50 грн», «39 додали соус Ткемалі» → { amount, note }.
@@ -826,6 +843,7 @@ function parseTotalReply(t) {
 }
 
 const ASK = {
+  fact: o => `Замовлення № ${o.no}, зараз ${money(o.total)}.\n🧾 Введіть <b>фактичну суму з каси</b> разом зі смаженням — відповіддю на це повідомлення, лише число.\nНаприклад: 461.30`,
   add:  o => `Замовлення № ${o.no}, зараз ${money(o.total)}.\n➕ На скільки <b>збільшити</b> суму? Відповідайте на це повідомлення, коментар — через пробіл.\nНаприклад: 39 додали соус Ткемалі`,
   sub:  o => `Замовлення № ${o.no}, зараз ${money(o.total)}.\n➖ На скільки <b>зменшити</b> суму? Відповідайте на це повідомлення, коментар — через пробіл.\nНаприклад: 25 вага менша`,
   note: o => `Замовлення № ${o.no}.\n💬 Напишіть коментар для клієнта відповіддю на це повідомлення. Сума не зміниться.`
@@ -885,8 +903,7 @@ bot.on('callback_query', async cq => {
      в момент запиту: між запитом і підтвердженням міг устигнути інший
      оператор. */
   const before = o.total;
-  const delta = conf.kind === 'add' ? conf.amount : conf.kind === 'sub' ? -conf.amount : 0;
-  const next = kop(before + delta);
+  const next = nextTotal(before, conf.kind, conf.amount);
   if (conf.kind !== 'note' && (next <= 0 || next > MAX_TOTAL)) {
     await bot.editMessageText(`Сума замовлення № ${o.no} вийшла б ${money(next)} — так не можна.`,
       { chat_id: chatId, message_id: cq.message.message_id }).catch(() => {});
@@ -895,7 +912,8 @@ bot.on('callback_query', async cq => {
 
   o.adjust = adjustmentsOf(o).slice();              // стара одна зміна стає першою в списку
   if (o.totalOrig == null) o.totalOrig = o.total;   // сума з сайту лишається назавжди
-  o.adjust.push({ kind: conf.kind, amount: conf.amount, note: conf.note, by: opName(cq.from), at: Date.now() });
+  o.adjust.push({ kind: conf.kind, amount: conf.amount, note: conf.note, by: opName(cq.from), at: Date.now(),
+                  ...(conf.kind === 'fact' ? { from: before } : {}) });   // факт — з чого перейшли
   o.total = next;
   delete o.totalNote; delete o.totalBy; delete o.totalAt;
   o.updatedAt = Date.now();
@@ -905,9 +923,9 @@ bot.on('callback_query', async cq => {
     chat_id: o.chatId, message_id: o.msgId, parse_mode: 'HTML', reply_markup: keyboard(o)
   }).catch(e => console.error('edit:', e.message));
   await bot.editMessageText(
-    conf.kind === 'note'
-      ? `✅ Коментар до № ${o.no} надіслано: ${conf.note}`
-      : `✅ № ${o.no}: ${money(before)} ${conf.kind === 'add' ? '+' : '−'} ${money(conf.amount)} = ${money(next)}` + (conf.note ? `\n${conf.note}` : ''),
+    conf.kind === 'note' ? `✅ Коментар до № ${o.no} надіслано: ${conf.note}`
+    : conf.kind === 'fact' ? `✅ № ${o.no}: фактична сума ${money(next)} (було ${money(before)}, ${diffText(before, next)})`
+    : `✅ № ${o.no}: ${money(before)} ${conf.kind === 'add' ? '+' : '−'} ${money(conf.amount)} = ${money(next)}` + (conf.note ? `\n${conf.note}` : ''),
     { chat_id: chatId, message_id: cq.message.message_id }).catch(() => {});
   await bot.answerCallbackQuery(cq.id, { text: 'Готово' });
 
@@ -935,7 +953,8 @@ bot.on('message', async msg => {
     if (!note) return askAdjust(o, ask.kind, msg.chat.id).catch(() => {});
   } else {
     ({ amount, note } = parseTotalReply(msg.text));
-    const next = kop(o.total + (ask.kind === 'add' ? amount : -amount));
+    if (ask.kind === 'fact') note = '';     // у факту коментаря немає: додане — через ➕ / ➖
+    const next = nextTotal(o.total, ask.kind, amount);
     if (!(amount > 0) || next <= 0 || next > MAX_TOTAL) {
       await bot.sendMessage(msg.chat.id,
         !(amount > 0) ? 'Не вдалося розібрати суму: рядок має починатися з числа.'
@@ -949,10 +968,14 @@ bot.on('message', async msg => {
      підтвердження тримаємо тут, а в кнопці — короткий ключ. */
   const id = crypto.randomBytes(4).toString('hex');
   amountConfirms.set(id, { no: o.no, kind: ask.kind, amount, note, at: Date.now() });
-  const preview = ask.kind === 'note'
-    ? `№ ${o.no}: коментар для клієнта:\n${note}`
-    : `№ ${o.no}: ${money(o.total)} ${ask.kind === 'add' ? '+' : '−'} ${money(amount)} = ${money(kop(o.total + (ask.kind === 'add' ? amount : -amount)))}` +
-      (note ? `\nКоментар для клієнта: ${note}` : '');
+  const next = nextTotal(o.total, ask.kind, amount);
+  const far = ask.kind === 'fact' && Math.abs(next - o.total) > o.total * FACT_WARN;
+  const preview = ask.kind === 'note' ? `№ ${o.no}: коментар для клієнта:\n${note}`
+    : ask.kind === 'fact'
+      ? `№ ${o.no}: фактична сума з каси\n${money(o.total)} → ${money(next)} (${diffText(o.total, next)})` +
+        (far ? `\n⚠️ Різниця більше ${Math.round(FACT_WARN * 100)}% — перевірте, чи немає опечатки.` : '')
+      : `№ ${o.no}: ${money(o.total)} ${ask.kind === 'add' ? '+' : '−'} ${money(amount)} = ${money(next)}` +
+        (note ? `\nКоментар для клієнта: ${note}` : '');
   bot.sendMessage(msg.chat.id, preview + '\nПідтвердити?',
     { reply_markup: { inline_keyboard: [[
       { text: '✅ Так', callback_data: `ac:${id}` },
@@ -964,10 +987,15 @@ bot.on('message', async msg => {
 function notifyAdjust(o, a) {
   const u = db.users[o.telKey] || {};
   if (!u.tgId || !a) return;
+  /* Про незмінну ціну за 100 г пишемо лише для факту з каси: там сума
+     міняється через вагу. Для ➕ / ➖ причину пояснює коментар. */
   const text = a.kind === 'note'
     ? `💬 Замовлення № ${o.no}. Оператор: ${a.note}`
-    : `${a.kind === 'add' ? '➕' : '➖'} Замовлення № ${o.no}: ${a.kind === 'add' ? '+' : '−'}${money(a.amount)}` +
-      ` — ${a.note || 'уточнили після зважування'}.\nДо сплати: ${money(o.total)}`;
+    : a.kind === 'fact'
+      ? `🧾 Замовлення № ${o.no} зважили: до сплати ${money(o.total)} (було ${money(a.from)}).\n` +
+        `Ціна за 100 г не змінилась — змінилась лише вага.`
+      : `${a.kind === 'add' ? '➕' : '➖'} Замовлення № ${o.no}: ${a.kind === 'add' ? '+' : '−'}${money(a.amount)}` +
+        ` — ${a.note || 'уточнили після зважування'}.\nДо сплати: ${money(o.total)}`;
   bot.sendMessage(u.tgId, text,
     { reply_markup: { inline_keyboard: [[{ text: 'Стежити за замовленням', url: SITE + '?order=' + o.no }]] } }
   ).catch(e => console.warn('Зміна № ' + o.no + ' не дійшла до клієнта:', e.message));

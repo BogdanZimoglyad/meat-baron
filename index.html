@@ -2010,7 +2010,9 @@ function openStatus(startStatus){
       ${o.fry?`<div class="sum"><span>Смаження · ${wLabel(o.fg)}</span><span>${money(kop(o.fg/1000*FRY_RATE))}</span></div>`:''}
       ${/* Зміни оператора: кожна окремим рядком — «+39 ₴ · додали соус», коментарі текстом */''}
       ${adjChanged(o)?`<div class="sum"><span>На сайті</span><span>${money(o.totalOrig)}</span></div>`:''}
-      ${(o.adjust||[]).filter(a=>a.kind!=='note').map(a=>`<div class="sum"><span>${a.kind==='add'?'+':'−'} ${esc(a.note||'уточнили після зважування')}</span><span>${a.kind==='add'?'+':'−'}${money(a.amount)}</span></div>`).join('')}
+      ${(o.adjust||[]).filter(a=>a.kind!=='note').map(a=> a.kind==='fact'
+        ? `<div class="sum"><span>Зважили на касі</span><span>${money(a.amount)}</span></div>`
+        : `<div class="sum"><span>${a.kind==='add'?'+':'−'} ${esc(a.note||'уточнили після зважування')}</span><span>${a.kind==='add'?'+':'−'}${money(a.amount)}</span></div>`).join('')}
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:10px;border-top:1px solid var(--line)">
         <span style="font-size:13px">${adjChanged(o)?'До сплати':'Разом'}</span><b style="font-family:Oswald;font-size:21px">${money(o.total)}</b></div>
       ${(o.adjust||[]).filter(a=>a.kind==='note').map(a=>`<p class="hint" style="margin:8px 0 0">💬 Оператор: ${esc(a.note)}</p>`).join('')}
