@@ -38,8 +38,13 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       fetch(e.request)
         .then(r => {
-          const copy = r.clone();
-          caches.open(CACHE).then(c => c.put(e.request, copy));
+          /* Лише вдалі відповіді. Інакше сторінка помилки (скажімо, 404,
+             поки GitHub перевстановлює домен) лягала в кеш і потім
+             показувалась замість сайту без інтернету. */
+          if (r.ok) {
+            const copy = r.clone();
+            caches.open(CACHE).then(c => c.put(e.request, copy));
+          }
           return r;
         })
         .catch(() => caches.match(e.request).then(hit => hit || caches.match('./index.html')))

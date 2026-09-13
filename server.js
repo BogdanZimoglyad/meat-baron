@@ -320,7 +320,13 @@ bot.onText(/\/points/, msg => {
    інакше будь-хто додав би бота до себе в групу і забрав замовлення. */
 const BIND_CODE = String(process.env.BIND_CODE || '');
 
-bot.onText(/\/bind\s+(\d+)(?:\s+(\S+))?/, (msg, m) => {
+/* У групі команда з меню Telegram приходить як «/bind@імʼя_бота 2 КОД».
+   Раніше шаблон чекав пробіл одразу після /bind, і бот мовчав. */
+bot.onText(/^\/bind(?:@\w+)?\s*$/, msg => {
+  bot.sendMessage(msg.chat.id, 'Допишіть номер точки і код: /bind НОМЕР КОД\nСписок точок — /points');
+});
+
+bot.onText(/^\/bind(?:@\w+)?\s+(\d+)(?:\s+(\S+))?/, (msg, m) => {
   const n = parseInt(m[1], 10);
   const code = m[2] || '';
 
