@@ -29,17 +29,19 @@
   --ok:#7BA84F;
 }
 *{box-sizing:border-box}
-html{background:var(--char)}
+html{background:#0b0909}
 html,body{margin:0;padding:0;overflow-x:hidden;min-height:100%}
 html{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
 body{overflow-wrap:anywhere;word-break:normal}
+/* Дим на всю сторінку: картки непрозорі, тож він видний лише по краях
+   і між ними. body прозорий, інакше перекрив би дим. */
 html::before{
   content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
-  background:url('smoke-bg.jpg') center/cover no-repeat;
-  opacity:.3;
+  background:url('smoke-page.jpg') center/cover no-repeat;
+  opacity:.9;
 }
 body{
-  background:var(--char);
+  background:transparent;
   color:var(--bone);
   font-family:'Manrope',system-ui,sans-serif;
   font-size:15px;
@@ -47,11 +49,6 @@ body{
   -webkit-font-smoothing:antialiased;
   padding-bottom:96px;
   position:relative;
-}
-body::before{
-  content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
-  background:url('smoke-bg.jpg') center/cover no-repeat;
-  opacity:.3;
 }
 h1,h2,h3,.disp{font-family:'Oswald',sans-serif;font-weight:500;letter-spacing:.01em;margin:0}
 button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
@@ -88,25 +85,9 @@ a{color:inherit}
 @media(min-width:560px){.ht-full{display:inline}.ht-short{display:none}}
 
 /* hero */
-.hero{padding:30px 0 26px;border-bottom:1px solid var(--line);position:relative;isolation:isolate}
-.hero .smk,.hero .mk-bg,.hero::after{
+.hero{padding:30px 0 26px;position:relative;isolation:isolate}
+.hero .mk-bg,.hero::after{
   left:50%;right:auto;width:100vw;margin-left:-50vw}
-.hero .smk{position:absolute;top:-1px;bottom:0;z-index:-3;overflow:hidden;pointer-events:none}
-.hero .smk i{position:absolute;top:-8%;left:0;width:220%;height:116%;display:block;
-  background:url('smoke-layer.jpg') left center/auto 100% repeat-x;
-  will-change:transform}
-.hero .smk i:nth-child(1){opacity:.34;animation:drift1 64s linear infinite}
-.hero .smk i:nth-child(2){opacity:.2;transform:scaleX(-1);animation:drift2 96s linear infinite}
-@keyframes drift1{
-  0%{transform:translate3d(0,0,0) scale(1.04)}
-  50%{transform:translate3d(-24%,-2%,0) scale(1.1)}
-  100%{transform:translate3d(-50%,0,0) scale(1.04)}
-}
-@keyframes drift2{
-  0%{transform:scaleX(-1) translate3d(0,0,0) scale(1.06)}
-  50%{transform:scaleX(-1) translate3d(-18%,2%,0) scale(1.02)}
-  100%{transform:scaleX(-1) translate3d(-40%,0,0) scale(1.06)}
-}
 .hero .mk-bg{position:absolute;z-index:-2;top:50%;height:86%;aspect-ratio:1;
   transform:translateY(-50%);background:url('logo-mark.png') center/contain no-repeat;
   opacity:.34;pointer-events:none;animation:pulse 9s ease-in-out infinite;
@@ -114,8 +95,8 @@ a{color:inherit}
 @keyframes pulse{0%,100%{opacity:.3}50%{opacity:.42}}
 .hero::after{content:'';position:absolute;top:-1px;bottom:0;z-index:-1;pointer-events:none;
   background:
-    linear-gradient(to right,var(--char) 4%,rgba(20,16,16,.78) 42%,rgba(20,16,16,.1) 100%),
-    linear-gradient(to bottom,rgba(20,16,16,.3),transparent 36%,rgba(20,16,16,.92))}
+    linear-gradient(to right,rgba(11,9,9,.85) 0%,rgba(11,9,9,.5) 45%,transparent 100%),
+    linear-gradient(to bottom,rgba(11,9,9,.6),transparent 70%)}
 .hero>*{position:relative}
 .brand{margin:0 0 10px;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:.16em;
   text-transform:uppercase;color:var(--smoke)}
@@ -644,7 +625,6 @@ body:has(.inst) .bar{bottom:66px}
 
 <main class="wrap">
   <section class="hero">
-    <div class="smk" aria-hidden="true"><i></i><i></i></div>
     <div class="mk-bg" aria-hidden="true"></div>
     <p class="brand">Мʼясний Барон</p>
     <h1><span>Найвигідніший шашлик</span>твого міста</h1>
