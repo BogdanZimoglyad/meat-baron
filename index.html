@@ -212,6 +212,57 @@ a{color:inherit}
 @media(min-width:1180px){
   .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+/* Великий екран компʼютера. Розміри рахувалися від телефона, і на
+   моніторі все виглядало дрібним: текст карток 12–13 px, фото 104 px,
+   а по боках порожньо. Тут — ширша сітка і більше все, що читають. */
+@media(min-width:1200px){
+  body{font-size:16px}
+  .wrap{max-width:1340px;padding:0 24px}
+  .layout{grid-template-columns:220px minmax(0,1fr) 260px;gap:18px 28px}
+  .top-in{padding:12px 24px}   /* .top-in перебиває бічні відступи .wrap — повертаємо, щоб шапка не липла до країв */
+  .mark{width:44px;height:44px}
+  .shop small{font-size:12px}
+  .shop b{font-size:16px}
+  .hist-top{padding:10px 14px;font-size:15px}
+  .hero{padding:32px 0 28px}
+  .hero h1{font-size:50px}
+  .hero p:not(.brand){font-size:16px;max-width:46ch}
+  .brand{font-size:14px}
+  .side{top:84px}
+  .side-cat{font-size:20px;padding:14px 12px 14px 16px}
+  .search{padding:12px 16px;border-radius:12px}
+  .search input{font-size:16px}
+  .search svg{width:18px;height:18px}
+  .subs .sub{font-size:14px;padding:8px 16px}
+  .grp{padding-top:22px}
+  .grp-h h2{font-size:27px}
+  .grp-h em{font-size:13.5px}
+  #catalog .grp-note{font-size:14.5px}   /* #catalog — бо базове правило стоїть нижче в файлі */
+  .grid{gap:14px}
+  .card{padding:14px;gap:14px;border-radius:14px}
+  .card .ph{width:120px;height:120px;border-radius:11px}
+  .c-b{gap:5px}
+  .c-b .nm{font-size:18px}
+  .c-b .pr-top{font-size:22px}
+  .c-b .ds{font-size:14px}
+  .c-b .un{font-size:13px}
+  .c-f{padding-top:10px}
+  .add{height:38px;padding:0 18px;font-size:15px;border-radius:9px}
+  .mode-bar .mb-btn{padding:13px 14px}
+  .mode-bar .mb-ic{width:22px;height:22px}
+  .mode-bar .mb-t{font-size:16px}
+  .mode-bar .mb-s{font-size:12.5px}
+  .info{padding:18px}
+  .side-h{font-size:12.5px}
+  .info-row{padding:11px 0;gap:12px}
+  .info-row .ic{width:21px;height:21px}
+  .info-row small{font-size:12px}
+  .info-row b{font-size:15px}
+  .info .info-map{font-size:13px}
+  .ig-sm{font-size:14.5px;padding:11px 12px}
+  main .about h2{font-size:26px}
+  main .about p{font-size:15.5px}
+}
 
 /* about */
 .about{margin-top:34px;padding:22px 0 8px;border-top:1px solid var(--line)}
