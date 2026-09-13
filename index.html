@@ -817,7 +817,7 @@ const DESC={
  'Фритюр меню/Сет на компанію + 2 соуси':'Усі 7 позицій фритюр-меню в одному сеті на компанію — і два соуси до них.',
  'Картопля':'Вже зі спеціями та олією — одразу на мангал чи в духовку. Упаковка на кілограм.',
  'Матнакаш':'Пишний вірменський хліб — ідеальна пара до мʼяса.',
- 'Лаваш тонкий':'Тонкий лаваш, 5 листів в упаковці — загорнути мʼясо чи подати до столу.',
+ 'Лаваш тонкий':'Тонкий лаваш — загорнути мʼясо чи подати до столу.',
  'Соуси в асортименті':'Фірмові соуси до мʼяса — асортимент питайте на точці.'
 };
 const GRP_NOTE={
@@ -1127,7 +1127,7 @@ function openPhoto(node){
     </div>
     <div class="lb-b">
       <h3>${it.name}</h3>
-      <p class="lb-pr">${money(it.price)}<span class="lb-un">${it.unit==='шт'?(servingOf(it)?(isSet(it)?' / сет · ':' / порція · ')+servingOf(it)+' г':' / шт'):' / 100 г'}</span></p>
+      <p class="lb-pr">${money(it.price)}<span class="lb-un">${it.unit==='шт'?(countUnitOf(it)?' / '+countUnitOf(it).w[0]+(unitInside(countUnitOf(it))?' · '+unitInside(countUnitOf(it)):''):' / шт'):' / 100 г'}</span></p>
       ${it.unit==='пак'?`<p class="lb-pk">Упаковка 1 кг — ${money(it.price*PACK_G/100)}</p>`:''}
       ${descOf(it)?`<p class="lb-ds">${descOf(it)}</p>`:''}
       <button class="cta lb-add" data-add="${it.id}">Додати в кошик</button>
@@ -1339,7 +1339,7 @@ const upsellPool=()=>{
 };
 const hasUpsell=()=>cart.some(l=>UPSELL_CATS.includes(l.cat));
 const hasMain=()=>cart.some(l=>MAIN_CATS.includes(l.cat));
-const upsellPrice=i=>money(i.price)+(i.unit==='шт'?' / шт':' / 100 г')+(i.unit==='пак'?' · упак. 1 кг':'');
+const upsellPrice=i=>money(i.price)+(i.unit==='шт'?' / '+(countUnitOf(i)?countUnitOf(i).w[0]:'шт'):' / 100 г')+(i.unit==='пак'?' · упак. 1 кг':'');
 /* Порційні позиції кладемо однією штукою, а не 500 г:
    півтори картоплини нікому не потрібні. */
 const upsellAdd=i=>addToCart(i, isCount(i)?1:(portionOf(i)||Math.max(500,i.minG)));
@@ -1445,21 +1445,24 @@ function plural(n,f){
   const a=n%10, b=n%100;
   return a===1&&b!==11? f[0] : a>=2&&a<=4&&(b<12||b>14)? f[1] : f[2];
 }
-const PORTIONS=['порція','порції','порцій'];
-/* Сет — теж порція за вагою, але «1 порція · 1050 г» звучить дивно */
-const isSet=it=>/^Сет /.test(it.name||'');
-const portionWords=it=>isSet(it)? ['сет','сети','сетів'] : PORTIONS;
+/* Що всередині одиниці: «150 г» або «5 листів». Назви одиниць — у
+   COUNT_UNIT у catalog.js, щоб сайт і повідомлення точці казали одне. */
+const unitInside=u=>u.g? u.g+' г' : (u.note||'');
 function unitNote(it){
-  if(it.unit==='шт')  return servingOf(it)? (isSet(it)?'за сет':'за порцію')+' · '+servingOf(it)+' г' : 'за штуку';
+  if(it.unit==='шт'){
+    const u=countUnitOf(it);
+    return u? `за ${u.za}${unitInside(u)?' · '+unitInside(u):''}` : 'за штуку';
+  }
   if(it.unit==='пак') return `упаковка 1 кг — ${money(it.price*PACK_G/100)}`;
   return 'за 100 г';
 }
-/* Скільки в рядку. Фритюр — порціями з вагою, щоб було видно, скільки
-   це їжі: «2 порції · 300 г», а не «2 шт». */
+/* Скільки в рядку: «2 порції · 300 г», «1 упаковка», а не «2 шт» —
+   з «штук» не зрозуміло, скільки там їжі. */
 function lineQty(l){
   if(l.unit==='шт'){
-    const sv=servingOf(l);
-    return sv? `${l.g} ${plural(l.g,portionWords(l))} · ${l.g*sv} г` : l.g+' шт';
+    const u=countUnitOf(l);
+    if(!u) return l.g+' шт';
+    return `${l.g} ${plural(l.g,u.w)}${u.g?' · '+(l.g*u.g)+' г':''}`;
   }
   if(l.unit==='пак') return l.g+' × 1 кг';
   return wLabel(l.g);
