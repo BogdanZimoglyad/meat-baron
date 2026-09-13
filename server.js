@@ -365,7 +365,7 @@ function orderText(o) {
   const who = a => (a.by ? ` <i>(${esc(a.by)})</i>` : '');
   const adjLines = adj.map(a =>
     a.kind === 'note' ? `💬 ${esc(a.note)}` + who(a)
-    : a.kind === 'fact' ? `🧾 Фактична сума з каси: ${money(a.amount)} (було ${money(a.from)})` + who(a)
+    : a.kind === 'fact' ? `🧾 Фактична сума з каси: ${money(a.amount)} (було ${money(a.from)})` + (a.note ? ` — ${esc(a.note)}` : '') + who(a)
     : `${a.kind === 'add' ? '➕' : '➖'} ${money(a.amount)}` + (a.note ? ` — ${esc(a.note)}` : '') + who(a)
   ).join('\n');
   const changed = adj.some(a => a.kind !== 'note');
@@ -797,7 +797,7 @@ bot.on('callback_query', async cq => {
    Сума на сайті орієнтовна: мʼясо важать під замовлення, а клієнт може
    щось додати телефоном. Суму оператор міняє лише кнопками:
      🧾 Фактична сума — число з каси, де замовлення пробили й зважили;
-                       без коментаря: додане телефоном — через ➕ / ➖
+                       коментар за потреби («замість ошийка поклали мʼякоть»)
      ➕ Додати  — «39 додали соус Ткемалі»: до суми додається 39
      ➖ Відняти — «20 вага менша»: від суми віднімається 20
      💬 Коментар — лише текст для клієнта, сума не міняється
@@ -843,7 +843,7 @@ function parseTotalReply(t) {
 }
 
 const ASK = {
-  fact: o => `Замовлення № ${o.no}, зараз ${money(o.total)}.\n🧾 Введіть <b>фактичну суму з каси</b> разом зі смаженням — відповіддю на це повідомлення, лише число.\nНаприклад: 461.30`,
+  fact: o => `Замовлення № ${o.no}, зараз ${money(o.total)}.\n🧾 Введіть <b>фактичну суму з каси</b> разом зі смаженням — відповіддю на це повідомлення. За потреби — коментар через пробіл.\nНаприклад: 461.30 або 461.30 замість ошийка поклали мʼякоть`,
   add:  o => `Замовлення № ${o.no}, зараз ${money(o.total)}.\n➕ На скільки <b>збільшити</b> суму? Відповідайте на це повідомлення, коментар — через пробіл.\nНаприклад: 39 додали соус Ткемалі`,
   sub:  o => `Замовлення № ${o.no}, зараз ${money(o.total)}.\n➖ На скільки <b>зменшити</b> суму? Відповідайте на це повідомлення, коментар — через пробіл.\nНаприклад: 25 вага менша`,
   note: o => `Замовлення № ${o.no}.\n💬 Напишіть коментар для клієнта відповіддю на це повідомлення. Сума не зміниться.`
@@ -924,7 +924,7 @@ bot.on('callback_query', async cq => {
   }).catch(e => console.error('edit:', e.message));
   await bot.editMessageText(
     conf.kind === 'note' ? `✅ Коментар до № ${o.no} надіслано: ${conf.note}`
-    : conf.kind === 'fact' ? `✅ № ${o.no}: фактична сума ${money(next)} (було ${money(before)}, ${diffText(before, next)})`
+    : conf.kind === 'fact' ? `✅ № ${o.no}: фактична сума ${money(next)} (було ${money(before)}, ${diffText(before, next)})` + (conf.note ? `\n${conf.note}` : '')
     : `✅ № ${o.no}: ${money(before)} ${conf.kind === 'add' ? '+' : '−'} ${money(conf.amount)} = ${money(next)}` + (conf.note ? `\n${conf.note}` : ''),
     { chat_id: chatId, message_id: cq.message.message_id }).catch(() => {});
   await bot.answerCallbackQuery(cq.id, { text: 'Готово' });
@@ -953,7 +953,6 @@ bot.on('message', async msg => {
     if (!note) return askAdjust(o, ask.kind, msg.chat.id).catch(() => {});
   } else {
     ({ amount, note } = parseTotalReply(msg.text));
-    if (ask.kind === 'fact') note = '';     // у факту коментаря немає: додане — через ➕ / ➖
     const next = nextTotal(o.total, ask.kind, amount);
     if (!(amount > 0) || next <= 0 || next > MAX_TOTAL) {
       await bot.sendMessage(msg.chat.id,
@@ -973,6 +972,7 @@ bot.on('message', async msg => {
   const preview = ask.kind === 'note' ? `№ ${o.no}: коментар для клієнта:\n${note}`
     : ask.kind === 'fact'
       ? `№ ${o.no}: фактична сума з каси\n${money(o.total)} → ${money(next)} (${diffText(o.total, next)})` +
+        (note ? `\nКоментар для клієнта: ${note}` : '') +
         (far ? `\n⚠️ Різниця більше ${Math.round(FACT_WARN * 100)}% — перевірте, чи немає опечатки.` : '')
       : `№ ${o.no}: ${money(o.total)} ${ask.kind === 'add' ? '+' : '−'} ${money(amount)} = ${money(next)}` +
         (note ? `\nКоментар для клієнта: ${note}` : '');
@@ -987,13 +987,14 @@ bot.on('message', async msg => {
 function notifyAdjust(o, a) {
   const u = db.users[o.telKey] || {};
   if (!u.tgId || !a) return;
-  /* Про незмінну ціну за 100 г пишемо лише для факту з каси: там сума
-     міняється через вагу. Для ➕ / ➖ причину пояснює коментар. */
+  /* Про незмінну ціну за 100 г пишемо лише для факту з каси без
+     коментаря: тоді сума змінилась через вагу. З коментарем причина може
+     бути іншою — заміна позиції, — і пояснює її оператор. */
   const text = a.kind === 'note'
     ? `💬 Замовлення № ${o.no}. Оператор: ${a.note}`
     : a.kind === 'fact'
       ? `🧾 Замовлення № ${o.no} зважили: до сплати ${money(o.total)} (було ${money(a.from)}).\n` +
-        `Ціна за 100 г не змінилась — змінилась лише вага.`
+        (a.note ? `Оператор: ${a.note}` : `Ціна за 100 г не змінилась — змінилась лише вага.`)
       : `${a.kind === 'add' ? '➕' : '➖'} Замовлення № ${o.no}: ${a.kind === 'add' ? '+' : '−'}${money(a.amount)}` +
         ` — ${a.note || 'уточнили після зважування'}.\nДо сплати: ${money(o.total)}`;
   bot.sendMessage(u.tgId, text,
