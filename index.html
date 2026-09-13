@@ -392,6 +392,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .fld:focus{border-color:var(--line-2)}
 .fld::placeholder{color:var(--smoke)}
 .box{background:rgba(30,24,23,.94);border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:12px}
+/* смаження на оформленні — у червоній рамці, щоб не проґавили */
+.fry-box{margin-top:16px;border-color:var(--ember);background:linear-gradient(rgba(196,52,42,.08),rgba(196,52,42,.08)),var(--coal)}
 .sw{width:50px;height:29px;border-radius:999px;background:var(--coal-2);border:1px solid var(--line-2);position:relative;flex:0 0 auto;transition:.16s}
 .sw i{position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:var(--smoke);transition:.16s}
 .sw[aria-checked=true]{background:var(--ember);border-color:var(--ember)}
@@ -2052,20 +2054,6 @@ function openCheckout(){
       <span class="ps-a">Обрати</span>
     </button>
 
-    ${fryLines().length?`<div class="box" id="fryBox">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
-        <div><b style="font-weight:500">Посмажити на мангалі</b>
-        <div style="font-size:12px;color:var(--smoke)">${FRY_RATE} ₴ за кг</div></div>
-        ${fryAllBtn()}
-      </div>
-      ${fryLines().map(({l,i})=>`<div class="fry-row">
-        <div class="ln-th">${photoOf(l)?`<img src="${photoOf(l)}" alt="">`:ph(l)}</div>
-        <div class="fry-b"><b>${esc(l.name)}</b><span>${lineQty(l)} · +${money(fryCostOf(l))}</span></div>
-        <button class="sw" data-f="${i}" role="switch" aria-checked="${!!l.fry}" aria-label="Смажити ${esc(l.name)}"><i></i></button>
-      </div>`).join('')}
-      ${meatGrams()?`<div class="warn">При смаженні мʼясо втрачає 30–35% ваги. З ${wLabel(meatGrams())} сирого вийде приблизно ${wLabel(Math.round(meatGrams()*.67/50)*50)}–${wLabel(Math.round(meatGrams()*.7/50)*50)} готового.</div>`:''}
-    </div>`:''}
-
     <span class="lbl">Оплата</span>
     <button class="pay" data-pay="cash" aria-pressed="${pay==='cash'}"><span class="dot"></span>Готівкою ${mode==='pickup'?'на місці':'курʼєру'}</button>
     <button class="pay" data-pay="card" aria-pressed="${pay==='card'}"><span class="dot"></span>Карткою ${mode==='pickup'?'на місці':'курʼєру'}</button>
@@ -2079,7 +2067,22 @@ function openCheckout(){
          <p class="hint" style="margin:6px 0 0">Номер підтверджено Telegram. <button class="lnk" id="ckOut" type="button">Це не я</button></p>`
       : `<input class="fld" id="tel" placeholder="+380 __ ___ __ __" inputmode="tel" autocomplete="tel" value="${esc(telV)}">
          <p class="hint" style="margin:6px 0 0"><button class="lnk" id="ckIn" type="button">Увійти через Telegram</button> — щоб не вводити щоразу і бачити свої замовлення.</p>`}
-    <p class="err" id="err">Вкажіть імʼя та номер телефону.</p>
+
+    ${/* Смаження — одразу над підсумком і кнопкою, у червоній рамці: вище, між
+       часом і оплатою, його частіше пропускали й дивувались, що мʼясо сире */''}
+    ${fryLines().length?`<div class="box fry-box" id="fryBox">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div><b style="font-weight:500">Посмажити на мангалі</b>
+        <div style="font-size:12px;color:var(--smoke)">${FRY_RATE} ₴ за кг</div></div>
+        ${fryAllBtn()}
+      </div>
+      ${fryLines().map(({l,i})=>`<div class="fry-row">
+        <div class="ln-th">${photoOf(l)?`<img src="${photoOf(l)}" alt="">`:ph(l)}</div>
+        <div class="fry-b"><b>${esc(l.name)}</b><span>${lineQty(l)} · +${money(fryCostOf(l))}</span></div>
+        <button class="sw" data-f="${i}" role="switch" aria-checked="${!!l.fry}" aria-label="Смажити ${esc(l.name)}"><i></i></button>
+      </div>`).join('')}
+      ${meatGrams()?`<div class="warn">При смаженні мʼясо втрачає 30–35% ваги. З ${wLabel(meatGrams())} сирого вийде приблизно ${wLabel(Math.round(meatGrams()*.67/50)*50)}–${wLabel(Math.round(meatGrams()*.7/50)*50)} готового.</div>`:''}
+    </div>`:''}
 
     <div class="box" style="margin-top:16px">
       <div class="sum"><span>Товари</span><span>${money(goodsTotal())}</span></div>
@@ -2090,6 +2093,7 @@ function openCheckout(){
         <span style="font-size:13px">Разом</span><b style="font-family:Oswald;font-size:23px">${money(total)}</b></div>
       <p class="weight-note">${WEIGHT_NOTE}</p>
     </div>
+    <p class="err" id="err">Вкажіть імʼя та номер телефону.</p>
     <button class="cta" id="send">Підтвердити замовлення</button>`);
 
     const ps=sIn.querySelector('#pickShop');
