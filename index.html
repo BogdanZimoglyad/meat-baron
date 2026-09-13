@@ -2299,13 +2299,17 @@ function openStatus(startStatus){
   if(o.no!=='—'){
     /* Тримаємо такт окремою функцією, щоб його можна було смикнути
        руками — коли людина повертається на вкладку. */
-    pollTick=async()=>{
+    /* Відповідь могла прийти, коли екран замовлення вже закрили і відкрили
+       інший (кошик): тоді не малюємо — інакше статус перемальовував би кошик. */
+    const tick=async()=>{
       try{const r=await req(API+'/api/order/'+o.no,null,8000);const d=await r.json();
         /* сума могла змінитись: оператор зважив замовлення */
         if(Number.isFinite(d.total)){o.total=d.total; o.totalOrig=d.totalOrig; o.adjust=d.adjust||[]}
+        if(pollTick!==tick) return;
         if(d.status){draw(d.status); if(d.status==='done'){clearInterval(poll);clearLast()} showActiveBar()}
       }catch(e){}
     };
+    pollTick=tick;
     poll=setInterval(pollTick,15000);
   }
 }
@@ -2526,12 +2530,16 @@ async function startLogin(){
   }catch(e){
     box.innerHTML=`<p class="hint" style="text-align:center;padding:10px 0">Не вдалося звʼязатися з сервером.</p>
       <button class="cta ghost" id="lgRetry">Спробувати ще раз</button>`;
-    sIn.querySelector('#lgRetry').onclick=startLogin;
+    if(box.isConnected) box.querySelector('#lgRetry').onclick=startLogin;
     return;
   }
+  /* Поки чекали на сервер, екран входу могли закрити — тоді й не чекаємо
+     підтвердження: раніше опитування йшло у фоні пʼять хвилин і відкривало
+     кабінет поверх кошика чи оформлення. */
+  if(!box.isConnected) return;
   box.innerHTML=`<a class="cta" id="lgGo" href="${esc(j.link)}" target="_blank" rel="noopener">Увійти через Telegram</a>
     <p class="hint" id="lgSt" style="text-align:center">Чекаємо на підтвердження…</p>`;
-  const st=sIn.querySelector('#lgSt');
+  const st=box.querySelector('#lgSt');
   const until=Date.now()+(j.ttl||300)*1000;
   /* Питаємо раз на дві секунди: людина в цей час перемикається в
      Telegram і назад, довша пауза відчувається як зависання. */
@@ -2543,7 +2551,7 @@ async function startLogin(){
       if(d.status==='ok'){
         clearInterval(loginPoll);
         setMe({token:d.token,tel:d.tel,name:d.name||'',addr:d.addr||''});
-        openCabinet();
+        if(box.isConnected) openCabinet();   // вхід зберігаємо в будь-якому разі, а кабінет — лише якщо людина ще на екрані входу
       } else if(d.status==='expired'){ clearInterval(loginPoll); expiredLogin() }
     }catch(e){ if(st) st.textContent='Звʼязок пропав. Чекаємо…' }
   },2000);
