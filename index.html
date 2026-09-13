@@ -39,7 +39,12 @@ body{overflow-wrap:anywhere;word-break:normal}
 /* Дим на всю сторінку: картки непрозорі, тож він видний лише по краях
    і між ними. body прозорий, інакше перекрив би дим. */
 html::before{
-  content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+  content:'';position:fixed;top:0;left:0;right:0;z-index:-1;pointer-events:none;
+  /* Висота — за найбільшим екраном (lvh), а не inset:0. На телефоні під
+     час прокрутки ховається рядок адреси, екран стає вищим — і шар
+     завдовжки «до низу» розтягувався, картинка cover перемасштабовувалась
+     і фон підстрибував. lvh від рядка адреси не залежить. */
+  height:100vh;height:100lvh;
   background:url('smoke-page.jpg') center/cover no-repeat;
   opacity:.9;
 }
@@ -48,7 +53,7 @@ html::before{
    перетікають. На телефоні лишається статичним: анімація на весь екран
    там їсть батарею і смикається під час прокрутки. */
 @media(min-width:900px) and (hover:hover){
-  html::before,html::after{inset:-8%;will-change:transform}
+  html::before,html::after{inset:-8%;height:auto;will-change:transform}
   html::before{animation:smoke-a 30s ease-in-out infinite alternate}
   html::after{
     content:'';position:fixed;z-index:-1;pointer-events:none;
