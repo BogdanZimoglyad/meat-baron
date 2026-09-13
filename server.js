@@ -25,7 +25,7 @@ const crypto = require('crypto');
 /* Прайс, правила рахунку і список точок — той самий файл, що підключає
    сайт. Сервер не вірить ні сумі, ні назві точки з браузера. */
 const CATALOG = require('./catalog.js');
-const { FRY_RATE, MIN_G, kop, lineSum, fryableG, canFry, countUnitOf, variantsOf, lineTitle } = CATALOG;
+const { FRY_RATE, MIN_G, kop, lineSum, fryableG, canFry, countUnitOf, variantsOf, priceOf, lineTitle } = CATALOG;
 const CATALOG_SHOPS = CATALOG.SHOPS;
 const byId = new Map(CATALOG.ITEMS.map(it => [it.id, it]));
 
@@ -479,7 +479,7 @@ app.post('/api/order', async (req, res) => {
     }
     lines.push({
       name: it.name, grp: it.grp, cat: it.cat, unit: it.unit, id: it.id,
-      g: q, sum: lineSum({ unit: it.unit, price: it.price, g: q }),
+      g: q, sum: lineSum({ unit: it.unit, price: priceOf(it, v), g: q }),   // у соусів ціна своя
       fry: canFry(it) && (perLine ? !!raw.fry : !!b.fry),
       ...(v ? { v } : {})
     });

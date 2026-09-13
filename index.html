@@ -306,6 +306,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .var-b b{display:block;font-weight:500;font-size:14px}
 .var-b span{display:block;margin-top:2px;font-size:12px;color:var(--smoke);line-height:1.4}
 .var-n{min-width:18px;text-align:center;font-family:'Oswald';font-size:15px;color:var(--bone)}
+.var-pr{margin-left:8px;font-style:normal;font-family:'Oswald';font-size:14px;font-weight:400;color:var(--ember-hot)}
 .ln-p{font-family:'Oswald';font-size:15px;min-width:58px;text-align:right}
 
 /* checkout */
@@ -1109,7 +1110,7 @@ function renderCatalog(){
         <button class="ph" ${photoOf(i)?`data-ph="${photoOf(i)}" data-id="${i.id}" aria-label="Показати ${i.name}"`:'disabled'}>${photoOf(i)?`<img src="${photoOf(i)}" alt="${i.name}" loading="lazy">`:ph(i)}</button>
         <div class="c-b">
           <span class="nm">${i.name}</span>
-          <span class="pr-top">${money(i.price)}</span>
+          ${variantsOf(i)?'':`<span class="pr-top">${money(i.price)}</span>`}
           ${descOf(i)?`<span class="ds">${descOf(i)}</span>`:''}
           <span class="un">${unitNote(i)}${c.fry?' · мариноване':''}</span>
           <div class="c-f">
@@ -1148,7 +1149,7 @@ function openPhoto(node){
     </div>
     <div class="lb-b">
       <h3>${it.name}</h3>
-      <p class="lb-pr">${money(it.price)}<span class="lb-un">${it.unit==='шт'?(countUnitOf(it)?' / '+countUnitOf(it).w[0]+(unitInside(countUnitOf(it))?' · '+unitInside(countUnitOf(it)):''):' / шт'):' / 100 г'}</span></p>
+      <p class="lb-pr">${variantsOf(it)? variantsNote(it) : money(it.price)+`<span class="lb-un">${it.unit==='шт'?(countUnitOf(it)?' / '+countUnitOf(it).w[0]+(unitInside(countUnitOf(it))?' · '+unitInside(countUnitOf(it)):''):' / шт'):' / 100 г'}</span>`}</p>
       ${it.unit==='пак'?`<p class="lb-pk">Упаковка 1 кг — ${money(it.price*PACK_G/100)}</p>`:''}
       ${descOf(it)?`<p class="lb-ds">${descOf(it)}</p>`:''}
       <button class="cta lb-add" data-add="${it.id}">Додати в кошик</button>
@@ -1344,7 +1345,7 @@ function addToCart(it,g,v){
   v=v||'';
   const ex=cart.find(l=>l.id===it.id&&(l.v||'')===v);
   if(ex) ex.g+=g;
-  else cart.push({id:it.id,name:it.name,grp:it.grp,price:it.price,unit:it.unit,cat:it.cat,minG:it.minG,g,...(v?{v}:{})});
+  else cart.push({id:it.id,name:it.name,grp:it.grp,price:priceOf(it,v),unit:it.unit,cat:it.cat,minG:it.minG,g,...(v?{v}:{})});
   paintBar();
 }
 
@@ -1356,14 +1357,14 @@ function openVariants(it,onDone){
   const done=onDone||close;
   const countOf=v=>{const l=cart.find(x=>x.id===it.id&&x.v===v);return l?l.g:0};
   const row=([v,d])=>`<div class="var-row" data-v="${esc(v)}">
-      <div class="var-b"><b>${esc(v)}</b><span>${esc(d)}</span></div>
+      <div class="var-b"><b>${esc(v)}<i class="var-pr">${money(priceOf(it,v))}</i></b><span>${esc(d)}</span></div>
       <div class="qty"><button class="qbtn" data-dv="-1" aria-label="Менше">−</button>
       <span class="var-n">${countOf(v)||''}</span>
       <button class="qbtn" data-dv="1" aria-label="Більше">+</button></div>
     </div>`;
   open(`<div class="grab-zone"><div class="grab"></div></div>
   <div class="sh-h"><h3>${esc(it.name)}</h3><button class="x" onclick="close_()">✕</button></div>
-  <p class="hint" style="margin-top:-6px">${descOf(it)?esc(descOf(it))+' ':''}${money(it.price)} за ${countUnitOf(it)?countUnitOf(it).za:'штуку'}.</p>
+  ${descOf(it)?`<p class="hint" style="margin-top:-6px">${esc(descOf(it))}</p>`:''}
   <div class="var-list">${vs.list.map(row).join('')}</div>
   <button class="cta" id="varDone">Готово</button>`);
   sIn.querySelector('.var-list').onclick=e=>{
@@ -1397,7 +1398,7 @@ const upsellPool=()=>{
 };
 const hasUpsell=()=>cart.some(l=>UPSELL_CATS.includes(l.cat));
 const hasMain=()=>cart.some(l=>MAIN_CATS.includes(l.cat));
-const upsellPrice=i=>money(i.price)+(i.unit==='шт'?' / '+(countUnitOf(i)?countUnitOf(i).w[0]:'шт'):' / 100 г')+(i.unit==='пак'?' · упак. 1 кг':'');
+const upsellPrice=i=>variantsOf(i)? variantsNote(i) : money(i.price)+(i.unit==='шт'?' / '+(countUnitOf(i)?countUnitOf(i).w[0]:'шт'):' / 100 г')+(i.unit==='пак'?' · упак. 1 кг':'');
 /* Порційні позиції кладемо однією штукою, а не 500 г:
    півтори картоплини нікому не потрібні. */
 const upsellAdd=i=>addToCart(i, isCount(i)?1:(portionOf(i)||Math.max(500,i.minG)));
@@ -1520,7 +1521,11 @@ function sheetLead(it){
   if(it.cat==='ready') return 'Готовий продукт зі смокера. ';
   return '';
 }
+/* У позиції з різновидами ціни різні, тож одну ціну не показуємо —
+   лише скільки є на вибір. Ціни видно у списку, коли обираєш. */
+const variantsNote=it=>{const n=variantsOf(it).list.length; return `${n} ${plural(n,['вид','види','видів'])} на вибір`};
 function unitNote(it){
+  if(variantsOf(it)) return variantsNote(it);
   if(it.unit==='шт'){
     const u=countUnitOf(it);
     return u? `за ${u.za}${unitInside(u)?' · '+unitInside(u):''}` : 'за штуку';
@@ -2347,7 +2352,7 @@ function repeatOrder(lines){
     const v=vs&&l.v&&vs.list.some(x=>x[0]===l.v)? l.v : '';
     const ex=cart.find(c=>c.id===it.id&&(c.v||'')===v);
     if(ex) ex.g+=g;
-    else cart.push({id:it.id,name:it.name,grp:it.grp,price:it.price,unit:it.unit,cat:it.cat,minG:it.minG,g,
+    else cart.push({id:it.id,name:it.name,grp:it.grp,price:priceOf(it,v),unit:it.unit,cat:it.cat,minG:it.minG,g,
                     fry:!!l.fry&&canFry(it),     // що смажили минулого разу
                     ...(v?{v}:{})});
     added++;
