@@ -2239,7 +2239,10 @@ function openStatus(startStatus){
   const o=order;
   const STK=['accepted','cooking','ready','done'];
   const draw=(status)=>{
-    const step=Math.max(0,STK.indexOf(status));
+    /* Зелений — крок уже пройдено, червоний — той, що попереду. Раніше
+       «Прийнято» лишалось червоним і після того, як оператор натиснув
+       «Прийняти в роботу», і здавалось, що замовлення ще не взяли. */
+    const reached=STK.indexOf(status);          // -1 — точка ще не підтвердила
     const steps=[['Прийнято',status==='new'?'чекаємо підтвердження точки':'оператор підтвердив'],
       ['Готується',o.fry?'мʼясо на мангалі':'збираємо замовлення'],
       /* третій елемент — значок у кружечку замість галочки */
@@ -2255,8 +2258,8 @@ function openStatus(startStatus){
       <span><b>Замовлення готове</b><span>${o.mode==='pickup'?'Чекаємо на вас за адресою '+o.shop:'Курʼєр уже виїжджає'}</span></span>
     </div>`:''}
     <div class="box steps">${steps.map((s,i)=>`
-      <div class="st ${i<step?'done':i===step?'on':''}">
-        <div class="st-l"><div class="st-d${s[2]?' ic':''}">${s[2]||(i<step?'✓':'')}</div>${i<3?'<div class="st-bar"></div>':''}</div>
+      <div class="st ${i<=reached?'done':i===reached+1?'on':''}">
+        <div class="st-l"><div class="st-d${s[2]?' ic':''}">${s[2]||(i<=reached?'✓':'')}</div>${i<3?'<div class="st-bar"></div>':''}</div>
         <div class="st-b"><div class="t">${s[0]}</div>${s[1]?`<div class="s">${s[1]}</div>`:''}</div>
       </div>`).join('')}</div>
 
