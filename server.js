@@ -190,8 +190,9 @@ const logins = new Map();              // ключ входу → стан сп�
 const chatLogin = new Map();           // чат у Telegram → ключ входу
 
 let BOT_NAME = process.env.BOT_USERNAME || '';
+let BOT_ID = 0;                          // щоб упізнавати відповіді на власні запити бота
 bot.getMe()
-  .then(me => { BOT_NAME = me.username || BOT_NAME; console.log('Бот @' + BOT_NAME); })
+  .then(me => { BOT_NAME = me.username || BOT_NAME; BOT_ID = me.id; console.log('Бот @' + BOT_NAME); })
   .catch(e => console.warn('Не вдалося дізнатися імʼя бота:', e.message));
 
 /* Спроби входу живуть у памʼяті: вони потрібні хвилину-дві, а після
@@ -977,11 +978,29 @@ bot.on('callback_query', async cq => {
 });
 
 /* Відповідь оператора на запит */
+/* Запит, якого бот уже не памʼятає, — за текстом його ж повідомлення з ASK:
+   «Замовлення № 1024, зараз … 🧾 Введіть…» → { no: 1024, kind: 'fact' } */
+function askFromText(r) {
+  if (!r || !r.from || !BOT_ID || r.from.id !== BOT_ID) return null;
+  const t = String(r.text || '');
+  /* Саме запит, а не картка замовлення: картка починається «Замовлення № N — Нове»
+     і теж містить 🧾/➕, та відповідь на неї сумою не є */
+  const m = t.match(/^Замовлення № (\d+)(?:, зараз |\.\n)/);
+  if (!m || !/відповід/i.test(t)) return null;
+  const kind = t.includes('🧾') ? 'fact' : t.includes('➕') ? 'add' : t.includes('➖') ? 'sub'
+             : t.includes('💬 Напишіть коментар') ? 'note' : null;
+  return kind ? { no: Number(m[1]), kind, at: Date.now() } : null;
+}
+
 bot.on('message', async msg => {
   const r = msg.reply_to_message;
   if (!r || !msg.text) return;
   const key = msg.chat.id + ':' + r.message_id;
-  const ask = amountAsks.get(key);
+  /* Запит бот памʼятає лише в памʼяті процесу й лише до першої відповіді.
+     Відповідь на той самий запит удруге або після перезапуску сервера
+     раніше мовчки ігнорувалась — оператор думав, що чат завис. Тепер
+     упізнаємо запит за текстом власного повідомлення бота. */
+  const ask = amountAsks.get(key) || askFromText(r);
   if (!ask) return;
   amountAsks.delete(key);
 
