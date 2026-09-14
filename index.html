@@ -91,7 +91,9 @@ a{color:inherit}
 .wrap{max-width:620px;margin:0 auto;padding:0 16px}
 
 /* header */
-.top{position:sticky;top:0;z-index:40;background:rgba(20,16,16,.94);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+/* padding-top — під годинник і «чубчик» iPhone: коли сайт відкрито з іконки на екрані «Додому»,
+   сторінка йде під рядок стану (black-translucent), і шапку з точкою та «Замовленнями» було не видно */
+.top{position:sticky;top:0;z-index:40;padding-top:env(safe-area-inset-top);background:rgba(20,16,16,.94);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .top-in{display:flex;align-items:center;gap:12px;padding:10px 0}
 .mark{width:38px;height:38px;border-radius:50%;object-fit:cover;flex:0 0 auto;display:block}
 .shop{flex:1;min-width:0;text-align:left;display:flex;align-items:center;gap:10px;
@@ -307,7 +309,7 @@ a{color:inherit}
 /* sheet */
 .veil{position:fixed;inset:0;background:rgba(8,6,6,.72);z-index:60;opacity:0;pointer-events:none;transition:.2s}
 .veil.on{opacity:1;pointer-events:auto}
-.sheet{position:fixed;left:0;right:0;bottom:0;z-index:61;background:var(--char);border-radius:18px 18px 0 0;border-top:1px solid var(--line-2);max-height:92vh;max-height:92dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;transform:translateY(101%);transition:transform .26s cubic-bezier(.3,.9,.3,1)}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:61;background:var(--char);border-radius:18px 18px 0 0;border-top:1px solid var(--line-2);max-height:92vh;max-height:calc(92dvh - env(safe-area-inset-top));overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;transform:translateY(101%);transition:transform .26s cubic-bezier(.3,.9,.3,1)}
 .sheet.on{transform:none}
 .sheet-in{max-width:620px;margin:0 auto;padding:8px 16px calc(20px + env(safe-area-inset-bottom))}
 .grab{width:44px;height:5px;border-radius:3px;background:var(--line-2);margin:0 auto;
