@@ -445,6 +445,12 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 
 /* підкатегорії */
 .subs{display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;padding:2px 0 12px;scrollbar-width:none}
+/* На телефоні стрічки кнопок доходять до краю екрана: раніше вони обрізались
+   за 16 px від краю, і «Мариноване мʼясо» чи «Баранина» виглядали зрізаними. */
+@media(max-width:899px){
+  .cats,.subs{margin-left:-16px;margin-right:-16px;padding-left:16px;padding-right:16px;scroll-padding-inline:16px}
+  .cats::after,.subs::after{content:"";flex:0 0 1px}   /* Safari «зʼїдає» правий відступ у стрічці, що гортається */
+}
 .subs::-webkit-scrollbar{display:none}
 .sub{flex:0 0 auto;border:1px solid var(--line);border-radius:999px;padding:6px 13px;
   font-size:12.5px;color:var(--smoke);white-space:nowrap;transition:.14s;background:var(--coal)}
