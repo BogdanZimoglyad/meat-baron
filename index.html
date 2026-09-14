@@ -180,6 +180,7 @@ a{color:inherit}
   display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;transition:.15s}
 .add:active{transform:scale(.96)}
 .empty{color:var(--smoke);padding:30px 0;text-align:center;font-size:14px}
+.search-head{margin:14px 2px 0;font-size:13px;color:var(--smoke)}
 
 /* три колонки на широкому екрані */
 .layout{display:block}
@@ -1115,7 +1116,9 @@ const SYN={
  'кур':'курка куряча','цыплен':'курка','говя':'яловичина',
  'индейк':'індик індича','индюш':'індича','индюк':'індик',
  'утк':'качка','утин':'качка',
- 'шея':'ошийок','шеи':'ошийок','ошеек':'ошийок',
+ 'шея':'ошийок ошийка','шеи':'ошийок ошийка','ошеек':'ошийок ошийка','ошейк':'ошийок ошийка','шейк':'ошийок ошийка',
+ 'курин':'куряча','грудк':'філе','крылыш':'крило','картоф':'картопля',
+ 'чеснок':'часниковий','чесноч':'часниковий','сливочн':'вершково','брусник':'брусничний','горчиц':'гірчичний',
  'ребр':'реберця','ребер':'реберця',
  'голен':'гомілка','ножк':'гомілка','окороч':'гомілка',
  'отбивн':'відбивної','корейк':'відбивної','кост':'кістці',
@@ -1153,14 +1156,30 @@ function ixOf(it){
 function hitWord(w,t){
   if(t.length>2&&w.indexOf(t)===0) return true;
   if(w.length>2&&t.indexOf(w)===0) return true;
-  return t.length>3&&w.length>3&&t.slice(0,4)===w.slice(0,4);
+  if(t.length>3&&w.length>3&&t.slice(0,4)===w.slice(0,4)) return true;
+  /* Одна літера не та — теж підходить, якщо слово вже з пʼяти літер:
+     «свиняя», «ребрышки» з одруківкою. Перша літера має збігтися, інакше
+     тягнуло б зайве. */
+  if(t.length>4&&w.length>=t.length&&t[0]===w[0]){
+    let miss=0;
+    for(let i=1;i<t.length&&miss<2;i++) if(t[i]!==w[i]) miss++;
+    return miss<2;
+  }
+  return false;
 }
-/* Слово покупця плюс те, на що його міняє словник */
+/* Слово покупця плюс те, на що його міняє словник. Спрацьовує й на
+   недописане слово: «оше» — вже початок «ошеек», тож одразу шукаємо
+   ошийок, а не чекаємо, поки допишуть. */
 function variants(t){
   const v=[t];
-  for(const p of SYN_F) if(t.indexOf(p[0])===0) for(const s of p[1]) if(v.indexOf(s)<0) v.push(s);
+  for(const p of SYN_F)
+    if(t.indexOf(p[0])===0||(t.length>2&&p[0].indexOf(t)===0))
+      for(const s of p[1]) if(v.indexOf(s)<0) v.push(s);
   return v;
 }
+/* Кістяк слова — лише приголосні. Останній захід, коли нічого не знайшли:
+   «ашеек» і «ошийок» різні голосними, а кістяк у них однаковий. */
+const skel=w=>w.replace(/[аеиоуюя]/g,'');
 /* Товар підходить, якщо кожне слово запиту знайшлося хоч у якомусь
    вигляді. Саме кожне: «ковбаски з сиром» не має видавати всі ковбаски. */
 function searchItems(q){
@@ -1177,15 +1196,24 @@ function searchItems(q){
     return vs.every(v=>v.some(t=>ws.some(w=>hitWord(w,t))));
   });
   const found=pick('mainW');
-  return found.length?found:pick('allW');
+  if(found.length) return found;
+  const more=pick('allW');
+  if(more.length) return more;
+  const sk=ts.map(skel);
+  if(sk.some(s=>s.length<3)) return more;
+  return ITEMS.filter(i=>sk.every(s=>ixOf(i).mainW.some(w=>skel(w).indexOf(s)===0)));
 }
 
 let cat='raw', sub='', cart=[], shop=0, order=null, getMode='pickup', orderNote='';
 
 /* ---------- catalog ---------- */
+/* Категорія, в якій шукаємо. Порожня — шукаємо всюди. Раніше дотик до
+   категорії стирав пошук: людина вводила «ковбаски», тиснула вкладку — і
+   все, що набрала, зникало. Тепер вкладка звужує результати. */
+let searchCat='';
 function renderCats(){
   const q=document.getElementById('q')?document.getElementById('q').value.trim():'';
-  const active=q?null:cat;
+  const active=q?searchCat:cat;
   document.getElementById('cats').innerHTML=CATS.map(c=>
     `<button class="cat" role="tab" aria-selected="${c.id===active}" data-c="${c.id}">${c.t}</button>`).join('');
   document.getElementById('sideCats').innerHTML=CATS.map(c=>
@@ -1194,10 +1222,19 @@ function renderCats(){
 function renderCatalog(){
   const q=document.getElementById('q').value.trim().toLowerCase();
   const searching=!!q;
-  const all=searching? searchItems(q) : ITEMS.filter(i=>i.cat===cat);
+  const found=searching? searchItems(q) : null;
+  const all=searching? found.filter(i=>!searchCat||i.cat===searchCat) : ITEMS.filter(i=>i.cat===cat);
   const box=document.getElementById('catalog');
   const subBox=document.getElementById('subs');
-  if(!all.length){box.innerHTML='<p class="empty">Нічого не знайшли. Спробуйте іншу назву.</p>';subBox.innerHTML='';return}
+  const catName=id=>(CATS.find(c=>c.id===id)||{}).t||'';
+  if(!all.length){
+    box.innerHTML=searching&&searchCat&&found.length
+      ? `<p class="empty">У «${esc(catName(searchCat))}» нічого не знайшли.<br>
+         <button class="lnk" id="searchAll" type="button">Показати в усіх категоріях (${found.length})</button></p>`
+      : '<p class="empty">Нічого не знайшли. Спробуйте іншу назву.</p>';
+    subBox.innerHTML='';
+    return;
+  }
 
   const allGroups=[...new Set(all.map(i=>i.grp))];
   if(!searching&&allGroups.length>1){
@@ -1209,7 +1246,9 @@ function renderCatalog(){
   const groups=[...new Set(list.map(i=>i.grp))];
   /* Пояснення до всієї категорії — над товарами, лише коли не шукаємо */
   const catNote=!searching&&(CATS.find(c=>c.id===cat)||{}).note;
-  box.innerHTML=(catNote?`<p class="grp-note cat-note">${catNote}</p>`:'')+groups.map(g=>{
+  /* Під час пошуку — що саме показано і як повернути всі категорії */
+  const searchHead=searching?`<p class="search-head">Знайдено ${all.length}${searchCat?` у «${esc(catName(searchCat))}» · <button class="lnk" id="searchAll" type="button">усі категорії</button>`:''}</p>`:'';
+  box.innerHTML=searchHead+(catNote?`<p class="grp-note cat-note">${catNote}</p>`:'')+groups.map(g=>{
     const c=CATS.find(c=>c.id===list.find(i=>i.grp===g).cat);
     return `<section class="grp"><div class="grp-h"><h2>${g}</h2><em>${c.u}</em></div>
     ${GRP_NOTE[g]?`<p class="grp-note">${GRP_NOTE[g]}</p>`:''}
@@ -1228,7 +1267,15 @@ function renderCatalog(){
       </article>`).join('')}</div></section>`;
   }).join('');
 }
-function pickCat(id){cat=id;sub='';document.getElementById('q').value='';renderCats();renderCatalog()}
+function pickCat(id){
+  const q=document.getElementById('q').value.trim();
+  if(q){ searchCat=searchCat===id?'':id; if(searchCat) cat=searchCat }   // повторний дотик — знову всюди
+  else { cat=id; sub='' }
+  renderCats(); renderCatalog();
+}
+document.getElementById('catalog').addEventListener('click',e=>{
+  if(e.target.id==='searchAll'){ searchCat=''; renderCats(); renderCatalog() }
+});
 document.getElementById('cats').onclick=e=>{const b=e.target.closest('.cat');if(b)pickCat(b.dataset.c)};
 document.getElementById('sideCats').onclick=e=>{const b=e.target.closest('.side-cat');if(b)pickCat(b.dataset.c)};
 document.getElementById('subs').onclick=e=>{const b=e.target.closest('.sub');if(!b)return;sub=b.dataset.g;renderCatalog()};
@@ -1237,7 +1284,10 @@ document.querySelector('.mode-bar').onclick=e=>{
   getMode=b.dataset.gm;
   document.querySelectorAll('[data-gm]').forEach(x=>x.setAttribute('aria-pressed',x===b));
 };
-document.getElementById('q').oninput=()=>{renderCats();renderCatalog()};
+document.getElementById('q').oninput=()=>{
+  if(!document.getElementById('q').value.trim()) searchCat='';   // стерли пошук — наступний знову всюди
+  renderCats();renderCatalog();
+};
 document.getElementById('catalog').onclick=e=>{
   const b=e.target.closest('.add'); if(b){openItem(b.dataset.i);return}
   const p=e.target.closest('[data-ph]'); if(p) openPhoto(p);
