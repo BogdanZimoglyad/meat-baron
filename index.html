@@ -1203,7 +1203,10 @@ function searchItems(q){
     const ws=ixOf(i)[k];
     return vs.every(v=>v.some(t=>ws.some(w=>hitWord(w,t))));
   });
-  const found=pick('mainW');
+  /* Спершу ті, де слово збіглося саме з назвою, а не через словник:
+     «кос» — це передусім «Косичка», а вже потім «кістці» з «кость». */
+  const direct=i=>ts.filter(t=>ixOf(i).mainW.some(w=>hitWord(w,t))).length;
+  const found=pick('mainW').sort((a,b)=>direct(b)-direct(a));
   if(found.length) return found;
   const more=pick('allW');
   if(more.length) return more;
@@ -1245,6 +1248,9 @@ function renderCatalog(){
   }
 
   const allGroups=[...new Set(all.map(i=>i.grp))];
+  /* Підкатегорія з іншої категорії (лишилась після пошуку) — показуємо «Все»,
+     інакше каталог був би порожнім без жодного пояснення */
+  if(!searching&&sub&&!allGroups.includes(sub)) sub='';
   if(!searching&&allGroups.length>1){
     subBox.innerHTML=`<button class="sub" data-g="" aria-selected="${!sub}">Все</button>`+
       allGroups.map(g=>`<button class="sub" data-g="${g}" aria-selected="${sub===g}">${g}</button>`).join('');
@@ -1277,7 +1283,7 @@ function renderCatalog(){
 }
 function pickCat(id){
   const q=document.getElementById('q').value.trim();
-  if(q){ searchCat=searchCat===id?'':id; if(searchCat) cat=searchCat }   // повторний дотик — знову всюди
+  if(q){ searchCat=searchCat===id?'':id; if(searchCat&&cat!==searchCat){ cat=searchCat; sub='' } }   // повторний дотик — знову всюди
   else { cat=id; sub='' }
   renderCats(); renderCatalog();
 }
