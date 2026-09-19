@@ -604,6 +604,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
   color:var(--smoke);text-align:center;transition:.12s;white-space:nowrap}
 .wi:hover{color:var(--bone)}
 .wi[aria-pressed=true]{background:var(--ember);color:#fff;font-weight:600}
+.wi.busy{opacity:.4;text-decoration:line-through;cursor:default}
 
 /* активне замовлення */
 .active-bar{margin-top:14px}
@@ -2050,6 +2051,32 @@ const openFrom=()=>fryWanted?GRILL_FROM:SHOP_OPEN;
 /* Чи вже пізно замовляти на сьогодні — і на мангал, і на сире */
 const closedForToday=()=>{ const n=new Date(); return n.getHours()*60+n.getMinutes()>lastOrderMin(n) };
 
+/* ---------- завантаження мангала ----------
+   Мангал тягне близько 15 кг за годину, але частину годин зʼїдають ті,
+   хто прийшов на точку чи подзвонив. Сайту віддано 10 кг на годину —
+   ліміт рахує сервер, він же не дасть записатись у забиту годину.
+   Якщо сервер не відповів, нічого не блокуємо: краще зайве замовлення,
+   яке оператор перенесе, ніж сайт, що відмовляє всім підряд. */
+let grill={shop:-1,cap:0,busyUntil:0,load:{},extra:{},at:0};
+async function loadGrill(force){
+  if(!force && grill.shop===shop && Date.now()-grill.at<60000) return;
+  try{
+    const r=await req(API+'/api/grill?shop='+shop,null,6000);
+    const d=await r.json();
+    if(d&&d.ok) grill={shop,cap:+d.cap||0,busyUntil:+d.busyUntil||0,load:d.load||{},extra:d.extra||{},at:Date.now()};
+  }catch(e){}
+}
+const slotMs=(d,h)=>{const t=new Date(d); t.setHours(h,0,0,0); return t.getTime()};
+/* Чи влізе замовлення в цю годину. Свою вагу теж рахуємо: якщо в кошику
+   4 кг, а на годину лишилось три — це вже інша година. */
+function slotFree(ms){
+  if(!fryWanted||!grill.cap||grill.shop!==shop) return true;
+  if(ms<grill.busyUntil) return false;
+  /* Оператор міг додати кілограмів на цю годину — тоді ліміт вищий */
+  const cap=grill.cap+(grill.extra[ms]||0);
+  return (grill.load[ms]||0)+Math.min(fryGrams(),cap)<=cap;
+}
+
 /* Найраніший можливий час — точний, разом із хвилинами. */
 function earliestExact(mode){
   const n=new Date(); const nowMin=n.getHours()*60+n.getMinutes();
@@ -2082,8 +2109,27 @@ function earliest(mode){
 }
 /* Підпис для «якнайшвидше». Час беремо точний, інакше о 12:30
    обіцяли б «з 13:00», хоча раніше 13:30 не встигнемо. */
-function asapLabel(mode){
+/* Найраніший час із урахуванням мангала: якщо найближча година вже
+   забита, пропонуємо першу вільну. */
+function asapAt(mode){
   const e=earliestExact(mode);
+  if(slotFree(new Date(e).setMinutes(0,0,0))) return e;
+  for(let i=0;i<DAYS_AHEAD;i++){
+    const d=new Date(); d.setDate(d.getDate()+i); d.setHours(0,0,0,0);
+    const s=slotsFor(d,mode).find(x=>x.free);
+    if(s) return new Date(s.ms);
+  }
+  return null;
+}
+/* Слот, на який підемо, якщо людина лишила «Якнайшвидше» */
+function chosenSlot(mode){
+  if(pickWhen) return slotMs(new Date(pickWhen.day),pickWhen.h);
+  const e=asapAt(mode);
+  return e? new Date(e).setMinutes(0,0,0) : 0;
+}
+function asapLabel(mode){
+  const e=asapAt(mode);
+  if(!e) return 'на мангал вільного часу немає';
   const h=String(e.getHours()).padStart(2,'0')+':'+String(e.getMinutes()).padStart(2,'0');
   return dayKey(e)===dayKey(new Date()) ? 'орієнтовно з '+h
        : dayLabel(e).toLowerCase()+', орієнтовно з '+h;
@@ -2099,7 +2145,8 @@ function slotsFor(d,mode){
     const from=new Date(d); from.setHours(h,0,0,0);
     if(from<e) continue;
     const to=Math.min(h+1,close);
-    out.push({h,label:String(h).padStart(2,'0')+':00–'+String(to).padStart(2,'0')+':00'});
+    const ms=from.getTime();
+    out.push({h,ms,free:slotFree(ms),label:String(h).padStart(2,'0')+':00–'+String(to).padStart(2,'0')+':00'});
   }
   return out;
 }
@@ -2112,14 +2159,18 @@ function whenLabel(mode){
 function validateWhen(mode){
   if(!pickWhen) return;
   const d=new Date(pickWhen.day);
-  const ok=slotsFor(d,mode).some(s=>s.h===pickWhen.h);
+  const ok=slotsFor(d,mode).some(s=>s.h===pickWhen.h&&s.free);
   if(!ok) pickWhen=null;
 }
 function pickTimeSheet(mode,back){
+  /* Скільки вже набрано на мангал — питаємо щоразу, коли відкривають
+     вікно: за пів години між заходами години могли розібрати. */
+  loadGrill().then(()=>{ if(sIn.querySelector('#whenOk')) build() });
+  const build=()=>{
   const days=[];
   for(let i=0;i<DAYS_AHEAD;i++){
     const d=new Date(); d.setDate(d.getDate()+i); d.setHours(0,0,0,0);
-    if(slotsFor(d,mode).length) days.push(d);
+    if(slotsFor(d,mode).some(s=>s.free)) days.push(d);
   }
   let sel=pickWhen? days.findIndex(d=>dayKey(d)===dayKey(new Date(pickWhen.day))) : 0;
   if(sel<0) sel=0;
@@ -2143,11 +2194,11 @@ function pickTimeSheet(mode,back){
         `<button class="wi" data-d="${i}" aria-pressed="${i===sel}">${dayLabel(x)}</button>`).join('')}</div>
       <div class="wcol" id="wSlots">${list.map(sl=>{
         const on=pickWhen&&pickWhen.h===sl.h&&dayKey(new Date(pickWhen.day))===dayKey(d);
-        return `<button class="wi" data-h="${sl.h}" aria-pressed="${!!on}">${sl.label}</button>`}).join('')}</div>
+        return `<button class="wi${sl.free?'':' busy'}" data-h="${sl.h}" ${sl.free?'':'disabled'} aria-pressed="${!!on}">${sl.label}</button>`}).join('')}</div>
     </div>
 
     <p class="hint">Готуємо ${mode==='delivery'?'і доставляємо ':''}від ${lead}.${mode==='delivery'?' Буває на 10–15 хв швидше.':''}${fryWanted?` Мангал з ${GRILL_FROM}:00.`:''}
-    Замовлення на сьогодні приймаємо до 19:00, у неділю — до 18:20.</p>
+    Замовлення на сьогодні приймаємо до 19:00, у неділю — до 18:20.${fryWanted&&list.some(s=>!s.free)?' Перекреслені години — мангал на них уже завантажений.':''}</p>
     <button class="cta" id="whenOk">Готово</button>`;
 
     sIn.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{sel=+b.dataset.d;draw()});
@@ -2167,7 +2218,9 @@ function pickTimeSheet(mode,back){
       });
     });
   };
-  open('');draw();
+  draw();
+  };
+  open('');build();
 }
 
 function openCheckout(){
@@ -2180,6 +2233,9 @@ function openCheckout(){
   /* Час могли обрати годину тому, а вкладка весь цей час була відкрита —
      слот уже минув. Раніше на точку йшло «Сьогодні · 16:00–17:00» о 19:00. */
   validateWhen(mode);
+  /* Скільки лишилось на мангалі, дізнаємось асинхронно: форма
+     відкривається одразу, а час перемальовується, щойно прийде відповідь. */
+  loadGrill().then(()=>{ if(sIn.querySelector('#send')){ validateWhen(mode); draw() } });
   /* Контакти тримаємо в змінних, бо draw() перемальовує форму цілком.
      Без цього людина вводила імʼя й телефон, вмикала мангал — і поля
      порожніли. Те саме було при зміні оплати, точки й часу. */
@@ -2254,7 +2310,9 @@ function openCheckout(){
     <button class="cta" id="send">Підтвердити замовлення</button>`);
 
     const ps=sIn.querySelector('#pickShop');
-    if(ps) ps.onclick=()=>pickShopSheet(draw);
+    /* Інша точка — інший мангал: перепитуємо завантаження */
+    if(ps) ps.onclick=()=>pickShopSheet(()=>{ draw();
+      loadGrill().then(()=>{ if(sIn.querySelector('#send')){ validateWhen(mode); draw() } }) });
     const pw=sIn.querySelector('#pickWhen');
     if(pw) pw.onclick=()=>pickTimeSheet(mode,draw);
     bindPhone(sIn.querySelector('#tel'));
@@ -2318,7 +2376,7 @@ function openCheckout(){
           return;
         }
       }
-      const payload={shop,shopName:SHOPS[shop][0],mode,addr,fry,fg,pay,total,nm,tel,note:orderNote,when:whenLabel(mode),lines:cart.map(l=>({...l,sum:lineSum(l)}))};
+      const payload={shop,shopName:SHOPS[shop][0],mode,addr,fry,fg,pay,total,nm,tel,note:orderNote,when:whenLabel(mode),slotAt:chosenSlot(mode),lines:cart.map(l=>({...l,sum:lineSum(l)}))};
       btn.disabled=true;btn.textContent='Відправляємо…';
       /* Замовлення не пішло — кошик лишається, людина бачить чому.
          Раніше будь-яка помилка показувала «Замовлення прийнято» з
@@ -2345,6 +2403,12 @@ function openCheckout(){
       /* Сервер відмовив — отже, нічого не записав і на точку не надіслав */
       /* 503 — точку не підключено до бота; «Telegram» покупцю нічого не каже */
       if(r.status===503) return fail('Точка зараз не приймає замовлення онлайн, замовлення не надіслано.');
+      /* 409 — поки заповнювали форму, цю годину на мангалі розібрали.
+         Оновлюємо завантаження й перемальовуємо: час уже інший. */
+      if(r.status===409){
+        await loadGrill(true); validateWhen(mode); draw();
+        return fail(d.error||'На цю годину мангал уже завантажений. Оберіть інший час.');
+      }
       if(!r.ok||!d.no) return fail((d.error||'Замовлення не надіслано.')+(/\.$/.test(d.error||'.')?'':'.'));
       /* сума з сервера головніша: він рахує за прайсом */
       order={...payload,no:d.no,shop:SHOPS[shop][0],st:d.status||'new',lines:payload.lines,
