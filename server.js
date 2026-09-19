@@ -67,7 +67,7 @@ app.use(express.static(__dirname, { dotfiles: 'ignore' }));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const DB = path.join(DATA_DIR, 'data.json');
 try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
-let db = { orders: {}, shops: {}, counter: 1000, users: {}, tokens: {}, busy: {} };
+let db = { orders: {}, shops: {}, counter: 1000, users: {}, tokens: {}, busy: {}, extra: {} };
 try {
   db = JSON.parse(fs.readFileSync(DB, 'utf8'));
 } catch (e) {
@@ -360,23 +360,43 @@ bot.onText(/\/whoami/, msg => {
     : `Чат ще не прив’язаний. ID: ${msg.chat.id}\nВикористайте /bind НОМЕР КОД`);
 });
 
-/* ---------- «мангал зайнятий» ----------
-   Коли мангал забитий живою чергою й телефонами, оператор пише в чаті
-   точки /mangal і закриває найближчі години: сайт не дасть обрати на
-   них смаження. Сире мʼясо замовляти можна — воно мангал не займає. */
-const busyKb = i => ({ inline_keyboard: [
-  [{ text: '🔥 Зайнятий на годину', callback_data: `g:${i}:60` }],
-  [{ text: '🔥 Зайнятий на дві години', callback_data: `g:${i}:120` }],
-  [{ text: '🔥 Зайнятий до кінця дня', callback_data: `g:${i}:day` }],
-  [{ text: '✅ Вільний, приймаємо', callback_data: `g:${i}:free` }]
-] });
+/* ---------- мангал: зайнятість і надбавки ----------
+   Коли мангал забитий живою чергою й телефонами, оператор у чаті точки
+   пише /mangal і закриває найближчі години: сайт не дасть обрати на них
+   смаження. Зворотний випадок теж буває — сайт вибрав свої 10 кг, а
+   мангальщики встигають більше: тоді кнопка «+5 кг» на потрібну годину
+   відкриває її знову. Сире мʼясо мангал не займає й не блокується. */
+const ADD_STEP_G = 5000;                 // скільки додає одне натискання
 const hhmm = ms => new Date(ms).toLocaleTimeString('uk-UA',
   { timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit' });
+/* Найближчі години, які ще має сенс показувати оператору */
+const nextSlots = (n = 3) => {
+  const out = [], base = hourFloor(Date.now());
+  for (let k = 1; k <= n; k++) out.push(base + k * HOUR);
+  return out;
+};
+const busyKb = i => ({
+  inline_keyboard: [
+    [{ text: '🔥 Зайнятий на годину', callback_data: `g:${i}:60` },
+     { text: '🔥 На дві', callback_data: `g:${i}:120` }],
+    [{ text: '🔥 Зайнятий до кінця дня', callback_data: `g:${i}:day` }],
+    [{ text: '✅ Вільний, приймаємо', callback_data: `g:${i}:free` }],
+    nextSlots().map(ms => ({ text: `+5 кг на ${hhmm(ms)}`, callback_data: `g:${i}:add:${ms}` })),
+    [{ text: '♻️ Прибрати надбавки', callback_data: `g:${i}:noadd` }]
+  ]
+});
 function busyText(i) {
-  const t = grillBusyUntil(i);
+  const t = grillBusyUntil(i), load = grillLoad(i), extra = extraOf(i);
+  const rows = nextSlots(4).map(ms => {
+    const cap = GRILL_CAP_G + (extra[ms] || 0), used = load[ms] || 0;
+    return `${hhmm(ms)} — ${wLabel(used)} з ${wLabel(cap)}` +
+      (used >= cap ? ' · забито' : '') + (extra[ms] ? ` (+${wLabel(extra[ms])} від вас)` : '');
+  }).join('\n');
   return `<b>Мангал · ${esc(SHOPS[i])}</b>\n` +
-    (t ? `Для сайту закритий до <b>${hhmm(t)}</b>.` : 'Приймає замовлення з сайту.') +
-    `\nСайту віддано ${wLabel(GRILL_CAP_G)} на годину — решту тримаємо на тих, хто прийшов чи подзвонив.`;
+    (t ? `Для сайту закритий до <b>${hhmm(t)}</b>.\n` : 'Приймає замовлення з сайту.\n') +
+    `Сайту віддано ${wLabel(GRILL_CAP_G)} на годину — решту тримаємо на тих, хто прийшов чи подзвонив.\n\n` +
+    `<b>Найближчі години</b>\n${rows}\n\n` +
+    `Встигаєте більше — додайте кнопкою «+5 кг» на потрібну годину.`;
 }
 bot.onText(/^\/mangal(?:@\w+)?/, msg => {
   const i = Object.keys(db.shops).find(k => db.shops[k] === msg.chat.id);
@@ -384,19 +404,41 @@ bot.onText(/^\/mangal(?:@\w+)?/, msg => {
   bot.sendMessage(msg.chat.id, busyText(Number(i)), { parse_mode: 'HTML', reply_markup: busyKb(Number(i)) });
 });
 bot.on('callback_query', async cq => {
-  const [tag, iStr, val] = (cq.data || '').split(':');
+  const [tag, iStr, val, arg] = (cq.data || '').split(':');
   if (tag !== 'g') return;
   const i = Number(iStr), chatId = cq.message && cq.message.chat.id;
-  /* Тільки зі свого чату: чужа точка не має закривати мангал сусідам */
+  /* Тільки зі свого чату: чужа точка не має чіпати мангал сусідам */
   if (db.shops[i] !== chatId) return bot.answerCallbackQuery(cq.id, { text: 'Це інша точка' });
   db.busy = db.busy || {};
-  if (val === 'free') db.busy[i] = 0;
-  else if (val === 'day') db.busy[i] = Date.now() + tillCloseMs();
-  else db.busy[i] = Date.now() + (Number(val) || 60) * 60000;
+  db.extra = db.extra || {};
+  let note;
+  if (val === 'add') {
+    const slot = hourFloor(Number(arg) || 0);
+    if (!slot || slot < hourFloor(Date.now())) {
+      return bot.answerCallbackQuery(cq.id, { text: 'Ця година вже минула — відкрийте /mangal ще раз' });
+    }
+    const e = db.extra[i] || (db.extra[i] = {});
+    e[slot] = (e[slot] || 0) + ADD_STEP_G;
+    /* Надбавка означає «беремо ще», тож знімаємо і загальне блокування */
+    if (db.busy[i] && slot < db.busy[i]) db.busy[i] = slot;
+    note = `+${wLabel(ADD_STEP_G)} на ${hhmm(slot)}`;
+  } else if (val === 'noadd') {
+    db.extra[i] = {};
+    note = 'Надбавки прибрано';
+  } else if (val === 'free') {
+    db.busy[i] = 0;
+    note = 'Мангал знову приймає';
+  } else if (val === 'day') {
+    db.busy[i] = Date.now() + tillCloseMs();
+    note = 'Закрито до кінця дня';
+  } else {
+    db.busy[i] = Date.now() + (Number(val) || 60) * 60000;
+    note = `Закрито до ${hhmm(db.busy[i])}`;
+  }
   save();
   await bot.editMessageText(busyText(i), { chat_id: chatId, message_id: cq.message.message_id,
     parse_mode: 'HTML', reply_markup: busyKb(i) }).catch(() => {});
-  bot.answerCallbackQuery(cq.id, { text: grillBusyUntil(i) ? 'Мангал закрито для сайту' : 'Мангал знову приймає' });
+  bot.answerCallbackQuery(cq.id, { text: note });
 });
 
 /* ---------- текст замовлення ---------- */
@@ -545,6 +587,14 @@ function tillCloseMs() {
   const close = (k.getDay() === 0 ? 19 : 20) * 60;
   return Math.max(0, close - (k.getHours() * 60 + k.getMinutes())) * 60000;
 }
+/* Надбавка на конкретну годину: мангальщики сказали, що встигнуть
+   більше, ніж ліміт сайту, — оператор додає кілограми кнопкою в боті. */
+const extraOf = shop => {
+  const all = (db.extra || {})[shop] || {}, out = {}, from = hourFloor(Date.now());
+  for (const k in all) if (Number(k) >= from && all[k] > 0) out[k] = all[k];
+  return out;
+};
+const capOf = (shop, slot) => GRILL_CAP_G + (extraOf(shop)[hourFloor(slot)] || 0);
 const grillBusyUntil = shop => {
   const t = (db.busy || {})[shop] || 0;
   return t > Date.now() ? t : 0;
@@ -564,8 +614,9 @@ function grillLoad(shop) {
 function grillRefuse(shop, slotAt, fg) {
   if (!slotAt) return null;                       // старий клієнт без часу — не чіпаємо
   if (slotAt < grillBusyUntil(shop)) return 'Мангал на цей час зайнятий. Оберіть пізніший час.';
+  const cap = capOf(shop, slotAt);
   const used = grillLoad(shop)[hourFloor(slotAt)] || 0;
-  if (used + Math.min(fg, GRILL_CAP_G) > GRILL_CAP_G) {
+  if (used + Math.min(fg, cap) > cap) {
     return 'На цю годину мангал уже завантажений. Оберіть інший час.';
   }
   return null;
@@ -577,7 +628,8 @@ app.get('/api/grill', (req, res) => {
   }
   let shop = Number(req.query.shop);
   if (!Number.isInteger(shop) || shop < 0 || shop >= SHOPS.length) shop = 0;
-  res.json({ ok: true, cap: GRILL_CAP_G, busyUntil: grillBusyUntil(shop), load: grillLoad(shop) });
+  res.json({ ok: true, cap: GRILL_CAP_G, extra: extraOf(shop),
+    busyUntil: grillBusyUntil(shop), load: grillLoad(shop) });
 });
 
 /* Беремо ОСТАННЮ адресу зі списку, а не першу. Перша — та, яку надіслав

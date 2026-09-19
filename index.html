@@ -2057,13 +2057,13 @@ const closedForToday=()=>{ const n=new Date(); return n.getHours()*60+n.getMinut
    ліміт рахує сервер, він же не дасть записатись у забиту годину.
    Якщо сервер не відповів, нічого не блокуємо: краще зайве замовлення,
    яке оператор перенесе, ніж сайт, що відмовляє всім підряд. */
-let grill={shop:-1,cap:0,busyUntil:0,load:{},at:0};
+let grill={shop:-1,cap:0,busyUntil:0,load:{},extra:{},at:0};
 async function loadGrill(force){
   if(!force && grill.shop===shop && Date.now()-grill.at<60000) return;
   try{
     const r=await req(API+'/api/grill?shop='+shop,null,6000);
     const d=await r.json();
-    if(d&&d.ok) grill={shop,cap:+d.cap||0,busyUntil:+d.busyUntil||0,load:d.load||{},at:Date.now()};
+    if(d&&d.ok) grill={shop,cap:+d.cap||0,busyUntil:+d.busyUntil||0,load:d.load||{},extra:d.extra||{},at:Date.now()};
   }catch(e){}
 }
 const slotMs=(d,h)=>{const t=new Date(d); t.setHours(h,0,0,0); return t.getTime()};
@@ -2072,7 +2072,9 @@ const slotMs=(d,h)=>{const t=new Date(d); t.setHours(h,0,0,0); return t.getTime(
 function slotFree(ms){
   if(!fryWanted||!grill.cap||grill.shop!==shop) return true;
   if(ms<grill.busyUntil) return false;
-  return (grill.load[ms]||0)+Math.min(fryGrams(),grill.cap)<=grill.cap;
+  /* Оператор міг додати кілограмів на цю годину — тоді ліміт вищий */
+  const cap=grill.cap+(grill.extra[ms]||0);
+  return (grill.load[ms]||0)+Math.min(fryGrams(),cap)<=cap;
 }
 
 /* Найраніший можливий час — точний, разом із хвилинами. */
