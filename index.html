@@ -305,6 +305,15 @@ a{color:inherit}
 .bar-in{width:100%;max-width:588px;margin:0 auto;background:var(--ember);border-radius:12px;padding:13px 16px;display:flex;align-items:center;justify-content:space-between;gap:14px;color:#fff;font-weight:500;box-shadow:0 10px 30px rgba(0,0,0,.5)}
 .bar-in span:last-child{font-family:'Oswald';font-size:17px;white-space:nowrap}
 .bar[hidden]{display:none}
+/* кнопка «нагору»: зʼявляється, коли догортали каталог, і піднімається над кошиком */
+.to-top{position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:44;
+  width:46px;height:46px;border-radius:50%;background:rgba(27,28,31,.92);border:1px solid var(--line-2);
+  color:var(--bone);display:grid;place-items:center;box-shadow:0 8px 24px rgba(0,0,0,.45);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);opacity:0;transform:translateY(8px);transition:opacity .18s,transform .18s}
+.to-top.on{opacity:1;transform:none}
+.to-top svg{width:22px;height:22px}
+.to-top[hidden]{display:none}
+body.has-bar .to-top{bottom:calc(84px + env(safe-area-inset-bottom))}
 
 /* sheet */
 .veil{position:fixed;inset:0;background:rgba(8,6,6,.72);z-index:60;opacity:0;pointer-events:none;transition:.2s}
@@ -354,7 +363,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .rowline{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
 .tot{display:flex;align-items:baseline;justify-content:space-between;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
 .tot b{font-family:'Oswald';font-size:26px;font-weight:500}
-.cta{width:100%;background:var(--ember);color:#fff;border-radius:11px;padding:15px;font-size:15px;font-weight:600;margin-top:14px;transition:.14s}
+/* display:block і box-sizing — бо .cta буває і <a> (вхід через Telegram, маршрут):
+   рядкове посилання ігнорувало width:100% і налазило на текст під ним */
+.cta{display:block;box-sizing:border-box;width:100%;text-align:center;text-decoration:none;background:var(--ember);color:#fff;border-radius:11px;padding:15px;font-size:15px;font-weight:600;margin-top:14px;transition:.14s}
 .cta:active{transform:scale(.99)}
 .cta.ghost{background:none;border:1px solid var(--line-2);color:var(--bone);font-weight:500}
 .hint{font-size:12px;color:var(--smoke);margin:10px 0 0;line-height:1.55}
@@ -415,6 +426,10 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .pay[aria-pressed=true] .dot{border-color:var(--ember)}
 .pay[aria-pressed=true] .dot::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--ember)}
 .sum{display:flex;justify-content:space-between;font-size:13.5px;color:var(--smoke);margin-bottom:7px}
+/* кроки входу: номер ліворуч, текст поруч — а не притиснутий до правого краю */
+.lg-step{display:flex;gap:12px;align-items:baseline;font-size:14px;color:var(--bone);margin-bottom:10px;line-height:1.4}
+.lg-step:last-child{margin-bottom:0}
+.lg-step b{flex:0 0 22px;height:22px;border-radius:50%;background:rgba(196,52,42,.18);color:var(--ember-hot);font-size:12.5px;font-weight:600;display:inline-grid;place-items:center}
 .err{color:#F09A92;font-size:14px;line-height:1.45;margin-top:8px;display:none}
 /* пропущене поле на оформленні — червона рамка й підказка просто під ним */
 .fld.bad,.box.bad{border-color:var(--ember-hot);box-shadow:0 0 0 3px rgba(224,74,60,.22)}
@@ -834,6 +849,11 @@ body:has(.inst) .bar{bottom:66px}
     <span id="barR">0 ₴</span>
   </button>
 </div>
+
+<!-- догортав каталог донизу — одним дотиком назад до пошуку й категорій -->
+<button class="to-top" id="toTop" aria-label="Нагору" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+</button>
 
 <div class="lb" id="lb" role="dialog" aria-label="Товар">
   <div class="lb-card"></div>
@@ -1801,6 +1821,7 @@ function paintBar(){
      почала набирати наново — а «Що до мʼяса?» більше не зʼявлялось. */
   if(!cart.length){upsellShown=false;upsellAll=false}
   bar.hidden=!cart.length;
+  document.body.classList.toggle('has-bar',!!cart.length);   // кнопці «нагору» — піднятись над кошиком
   const n=cart.length;
   document.getElementById('barL').textContent=`Кошик · ${n} ${plural(n,['позиція','позиції','позицій'])}`;   // 21 позиція, а не «21 позицій»
   document.getElementById('barR').textContent=money(cartTotal());
@@ -2423,6 +2444,23 @@ document.getElementById('shopName').textContent=SHOPS[shop][0];
 })();
 renderCats();renderCatalog();syncScrollLock();
 restoreCart();
+
+/* Кнопка «нагору». Каталог довгий, і з його кінця до пошуку з категоріями
+   доводилось гортати назад усю сторінку. */
+(function(){
+  const btn=document.getElementById('toTop'); if(!btn) return;
+  let raf=0;
+  const check=()=>{
+    raf=0;
+    const show=scrollY>700;
+    if(show) btn.hidden=false;
+    btn.classList.toggle('on',show);
+    if(!show) setTimeout(()=>{ if(!btn.classList.contains('on')) btn.hidden=true },200);
+  };
+  addEventListener('scroll',()=>{ if(!raf) raf=requestAnimationFrame(check) },{passive:true});
+  btn.onclick=()=>{ try{ scrollTo({top:0,behavior:'smooth'}) }catch(e){ scrollTo(0,0) } };
+  check();
+})();
 ['histTop'].forEach(id=>{const b=document.getElementById(id); if(b) b.onclick=()=>openHistory()});
 
 /* ---------- активне замовлення ---------- */
@@ -2595,11 +2633,15 @@ function openLogin(){
   <div class="sh-h"><h3>Вхід</h3><button class="x" onclick="close_()">✕</button></div>
   <p class="hint" style="margin-top:-4px">Щоб бачити свої замовлення й не вводити щоразу імʼя та телефон.</p>
   <div class="box" style="margin-top:14px">
-    <div class="sum"><span>1</span><span>Відкриється наш бот у Telegram</span></div>
-    <div class="sum"><span>2</span><span>Натисніть «Поділитися номером»</span></div>
-    <div class="sum"><span>3</span><span>Поверніться сюди — ви вже увійшли</span></div>
+    <div class="lg-step"><b>1</b><span>Відкриється наш бот у Telegram</span></div>
+    <div class="lg-step"><b>2</b><span>Натисніть «Поділитися номером»</span></div>
+    <div class="lg-step"><b>3</b><span>Поверніться сюди — ви вже увійшли</span></div>
   </div>
-  <p class="hint">Номер надсилає сам Telegram. Ми не бачимо ваших переписок і не пишемо першими.</p>
+  ${/* Пишемо лише правду: номер, імʼя, адресу й замовлення ми таки зберігаємо —
+       без них не було б «Моїх замовлень» і «Повторити». Обіцяємо те, що справді
+       робимо: не передаємо нікому, крім точки, і не рекламуємо. */''}
+  <p class="hint">Номер надсилає сам Telegram. Використовуємо його лише для ваших замовлень,
+  нікому не передаємо й не розсилаємо рекламу. Ми не бачимо ваших переписок і не пишемо першими.</p>
   <div id="lgBox"><p class="hint" style="text-align:center;padding:14px 0">Готуємо посилання…</p></div>`);
   startLogin();
 }
