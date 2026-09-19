@@ -410,6 +410,24 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .sg{border:1px solid var(--line-2);border-radius:10px;padding:12px 0;font-size:14px;color:var(--smoke);transition:.14s}
 .sg[aria-pressed=true]{background:var(--ember);border-color:var(--ember);color:#fff}
 .fld{width:100%;background:var(--coal);border:1px solid var(--line);border-radius:10px;padding:12px 13px;outline:none;margin-top:8px}
+/* адреса доставки: вулиця з підказкою і дрібні поля поруч */
+.addr-wrap{position:relative}
+.addr-sug{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:5;
+  background:var(--coal);border:1px solid var(--line-2);border-radius:10px;
+  overflow:hidden;box-shadow:0 12px 28px rgba(0,0,0,.55)}
+.addr-sug button{display:block;width:100%;text-align:left;padding:10px 13px;font-size:14px;
+  color:var(--bone);border-bottom:1px solid var(--line)}
+.addr-sug button:last-child{border-bottom:0}
+.addr-sug button:hover,.addr-sug button.on{background:rgba(214,64,52,.16)}
+.addr-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.addr-grid .fld{margin-top:8px}
+/* повідомлення про помилку в сітці — на всю ширину, інакше воно
+   стає другою колонкою і поля зʼїжджають */
+.addr-grid .fld-err{grid-column:1/-1;margin-top:0}
+.addr-saved{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip-a{padding:7px 11px;border:1px solid var(--line-2);border-radius:999px;
+  font-size:12.5px;color:var(--smoke);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip-a:hover{color:var(--bone);border-color:var(--ember)}
 .fld:focus{border-color:var(--line-2)}
 .fld::placeholder{color:var(--smoke)}
 .box{background:rgba(30,24,23,.94);border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:12px}
@@ -2230,6 +2248,66 @@ function pickTimeSheet(mode,back){
   open('');build();
 }
 
+/* ---------- адреса доставки ----------
+   Раніше адреса була одним полем «Вулиця, будинок, квартира»: половина
+   людей писала лише вулицю, і курʼєр телефонував уточнювати. Тепер поля
+   окремі, вулицю підказуємо зі списку вулиць Харкова (OpenStreetMap),
+   а сам список вантажимо лише тоді, коли обрали доставку. */
+let streetsP=null;
+function loadStreets(){
+  if(!streetsP) streetsP=new Promise(res=>{
+    const s=document.createElement('script');
+    s.src='streets.js'; s.async=true;
+    s.onload=()=>res(window.KH_STREETS||[]);
+    s.onerror=()=>res([]);            // без підказок, але поле працює
+    document.head.appendChild(s);
+  });
+  return streetsP;
+}
+/* «Сумська» знаходить і «Сумська вулиця», і «вулиця Сумська»; слова
+   типу «вул.» у запиті ігноруємо — людина пише їх за звичкою. */
+const stFold=s=>String(s||'').toLowerCase().replace(/['’ʼ`]/g,'').replace(/\s+/g,' ').trim();
+const ST_WORDS=/^(вул|вулиця|пров|провулок|просп|проспект|бул|бульвар|пл|площа|наб|набережна|узвіз|шосе|проїзд|вїзд|тупик|алея|майдан)\.?$/;
+function streetHits(list,q){
+  const words=stFold(q).split(' ').filter(w=>w&&!ST_WORDS.test(w));
+  if(!words.length) return [];
+  const out=[];
+  for(const name of list){
+    const f=stFold(name), parts=f.split(' ');
+    let rank=-1;
+    if(parts.some(p=>p.startsWith(words[0]))) rank=parts[0].startsWith(words[0])?0:1;
+    else if(f.includes(words[0])) rank=2;
+    if(rank<0) continue;
+    if(words.length>1&&!words.slice(1).every(w=>f.includes(w))) continue;
+    out.push([rank,name.length,name]);
+    if(out.length>400) break;
+  }
+  return out.sort((a,b)=>a[0]-b[0]||a[1]-b[1]).slice(0,6).map(x=>x[2]);
+}
+/* Рядок для точки й курʼєра */
+function addrText(p){
+  const s=[[p.street,p.house].filter(Boolean).join(', ')];
+  if(p.flat) s.push('кв. '+p.flat);
+  if(p.ent) s.push('підʼїзд '+p.ent);
+  if(p.floor) s.push('поверх '+p.floor);
+  return s.filter(Boolean).join(', ');
+}
+/* Стара адреса одним рядком — розкладаємо назад у поля */
+function parseAddr(s){
+  const p={street:'',house:'',flat:'',ent:'',floor:''};
+  if(!s) return p;
+  const t=String(s);
+  const m=(re)=>{const x=t.match(re); return x?x[1].trim():''};
+  p.flat=m(/кв\.?\s*([^,]+)/i);
+  p.ent=m(/під[ʼ'’]?їзд\s*([^,]+)/i);
+  p.floor=m(/поверх\s*([^,]+)/i);
+  const head=t.split(',');
+  p.street=(head[0]||'').trim();
+  const h=(head[1]||'').trim().replace(/^буд\.?\s*/i,'');
+  if(h&&/\d/.test(h)&&!/кв|під|поверх/i.test(h)) p.house=h;
+  return p;
+}
+
 function openCheckout(){
   /* Онлайн-оплати поки немає. Поки її не підключено, не пропонуємо:
      інакше оператор бачив би «оплачено», а грошей ніхто не брав. */
@@ -2249,7 +2327,37 @@ function openCheckout(){
   /* Хто увійшов — тому підставляємо все відоме: імʼя, номер і адресу
      минулої доставки. Решті лишається номер із попереднього замовлення
      в цьому браузері. */
-  let nmV=(me&&me.name)||'', telV=(me&&me.tel)||fmtPhone(savedTel()), addrV=(me&&me.addr)||'';
+  let nmV=(me&&me.name)||'', telV=(me&&me.tel)||fmtPhone(savedTel());
+  /* Адресу тримаємо частинами: так її легше перевірити й підставити
+     наступного разу. Старі замовлення знали лише рядок — розкладаємо. */
+  let addrP=(me&&me.addrParts)?{...me.addrParts}:parseAddr((me&&me.addr)||'');
+  let streets=[];
+  if(mode==='delivery') loadStreets().then(l=>{streets=l});
+  /* Підказка вулиць під полем: до шести варіантів, клік підставляє назву
+     і переводить курсор на номер будинку. */
+  const bindStreet=()=>{
+    const inp=sIn.querySelector('#addrStreet'), box=sIn.querySelector('#addrSug');
+    if(!inp||!box) return;
+    const hide=()=>{box.hidden=true;box.innerHTML=''};
+    const show=()=>{
+      const hits=streetHits(streets,inp.value);
+      if(!hits.length||(hits.length===1&&stFold(hits[0])===stFold(inp.value))) return hide();
+      box.innerHTML=hits.map(s=>`<button type="button" data-st="${esc(s)}">${esc(s)}</button>`).join('');
+      box.hidden=false;
+      box.querySelectorAll('[data-st]').forEach(b=>b.onmousedown=e=>{
+        e.preventDefault();                 // інакше blur з'їсть клік
+        inp.value=b.dataset.st; addrP.street=b.dataset.st; hide();
+        const h=sIn.querySelector('#addrHouse'); if(h) h.focus();
+      });
+    };
+    inp.addEventListener('input',()=>{
+      if(streets.length) return show();
+      loadStreets().then(l=>{streets=l;show()});
+    });
+    inp.addEventListener('blur',()=>setTimeout(hide,150));
+    inp.addEventListener('keydown',e=>{ if(e.key==='Escape') hide() });
+  };
+
   const draw=()=>{
     const fg=fryGrams(), fry=fg>=MIN_G;
     const fryCost=fry?kop(fg/1000*FRY_RATE):0, total=kop(goodsTotal()+fryCost);
@@ -2266,8 +2374,21 @@ function openCheckout(){
              </button>`
           : `<div class="box"><div style="font-size:11px;color:var(--smoke)">Точка видачі</div>
              <b style="font-weight:500">${SHOPS[shop][0]}</b></div>`)
-      : `<input class="fld" id="addr" placeholder="Вулиця, будинок, квартира" value="${esc(addrV)}">
-         <p class="hint">Вартість доставки уточнить оператор телефоном — служба доставки партнерська.</p>`}
+      : `<span class="lbl">Адреса доставки</span>
+         ${(me&&me.addrs&&me.addrs.length>0)?`<div class="addr-saved">${me.addrs.slice(0,3).map((a,i)=>
+           `<button class="chip-a" data-sv="${i}">${esc(a.text)}</button>`).join('')}</div>`:''}
+         <div class="addr-wrap">
+           <input class="fld" id="addrStreet" placeholder="Вулиця" autocomplete="off" value="${esc(addrP.street)}">
+           <div class="addr-sug" id="addrSug" hidden></div>
+         </div>
+         <div class="addr-grid">
+           <input class="fld" id="addrHouse" placeholder="Будинок" value="${esc(addrP.house)}">
+           <input class="fld" id="addrFlat" placeholder="Квартира" value="${esc(addrP.flat)}">
+           <input class="fld" id="addrEnt" placeholder="Підʼїзд" value="${esc(addrP.ent)}">
+           <input class="fld" id="addrFloor" placeholder="Поверх" value="${esc(addrP.floor)}">
+         </div>
+         <p class="hint">Підʼїзд і поверх не обовʼязкові, але з ними курʼєр знайде швидше.
+         Вартість доставки уточнить оператор телефоном — служба доставки партнерська.</p>`}
 
     <button class="box pick-shop" id="pickWhen">
       <span class="ps-t"><small>Час отримання</small><b>${whenLabel(mode)}</b></span>
@@ -2328,7 +2449,18 @@ function openCheckout(){
     const keep=(id,set)=>{const el=sIn.querySelector(id); if(el) el.addEventListener('input',()=>set(el.value))};
     keep('#nm',   v=>nmV=v);
     keep('#tel',  v=>telV=v);
-    keep('#addr', v=>addrV=v);
+    keep('#addrStreet', v=>addrP.street=v);
+    keep('#addrHouse',  v=>addrP.house=v);
+    keep('#addrFlat',   v=>addrP.flat=v);
+    keep('#addrEnt',    v=>addrP.ent=v);
+    keep('#addrFloor',  v=>addrP.floor=v);
+    bindStreet();
+    /* Збережені адреси: клік підставляє всі поля одразу */
+    sIn.querySelectorAll('[data-sv]').forEach(b=>b.onclick=()=>{
+      const a=((me&&me.addrs)||[])[+b.dataset.sv]; if(!a) return;
+      addrP=a.parts?{...a.parts}:parseAddr(a.text);
+      draw();
+    });
     sIn.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
       mode=b.dataset.mode; validateWhen(mode); draw()});
     sIn.querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>{pay=b.dataset.pay;draw()});
@@ -2354,7 +2486,7 @@ function openCheckout(){
       const nm=sIn.querySelector('#nm').value.trim(), telRaw=sIn.querySelector('#tel').value.trim();
       const telDigits=normPhone(telRaw);
       const tel=telDigits.length===9?'+380'+telDigits:telRaw;
-      const addr=sIn.querySelector('#addr')?sIn.querySelector('#addr').value.trim():'';
+      const addr=mode==='delivery'? addrText(addrP) : '';
       /* Пропущене поле: підкидаємо до нього, обводимо червоним і пишемо
          під ним. Раніше дрібний напис стояв унизу форми, і на телефоні
          людина не бачила, що саме не заповнила. Порядок — як у формі. */
@@ -2370,7 +2502,10 @@ function openCheckout(){
         try{f.scrollIntoView({block:'center',behavior:'smooth'})}catch(e){f.scrollIntoView()}
         if(f.tagName==='INPUT'&&!f.readOnly) setTimeout(()=>{try{f.focus({preventScroll:true})}catch(e){}},400);
       };
-      if(mode==='delivery'&&addr.length<5) return bad('#addr','Вкажіть адресу доставки: вулиця, будинок, квартира.');
+      if(mode==='delivery'){
+        if(addrP.street.trim().length<3) return bad('#addrStreet','Вкажіть вулицю — курʼєру треба знати, куди їхати.');
+        if(!addrP.house.trim())          return bad('#addrHouse','Вкажіть номер будинку.');
+      }
       if(nm.length<2) return bad('#nm','Вкажіть імʼя — так оператор знатиме, як до вас звертатися.');
       if(telDigits.length<9) return bad('#tel','Вкажіть номер телефону повністю — оператор може передзвонити щодо замовлення.');
       /* Поки заповнювали форму, обраний слот міг минути — не відправляємо
@@ -2383,7 +2518,7 @@ function openCheckout(){
           return;
         }
       }
-      const payload={shop,shopName:SHOPS[shop][0],mode,addr,fry,fg,pay,total,nm,tel,note:orderNote,when:whenLabel(mode),slotAt:chosenSlot(mode),lines:cart.map(l=>({...l,sum:lineSum(l)}))};
+      const payload={shop,shopName:SHOPS[shop][0],mode,addr,addrParts:mode==='delivery'?addrP:null,fry,fg,pay,total,nm,tel,note:orderNote,when:whenLabel(mode),slotAt:chosenSlot(mode),lines:cart.map(l=>({...l,sum:lineSum(l)}))};
       btn.disabled=true;btn.textContent='Відправляємо…';
       /* Замовлення не пішло — кошик лишається, людина бачить чому.
          Раніше будь-яка помилка показувала «Замовлення прийнято» з
@@ -2717,7 +2852,7 @@ paintAuth();
 if(me) req(API+'/api/me',{headers:authHead()},8000)
   .then(r=>{
     if(r.status===401) return setMe(null);
-    return r.json().then(d=>{ if(d&&d.ok) setMe({...me,tel:d.tel,name:d.name||'',addr:d.addr||''}) });
+    return r.json().then(d=>{ if(d&&d.ok) setMe({...me,tel:d.tel,name:d.name||'',addr:d.addr||'',addrParts:d.addrParts||null,addrs:d.addrs||[]}) });
   })
   .catch(()=>{});   // немає звʼязку — лишаємо як є, кабінет відкриється офлайн
 
@@ -2781,7 +2916,7 @@ async function startLogin(){
       const d=await r.json();
       if(d.status==='ok'){
         clearInterval(loginPoll);
-        setMe({token:d.token,tel:d.tel,name:d.name||'',addr:d.addr||''});
+        setMe({token:d.token,tel:d.tel,name:d.name||'',addr:d.addr||'',addrParts:d.addrParts||null,addrs:d.addrs||[]});
         if(box.isConnected) openCabinet();   // вхід зберігаємо в будь-якому разі, а кабінет — лише якщо людина ще на екрані входу
       } else if(d.status==='expired'){ clearInterval(loginPoll); expiredLogin() }
     }catch(e){ if(st) st.textContent='Звʼязок пропав. Чекаємо…' }
@@ -2820,7 +2955,7 @@ function openCabinet(){
                                        body:JSON.stringify({name:nm,addr:ad})},10000);
       if(dropMeIf401(r)) return openLogin();
       const d=await r.json();
-      setMe({...me,name:d.name||'',addr:d.addr||''});
+      setMe({...me,name:d.name||'',addr:d.addr||'',addrParts:d.addrParts||null,addrs:d.addrs||[]});
       st.textContent='Збережено.';
       sIn.querySelector('.sh-h h3').textContent=firstName(d.name)||'Мій кабінет';
     }catch(e){ st.textContent='Не вдалося зберегти. Спробуйте пізніше.' }

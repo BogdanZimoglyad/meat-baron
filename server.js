@@ -894,6 +894,7 @@ app.post('/api/order', async (req, res) => {
     shopName: SHOPS[shopIndex],
     mode: b.mode === 'delivery' ? 'delivery' : 'pickup',
     addr: String(b.addr || '').slice(0, 200),
+    addrParts: addrParts(b.addrParts),
     fry,
     fg,
     mismatch,
@@ -937,7 +938,15 @@ app.post('/api/order', async (req, res) => {
     const u = db.users[who.telKey] || { telKey: who.telKey, createdAt: Date.now() };
     u.tel = o.tel;
     u.name = nm;
-    if (o.mode === 'delivery' && o.addr) u.addr = o.addr;
+    if (o.mode === 'delivery' && o.addr) {
+      u.addr = o.addr;
+      u.addrParts = o.addrParts;
+      /* Три останні адреси: люди возять то додому, то на роботу,
+         то батькам. Однакові не дублюємо — свіжа йде першою. */
+      u.addrs = [{ text: o.addr, parts: o.addrParts, at: Date.now() }]
+        .concat((u.addrs || []).filter(a => a && a.text !== o.addr))
+        .slice(0, 3);
+    }
     u.lastSeen = Date.now();
     db.users[who.telKey] = u;
   }
@@ -993,7 +1002,8 @@ app.get('/api/auth/poll/:sid', (req, res) => {
   logins.delete(String(req.params.sid));
   if (s.chatId) chatLogin.delete(s.chatId);
   const u = db.users[s.telKey] || {};
-  res.json({ ok: true, status: 'ok', token: s.token, tel: u.tel || ('+380' + s.telKey), name: u.name || '', addr: u.addr || '' });
+  res.json({ ok: true, status: 'ok', token: s.token, tel: u.tel || ('+380' + s.telKey),
+    name: u.name || '', addr: u.addr || '', addrParts: u.addrParts || null, addrs: u.addrs || [] });
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -1007,7 +1017,8 @@ app.get('/api/me', (req, res) => {
   const a = authOf(req);
   if (!a) return res.status(401).json({ error: 'Потрібно увійти' });
   const u = a.user;
-  res.json({ ok: true, tel: u.tel || ('+380' + a.telKey), name: u.name || '', addr: u.addr || '' });
+  res.json({ ok: true, tel: u.tel || ('+380' + a.telKey), name: u.name || '',
+    addr: u.addr || '', addrParts: u.addrParts || null, addrs: u.addrs || [] });
 });
 
 app.put('/api/me', (req, res) => {
@@ -1023,7 +1034,8 @@ app.put('/api/me', (req, res) => {
   u.lastSeen = Date.now();
   db.users[a.telKey] = u;
   save();
-  res.json({ ok: true, tel: u.tel, name: u.name || '', addr: u.addr || '' });
+  res.json({ ok: true, tel: u.tel, name: u.name || '', addr: u.addr || '',
+    addrParts: u.addrParts || null, addrs: u.addrs || [] });
 });
 
 /* ---------- історія замовлень ---------- */
@@ -1045,6 +1057,22 @@ const pubOrder = o => ({
   ...(adjustmentsOf(o).length ? { totalOrig: o.totalOrig, adjust: pubAdjust(o) } : {}),
   lines: Array.isArray(o.lines) ? o.lines : []
 });
+/* Адреса приходить і рядком (для чату точки), і частинами — щоб наступного
+   разу підставити її в ті самі поля. Беремо лише відомі ключі й коротко:
+   решта з браузера нас не цікавить. */
+const ADDR_KEYS = ['street', 'house', 'flat', 'ent', 'floor'];
+function addrParts(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const out = {};
+  /* Лише рядки й числа: обʼєкт із браузера перетворився б на
+     «[object Object]» і поїхав курʼєру в адресі. */
+  for (const k of ADDR_KEYS) {
+    const v = raw[k];
+    out[k] = (typeof v === 'string' || typeof v === 'number') ? String(v).trim().slice(0, 40) : '';
+  }
+  return out.street || out.house ? out : null;
+}
+
 const ordersOf = telKey => Object.values(db.orders)
   .filter(o => (o.telKey || normTel(o.tel)) === telKey)
   .sort((a, b) => b.createdAt - a.createdAt);

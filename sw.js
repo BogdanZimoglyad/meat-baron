@@ -32,9 +32,13 @@ self.addEventListener('fetch', e => {
 
   const isPage = e.request.mode === 'navigate' || url.pathname.endsWith('.html');
   const isCode = url.pathname.endsWith('.js') || url.pathname.endsWith('.json');
+  /* Довідник вулиць — 110 КБ, які майже не змінюються. Тягнути його
+     щоразу на мобільному інтернеті нема сенсу, тож він іде тим самим
+     шляхом, що й фото: з кеша одразу, оновлення — у фоні. */
+  const isDict = url.pathname.endsWith('streets.js');
 
   // Сторінка і код: спершу мережа, кеш лише коли інтернету немає
-  if (isPage || isCode) {
+  if ((isPage || isCode) && !isDict) {
     e.respondWith(
       fetch(e.request)
         .then(r => {
