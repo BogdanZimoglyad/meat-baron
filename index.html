@@ -305,6 +305,15 @@ a{color:inherit}
 .bar-in{width:100%;max-width:588px;margin:0 auto;background:var(--ember);border-radius:12px;padding:13px 16px;display:flex;align-items:center;justify-content:space-between;gap:14px;color:#fff;font-weight:500;box-shadow:0 10px 30px rgba(0,0,0,.5)}
 .bar-in span:last-child{font-family:'Oswald';font-size:17px;white-space:nowrap}
 .bar[hidden]{display:none}
+/* кнопка «нагору»: зʼявляється, коли догортали каталог, і піднімається над кошиком */
+.to-top{position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:44;
+  width:46px;height:46px;border-radius:50%;background:rgba(27,28,31,.92);border:1px solid var(--line-2);
+  color:var(--bone);display:grid;place-items:center;box-shadow:0 8px 24px rgba(0,0,0,.45);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);opacity:0;transform:translateY(8px);transition:opacity .18s,transform .18s}
+.to-top.on{opacity:1;transform:none}
+.to-top svg{width:22px;height:22px}
+.to-top[hidden]{display:none}
+body.has-bar .to-top{bottom:calc(84px + env(safe-area-inset-bottom))}
 
 /* sheet */
 .veil{position:fixed;inset:0;background:rgba(8,6,6,.72);z-index:60;opacity:0;pointer-events:none;transition:.2s}
@@ -840,6 +849,11 @@ body:has(.inst) .bar{bottom:66px}
     <span id="barR">0 ₴</span>
   </button>
 </div>
+
+<!-- догортав каталог донизу — одним дотиком назад до пошуку й категорій -->
+<button class="to-top" id="toTop" aria-label="Нагору" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+</button>
 
 <div class="lb" id="lb" role="dialog" aria-label="Товар">
   <div class="lb-card"></div>
@@ -1807,6 +1821,7 @@ function paintBar(){
      почала набирати наново — а «Що до мʼяса?» більше не зʼявлялось. */
   if(!cart.length){upsellShown=false;upsellAll=false}
   bar.hidden=!cart.length;
+  document.body.classList.toggle('has-bar',!!cart.length);   // кнопці «нагору» — піднятись над кошиком
   const n=cart.length;
   document.getElementById('barL').textContent=`Кошик · ${n} ${plural(n,['позиція','позиції','позицій'])}`;   // 21 позиція, а не «21 позицій»
   document.getElementById('barR').textContent=money(cartTotal());
@@ -2429,6 +2444,23 @@ document.getElementById('shopName').textContent=SHOPS[shop][0];
 })();
 renderCats();renderCatalog();syncScrollLock();
 restoreCart();
+
+/* Кнопка «нагору». Каталог довгий, і з його кінця до пошуку з категоріями
+   доводилось гортати назад усю сторінку. */
+(function(){
+  const btn=document.getElementById('toTop'); if(!btn) return;
+  let raf=0;
+  const check=()=>{
+    raf=0;
+    const show=scrollY>700;
+    if(show) btn.hidden=false;
+    btn.classList.toggle('on',show);
+    if(!show) setTimeout(()=>{ if(!btn.classList.contains('on')) btn.hidden=true },200);
+  };
+  addEventListener('scroll',()=>{ if(!raf) raf=requestAnimationFrame(check) },{passive:true});
+  btn.onclick=()=>{ try{ scrollTo({top:0,behavior:'smooth'}) }catch(e){ scrollTo(0,0) } };
+  check();
+})();
 ['histTop'].forEach(id=>{const b=document.getElementById(id); if(b) b.onclick=()=>openHistory()});
 
 /* ---------- активне замовлення ---------- */
