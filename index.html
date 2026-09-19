@@ -354,7 +354,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .rowline{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
 .tot{display:flex;align-items:baseline;justify-content:space-between;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
 .tot b{font-family:'Oswald';font-size:26px;font-weight:500}
-.cta{width:100%;background:var(--ember);color:#fff;border-radius:11px;padding:15px;font-size:15px;font-weight:600;margin-top:14px;transition:.14s}
+/* display:block і box-sizing — бо .cta буває і <a> (вхід через Telegram, маршрут):
+   рядкове посилання ігнорувало width:100% і налазило на текст під ним */
+.cta{display:block;box-sizing:border-box;width:100%;text-align:center;text-decoration:none;background:var(--ember);color:#fff;border-radius:11px;padding:15px;font-size:15px;font-weight:600;margin-top:14px;transition:.14s}
 .cta:active{transform:scale(.99)}
 .cta.ghost{background:none;border:1px solid var(--line-2);color:var(--bone);font-weight:500}
 .hint{font-size:12px;color:var(--smoke);margin:10px 0 0;line-height:1.55}
@@ -415,6 +417,10 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .pay[aria-pressed=true] .dot{border-color:var(--ember)}
 .pay[aria-pressed=true] .dot::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--ember)}
 .sum{display:flex;justify-content:space-between;font-size:13.5px;color:var(--smoke);margin-bottom:7px}
+/* кроки входу: номер ліворуч, текст поруч — а не притиснутий до правого краю */
+.lg-step{display:flex;gap:12px;align-items:baseline;font-size:14px;color:var(--bone);margin-bottom:10px;line-height:1.4}
+.lg-step:last-child{margin-bottom:0}
+.lg-step b{flex:0 0 22px;height:22px;border-radius:50%;background:rgba(196,52,42,.18);color:var(--ember-hot);font-size:12.5px;font-weight:600;display:inline-grid;place-items:center}
 .err{color:#F09A92;font-size:14px;line-height:1.45;margin-top:8px;display:none}
 /* пропущене поле на оформленні — червона рамка й підказка просто під ним */
 .fld.bad,.box.bad{border-color:var(--ember-hot);box-shadow:0 0 0 3px rgba(224,74,60,.22)}
@@ -2595,9 +2601,9 @@ function openLogin(){
   <div class="sh-h"><h3>Вхід</h3><button class="x" onclick="close_()">✕</button></div>
   <p class="hint" style="margin-top:-4px">Щоб бачити свої замовлення й не вводити щоразу імʼя та телефон.</p>
   <div class="box" style="margin-top:14px">
-    <div class="sum"><span>1</span><span>Відкриється наш бот у Telegram</span></div>
-    <div class="sum"><span>2</span><span>Натисніть «Поділитися номером»</span></div>
-    <div class="sum"><span>3</span><span>Поверніться сюди — ви вже увійшли</span></div>
+    <div class="lg-step"><b>1</b><span>Відкриється наш бот у Telegram</span></div>
+    <div class="lg-step"><b>2</b><span>Натисніть «Поділитися номером»</span></div>
+    <div class="lg-step"><b>3</b><span>Поверніться сюди — ви вже увійшли</span></div>
   </div>
   <p class="hint">Номер надсилає сам Telegram. Ми не бачимо ваших переписок і не пишемо першими.</p>
   <div id="lgBox"><p class="hint" style="text-align:center;padding:14px 0">Готуємо посилання…</p></div>`);
