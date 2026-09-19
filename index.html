@@ -881,11 +881,12 @@ const CATS=[
  {id:'extra',t:'До мʼяса',u:'сири, овочі, хліб, соуси',fry:0}
 ].filter(c=>!CATS_OFF.has(c.id));
 /* графік і час видачі */
-/* Графік точок. Неділя коротша, а на мангал замовлення приймають доти,
-   доки встигають посмажити до закриття: у будні до 19:00, у неділю до 18:20. */
+/* Графік точок. Неділя коротша. Замовлення на сьогодні приймаємо доти,
+   доки встигають зібрати й посмажити до закриття: у будні до 19:00,
+   у неділю до 18:20 (власник, 19.09). */
 const SHOP_OPEN=8;
 const closeHour=d=>d.getDay()===0?19:20;               // 0 — неділя
-const grillLastOrder=d=>d.getDay()===0?18*60+20:19*60; // хвилини від опівночі
+const lastOrderMin=d=>d.getDay()===0?18*60+20:19*60; // хвилини від опівночі
 const GRILL_FROM=10;                    // мангал з 10:00
 const LEAD_PICKUP=60, LEAD_DELIVERY=100; // хвилин: самовивіз 1 год, доставка 1 год 40 хв (таксі)
 /* Під кінець дня мангал уже розпалений і вугілля готове — останні
@@ -2046,8 +2047,8 @@ function dayLabel(d){
    а мангал розпалюють пізніше — тримати всіх до 10:00 нема причини. */
 let fryWanted=false;
 const openFrom=()=>fryWanted?GRILL_FROM:SHOP_OPEN;
-/* Чи вже пізно замовляти на мангал сьогодні */
-const grillClosedToday=()=>{ const n=new Date(); return fryWanted && n.getHours()*60+n.getMinutes()>grillLastOrder(n) };
+/* Чи вже пізно замовляти на сьогодні — і на мангал, і на сире */
+const closedForToday=()=>{ const n=new Date(); return n.getHours()*60+n.getMinutes()>lastOrderMin(n) };
 
 /* Найраніший можливий час — точний, разом із хвилинами. */
 function earliestExact(mode){
@@ -2060,8 +2061,8 @@ function earliestExact(mode){
   const from=openFrom();
   // ще не відчинено — чекаємо на відкриття
   if(t.getHours()<from) t.setHours(from,0,0,0);
-  // мангал на сьогодні вже не приймає — найближче завтра
-  if(grillClosedToday()&&dayKey(t)===dayKey(new Date())){
+  // на сьогодні вже не приймаємо — найближче завтра
+  if(closedForToday()&&dayKey(t)===dayKey(new Date())){
     t.setDate(t.getDate()+1);
     t.setHours(from,0,0,0);
   }
@@ -2090,7 +2091,7 @@ function asapLabel(mode){
 /* слоти на конкретний день */
 function slotsFor(d,mode){
   const out=[], e=earliest(mode);
-  if(grillClosedToday()&&dayKey(d)===dayKey(new Date())) return out;   // сьогодні мангал уже не встигне
+  if(closedForToday()&&dayKey(d)===dayKey(new Date())) return out;   // на сьогодні вже пізно
   const sameDay=dayKey(d)===dayKey(e);
   let h=Math.max(openFrom(), sameDay? e.getHours():openFrom());
   const close=closeHour(d);
@@ -2145,7 +2146,8 @@ function pickTimeSheet(mode,back){
         return `<button class="wi" data-h="${sl.h}" aria-pressed="${!!on}">${sl.label}</button>`}).join('')}</div>
     </div>
 
-    <p class="hint">Готуємо ${mode==='delivery'?'і доставляємо ':''}від ${lead}.${mode==='delivery'?' Буває на 10–15 хв швидше.':''}${fryWanted?` Мангал з ${GRILL_FROM}:00, замовлення на нього приймаємо до 19:00, у неділю — до 18:20.`:''}</p>
+    <p class="hint">Готуємо ${mode==='delivery'?'і доставляємо ':''}від ${lead}.${mode==='delivery'?' Буває на 10–15 хв швидше.':''}${fryWanted?` Мангал з ${GRILL_FROM}:00.`:''}
+    Замовлення на сьогодні приймаємо до 19:00, у неділю — до 18:20.</p>
     <button class="cta" id="whenOk">Готово</button>`;
 
     sIn.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{sel=+b.dataset.d;draw()});
