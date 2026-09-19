@@ -437,6 +437,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 
 /* status */
 .done-ic{width:56px;height:56px;border-radius:50%;background:rgba(123,168,79,.16);display:grid;place-items:center;margin:6px auto 12px}
+/* Скасоване замовлення: той самий кружечок, але червоний */
+.done-ic.off{background:rgba(214,64,52,.16)}
+.done-ic.off svg{stroke:var(--ember)}
 .done-ic svg{width:28px;height:28px;stroke:var(--ok)}
 .steps{margin-top:6px}
 .st{display:flex;gap:12px}
@@ -636,6 +639,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .ready-note{display:flex;align-items:center;gap:11px;margin-bottom:12px;padding:13px 14px;
   border-radius:12px;background:rgba(123,168,79,.14);border:1px solid rgba(123,168,79,.45)}
 .ready-note svg{width:22px;height:22px;color:var(--ok);flex:0 0 auto}
+.ready-note.off{border-color:rgba(214,64,52,.45);background:rgba(214,64,52,.10)}
+.ready-note.off svg{color:var(--ember)}
 .ready-note b{display:block;font-weight:600;font-size:14.5px;color:var(--bone)}
 .ready-note span span,.ready-note>span{line-height:1.4}
 .ready-note>span span{font-size:12.5px;color:var(--smoke)}
@@ -2427,31 +2432,41 @@ function openCheckout(){
 /* ---------- status ---------- */
 function openStatus(startStatus){
   const o=order;
-  const STK=['accepted','cooking','ready','done'];
+  /* На доставці останній крок — «Передано курʼєру»: саме він і є
+     статусом onway. «Доставлено» закриває всі чотири. */
+  const STK=o.mode==='delivery'?['accepted','cooking','ready','onway']
+                               :['accepted','cooking','ready','done'];
+  const cancelNote=()=>((o.adjust||[]).filter(a=>a.kind==='cancel').pop()||{}).note||'';
   const draw=(status)=>{
     /* Зелений — крок уже пройдено, червоний — той, що попереду. Раніше
        «Прийнято» лишалось червоним і після того, як оператор натиснув
        «Прийняти в роботу», і здавалось, що замовлення ще не взяли. */
-    const reached=STK.indexOf(status);          // -1 — точка ще не підтвердила
+    const off=status==='canceled';              // скасоване — без кроків і без галочки
+    const reached=status==='done'? STK.length-1 : STK.indexOf(status);   // -1 — точка ще не підтвердила
     const steps=[['Прийнято',status==='new'?'чекаємо підтвердження точки':'оператор підтвердив'],
       ['Готується',o.fry?'мʼясо на мангалі':'збираємо замовлення'],
       /* третій елемент — значок у кружечку замість галочки */
       ['Готове',me?'напишемо в Telegram':'надішлемо SMS','🔥'],[o.mode==='pickup'?'Видано':'Передано курʼєру','','🤝']];
     sIn.innerHTML=`<div class="grab-zone"><div class="grab"></div></div>
-    <div class="done-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round"><path d="M4 12.5l5.5 5.5L20 7"/></svg></div>
-    <h3 style="text-align:center;font-size:23px;text-transform:uppercase">Замовлення прийнято</h3>
+    <div class="done-ic${off?' off':''}"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round">
+      <path d="${off?'M6 6l12 12M18 6L6 18':'M4 12.5l5.5 5.5L20 7'}"/></svg></div>
+    <h3 style="text-align:center;font-size:23px;text-transform:uppercase">${off?'Замовлення скасовано':'Замовлення прийнято'}</h3>
     <p style="text-align:center;color:var(--smoke);font-size:13px;margin:5px 0 4px">№ ${o.no} · ${o.shop}</p>
     <p style="text-align:center;color:var(--ember-hot);font-size:13.5px;margin:0 0 18px">${o.when||''}</p>
 
+    ${off?`<div class="ready-note off">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      <span><b>Точка скасувала замовлення</b><span>${esc(cancelNote()||'причину уточнить оператор')}</span></span>
+    </div>`:''}
     ${status==='ready'?`<div class="ready-note">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5.5 5.5L20 7"/></svg>
       <span><b>Замовлення готове</b><span>${o.mode==='pickup'?'Чекаємо на вас за адресою '+o.shop:'Курʼєр уже виїжджає'}</span></span>
     </div>`:''}
-    <div class="box steps">${steps.map((s,i)=>`
+    ${off?'':`<div class="box steps">${steps.map((s,i)=>`
       <div class="st ${i<=reached?'done':i===reached+1?'on':''}">
         <div class="st-l"><div class="st-d${s[2]?' ic':''}">${s[2]||(i<=reached?'✓':'')}</div>${i<3?'<div class="st-bar"></div>':''}</div>
         <div class="st-b"><div class="t">${s[0]}</div>${s[1]?`<div class="s">${s[1]}</div>`:''}</div>
-      </div>`).join('')}</div>
+      </div>`).join('')}</div>`}
 
     <div class="box">
       ${o.lines.length
@@ -2500,7 +2515,7 @@ function openStatus(startStatus){
         /* сума могла змінитись: оператор зважив замовлення */
         if(Number.isFinite(d.total)){o.total=d.total; o.totalOrig=d.totalOrig; o.adjust=d.adjust||[]}
         if(pollTick!==tick) return;
-        if(d.status){draw(d.status); if(d.status==='done'){clearInterval(poll);clearLast()} showActiveBar()}
+        if(d.status){draw(d.status); if(d.status==='done'||d.status==='canceled'){clearInterval(poll);clearLast()} showActiveBar()}
       }catch(e){}
     };
     pollTick=tick;
@@ -2577,7 +2592,8 @@ function readLast(){
 /* 'new' — точка ще не підтвердила. Раніше такий заказ показувався
    як «Прийнято», і клієнт думав, що його вже взяли в роботу. */
 const ST_LABEL={new:'Очікує підтвердження',accepted:'Прийнято',
-                cooking:'Готується',ready:'Готове',done:'Видано'};
+                cooking:'Готується',ready:'Готове',onway:'У дорозі',
+                done:'Видано',canceled:'Скасовано'};
 /* Замовлення, яке зараз готують, — від сервера. Памʼять браузера знає
    лише про те, що оформили на цьому пристрої: людина замовляла з
    компʼютера, відкрила сайт у телефоні — і там порожньо. */
@@ -2607,7 +2623,7 @@ async function showActiveBar(){
       if(d.status) st=d.status;
     }catch(e){}
   }
-  if(st==='done'){if(!srv)clearLast();el.hidden=true;return}
+  if(st==='done'||st==='canceled'){if(!srv)clearLast();el.hidden=true;return}
   el.hidden=false;
   const ready=st==='ready';
   const sub=ready? 'Можна забирати · '+shopName : shopName+(v.when?' · '+v.when:'');

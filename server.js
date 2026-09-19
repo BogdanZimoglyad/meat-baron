@@ -151,21 +151,29 @@ for (let i = 1; i <= 20; i++) {
    Щоб увімкнути точку, постав 1 у третьому стовпці в catalog.js. */
 const SHOPS = CATALOG_SHOPS.map(s => s[0]);
 
-const STATUSES = ['new', 'accepted', 'cooking', 'ready', 'done'];
+/* Дорога замовлення. «У дорозі» буває лише на доставці — після «Готове»
+   оператор передає пакунок таксі; на самовивозі цього кроку немає.
+   «Скасовано» стоїть осібно: воно не крок уперед, а вихід із ланцюжка. */
+const STATUSES = ['new', 'accepted', 'cooking', 'ready', 'onway', 'done'];
+const CANCELED = 'canceled';
+const FINAL = new Set(['done', CANCELED]);
 const LABEL = {
   new: 'Нове',
   accepted: 'Прийнято',
   cooking: 'Готується',
   ready: 'Готове',
-  done: 'Видано'
+  onway: 'У дорозі',
+  done: 'Видано',
+  canceled: 'Скасовано'
 };
-const NEXT_BTN = {
-  new: [['accepted', '✅ Прийняти в роботу']],
-  accepted: [['cooking', '👨‍🍳 Готується']],   // 🔥 тепер у «Готове», як на сайті
-  cooking: [['ready', '🔥 Готове']],
-  ready: [['done', '🤝 Видано']],
-  done: []
-};
+/* Кнопки залежать від способу отримання, тому це функція, а не таблиця */
+const nextBtns = o =>
+    o.status === 'new'      ? [['accepted', '✅ Прийняти в роботу']]
+  : o.status === 'accepted' ? [['cooking', '👨‍🍳 Готується']]   // 🔥 тепер у «Готове», як на сайті
+  : o.status === 'cooking'  ? [['ready', '🔥 Готове']]
+  : o.status === 'ready'    ? (o.mode === 'delivery' ? [['onway', '🚗 Передали курʼєру']] : [['done', '🤝 Видано']])
+  : o.status === 'onway'    ? [['done', '🤝 Доставлено']]
+  : [];
 
 const money = n => kop(n).toFixed(2).replace(/\.00$/, '') + ' ₴';
 const normTel = t => {
@@ -482,9 +490,10 @@ function orderText(o) {
     a.kind === 'note' ? `💬 ${esc(a.note)}` + who(a)
     : a.kind === 'fact' ? `🧾 Фактична сума з каси: ${money(a.amount)} (було ${money(a.from)})` + (a.note ? ` — ${esc(a.note)}` : '') + who(a)
     : a.kind === 'ship' ? `🚕 Доставка: ${money(a.amount)}` + (a.from ? ` (було ${money(a.from)})` : '') + (a.note ? ` — ${esc(a.note)}` : '') + who(a)
+    : a.kind === 'cancel' ? `✖️ Скасовано: ${esc(a.note)}` + who(a)
     : `${a.kind === 'add' ? '➕' : '➖'} ${money(a.amount)}` + (a.note ? ` — ${esc(a.note)}` : '') + who(a)
   ).join('\n');
-  const changed = adj.some(a => a.kind !== 'note');
+  const changed = adj.some(a => a.kind !== 'note' && a.kind !== 'cancel');
   const sum = adj.length
     ? (changed ? `На сайті: ${money(o.totalOrig)}\n` : '') + `${adjLines}\n` +
       `<b>${changed ? 'До сплати' : 'Разом'}: ${money(o.total)}</b>${warn}\n` +
@@ -501,14 +510,22 @@ function orderText(o) {
 
 /* Чи можна зараз вносити саме цю зміну: доставку — майже до видачі,
    решту — лише поки замовлення не готується. */
-const canEdit = (o, kind) => kind === 'ship' ? (o.mode === 'delivery' && SHIP_OK.has(o.status)) : EDITABLE.has(o.status);
-const lockedText = kind => kind === 'ship'
+const canEdit = (o, kind) =>
+    kind === 'ship'   ? (o.mode === 'delivery' && SHIP_OK.has(o.status))
+  : kind === 'cancel' ? cancelable(o)
+  : EDITABLE.has(o.status) && o.status !== CANCELED;
+const lockedText = kind => kind === 'cancel'
+  ? 'Замовлення вже видано або скасовано'
+  : kind === 'ship'
   ? 'Замовлення вже видано — вартість доставки змінити не можна'
   : LOCKED_TEXT;
 
 /* Суму й коментарі оператор міняє лише до «Готується». Далі замовлення
    вже в роботі, і сума має лишатися тією, яку бачив клієнт. */
 const EDITABLE = new Set(['new', 'accepted']);
+/* Скасувати можна, поки замовлення не видане
+   (і поки воно вже не скасоване) */
+const cancelable = o => !FINAL.has(o.status);
 /* Вартість доставки — виняток: таксі викликають, коли замовлення вже
    готується чи готове, тож вписати її можна майже до видачі. */
 const SHIP_OK = new Set(['new', 'accepted', 'cooking', 'ready']);
@@ -529,9 +546,12 @@ const pubAdjust = o => adjustmentsOf(o).map(a => ({ kind: a.kind, amount: a.amou
 
 function keyboard(o) {
   /* Доставку вписують окремою кнопкою: суму каже таксі, а не каса */
-  const btns = NEXT_BTN[o.status].map(([st, txt]) => ([{ text: txt, callback_data: `s:${o.no}:${st}` }]));
+  if (o.status === CANCELED) return { inline_keyboard: [] };   // скасоване не чіпаємо
+  const btns = nextBtns(o).map(([st, txt]) => ([{ text: txt, callback_data: `s:${o.no}:${st}` }]));
   if (o.mode === 'delivery' && SHIP_OK.has(o.status)) btns.push(
     [{ text: o.ship ? '🚕 Змінити вартість доставки' : '🚕 Вартість доставки', callback_data: `a:${o.no}:ship` }]);
+  /* Скасування — окремим рядком унизу, щоб не тиснули випадково */
+  if (cancelable(o)) btns.push([{ text: '✖️ Скасувати замовлення', callback_data: `a:${o.no}:cancel` }]);
   if (EDITABLE.has(o.status)) btns.push(
     [{ text: '🧾 Фактична сума', callback_data: `a:${o.no}:fact` }],
     [
@@ -619,7 +639,8 @@ function grillLoad(shop) {
   const out = {}, from = hourFloor(Date.now());
   for (const no in db.orders) {
     const o = db.orders[no];
-    if (o.shop !== shop || !o.fry || !o.slotAt || o.slotAt < from) continue;
+    /* Скасоване мангал не займає — саме для цього оператор і тисне «Скасувати» */
+    if (o.shop !== shop || !o.fry || !o.slotAt || o.slotAt < from || o.status === CANCELED) continue;
     const key = hourFloor(o.slotAt);
     out[key] = (out[key] || 0) + (o.fg || 0);
   }
@@ -941,7 +962,7 @@ app.get('/api/me/active', (req, res) => {
   if (!a) return res.status(401).json({ error: 'Потрібно увійти' });
   const DAY = 24 * 3600 * 1000;
   const o = ordersOf(a.telKey)
-    .filter(o => o.status !== 'done')
+    .filter(o => !FINAL.has(o.status))
     .filter(o => Date.now() - (o.createdAt || 0) < DAY)[0];
   res.json({ ok: true, order: o ? pubOrder(o) : null });
 });
@@ -986,7 +1007,7 @@ bot.on('callback_query', async cq => {
   /* Статус іде лише вперед, на один крок. Старе повідомлення чи швидкий
      подвійний дотик натискали кнопку, якої вже не мало бути, — і
      «Готове» відкочувалось назад у «Готується», у клієнта теж. */
-  if (!NEXT_BTN[o.status].some(([next]) => next === st)) {
+  if (!nextBtns(o).some(([next]) => next === st)) {
     await bot.editMessageReplyMarkup(keyboard(o), { chat_id: o.chatId, message_id: o.msgId }).catch(() => {});
     return bot.answerCallbackQuery(cq.id, { text: `Уже «${LABEL[o.status]}» — кнопки оновлено` });
   }
@@ -1063,6 +1084,7 @@ const ASK = {
   add:  o => `Замовлення № ${o.no}, зараз ${money(o.total)}.\n➕ На скільки <b>збільшити</b> суму? Відповідайте на це повідомлення, коментар — через пробіл.\nНаприклад: 39 додали соус Ткемалі`,
   sub:  o => `Замовлення № ${o.no}, зараз ${money(o.total)}.\n➖ На скільки <b>зменшити</b> суму? Відповідайте на це повідомлення, коментар — через пробіл.\nНаприклад: 25 вага менша`,
   note: o => `Замовлення № ${o.no}.\n💬 Напишіть коментар для клієнта відповіддю на це повідомлення. Сума не зміниться.`,
+  cancel: o => `Замовлення № ${o.no} — ${LABEL[o.status]}.\n✖️ Напишіть <b>причину скасування</b> відповіддю на це повідомлення — її побачить клієнт.\nНаприклад: немає в наявності або клієнт відмовився`,
   ship: o => `Замовлення № ${o.no}, зараз ${money(o.total)}.\n🚕 Введіть <b>вартість доставки</b> — відповіддю на це повідомлення. За потреби — коментар через пробіл.\nНаприклад: 120 або 120 таксі до Салтівки` +
     (o.ship ? `\nЗараз у сумі вже є доставка ${money(o.ship)} — нова замінить її.` : '')
 };
@@ -1118,12 +1140,30 @@ bot.on('callback_query', async cq => {
     return bot.answerCallbackQuery(cq.id, { text: 'Скасовано' });
   }
 
+  /* Скасування — не зміна суми: замовлення виходить із ланцюжка, кнопки
+     зникають, а зайнята година на мангалі звільняється сама (скасовані
+     grillLoad не рахує). */
+  if (conf.kind === 'cancel') {
+    o.adjust = adjustmentsOf(o).slice();
+    o.adjust.push({ kind: 'cancel', note: conf.note, by: opName(cq.from), at: Date.now(), from: o.status });
+    o.status = CANCELED;
+    o.updatedAt = Date.now();
+    save();
+    await bot.editMessageText(orderText(o), {
+      chat_id: o.chatId, message_id: o.msgId, parse_mode: 'HTML', reply_markup: keyboard(o)
+    }).catch(e => console.error('edit:', e.message));
+    await bot.editMessageText(`✖️ № ${o.no} скасовано: ${conf.note}`,
+      { chat_id: chatId, message_id: cq.message.message_id }).catch(() => {});
+    await bot.answerCallbackQuery(cq.id, { text: 'Скасовано' });
+    return notifyCancel(o, conf.note);
+  }
+
   /* ac — застосовуємо. Суму рахуємо від поточної, а не від тієї, що була
      в момент запиту: між запитом і підтвердженням міг устигнути інший
      оператор. */
   const before = o.total;
   const next = nextTotal(before, conf.kind, conf.amount, o);
-  if (conf.kind !== 'note' && (next <= 0 || next > MAX_TOTAL)) {
+  if (conf.kind !== 'note' && conf.kind !== 'cancel' && (next <= 0 || next > MAX_TOTAL)) {
     await bot.editMessageText(`Сума замовлення № ${o.no} вийшла б ${money(next)} — так не можна.`,
       { chat_id: chatId, message_id: cq.message.message_id }).catch(() => {});
     return bot.answerCallbackQuery(cq.id, { text: 'Некоректна сума' });
@@ -1166,6 +1206,8 @@ function askFromText(r) {
   const m = t.match(/^Замовлення № (\d+)(?:, зараз |\.\n)/);
   if (!m || !/відповід/i.test(t)) return null;
   const kind = t.includes('🧾') ? 'fact' : t.includes('➕') ? 'add' : t.includes('➖') ? 'sub'
+             : t.includes('✖️') ? 'cancel'
+             : t.includes('✖️') ? 'cancel'
              : t.includes('🚕') ? 'ship'
              : t.includes('💬 Напишіть коментар') ? 'note' : null;
   return kind ? { no: Number(m[1]), kind, at: Date.now() } : null;
@@ -1190,7 +1232,8 @@ bot.on('message', async msg => {
   }
 
   let amount = 0, note = '';
-  if (ask.kind === 'note') {
+  /* Коментар і скасування — це текст, а не сума */
+  if (ask.kind === 'note' || ask.kind === 'cancel') {
     note = msg.text.trim().slice(0, 200);
     if (!note) return askAdjust(o, ask.kind, msg.chat.id).catch(() => {});
   } else {
@@ -1211,7 +1254,9 @@ bot.on('message', async msg => {
   amountConfirms.set(id, { no: o.no, kind: ask.kind, amount, note, at: Date.now() });
   const next = nextTotal(o.total, ask.kind, amount, o);
   const far = ask.kind === 'fact' && Math.abs(next - o.total) > o.total * FACT_WARN;
-  const preview = ask.kind === 'ship'
+  const preview = ask.kind === 'cancel'
+    ? `✖️ № ${o.no} (${LABEL[o.status]}) — скасувати?\nПричина для клієнта: ${note}`
+    : ask.kind === 'ship'
     ? `№ ${o.no}: доставка ${money(amount)}${o.ship ? ` замість ${money(o.ship)}` : ''}\n${money(o.total)} → ${money(next)}`
       + (note ? `\nКоментар для клієнта: ${note}` : '')
     : ask.kind === 'note' ? `№ ${o.no}: коментар для клієнта:\n${note}`
@@ -1229,6 +1274,19 @@ bot.on('message', async msg => {
 });
 
 /* Клієнту, який увійшов через Telegram, — про кожну зміну */
+/* Про скасування пишемо окремо: це не зміна суми, а кінець замовлення.
+   Тому й телефон точки поруч — щоб людина могла одразу перепитати. */
+function notifyCancel(o, why) {
+  const u = db.users[o.telKey] || {};
+  const tel = (CATALOG_SHOPS[o.shop] || [])[1] || '';
+  const text = `✖️ Замовлення № ${o.no} скасовано.\nПричина: ${why}` +
+    (tel ? `\nЯкщо це непорозуміння — зателефонуйте: ${tel}` : '');
+  if (!u.tgId) return console.log('[SMS →', o.tel + ']', text.replace(/\n/g, ' '));
+  bot.sendMessage(u.tgId, text, {
+    reply_markup: { inline_keyboard: [[{ text: 'Відкрити замовлення', url: SITE + '?order=' + o.no }]] }
+  }).catch(e => console.warn('Скасування № ' + o.no + ' не дійшло до клієнта:', e.message));
+}
+
 function notifyAdjust(o, a) {
   const u = db.users[o.telKey] || {};
   if (!u.tgId || !a) return;
@@ -1260,6 +1318,9 @@ const NOTE = {
   accepted: o => `✅ Замовлення № ${o.no} прийнято.\n` +
     (o.when ? `Орієнтовно: ${o.when}\n` : '') +
     (o.mode === 'pickup' ? `Точка: ${o.shopName}` : 'Доставка: курʼєр звʼяжеться щодо вартості.'),
+  onway: o => `🚗 Замовлення № ${o.no} уже в дорозі.` +
+    (o.addr ? `\nВезуть за адресою: ${o.addr}` : '') +
+    `\nКурʼєр зателефонує, коли буде на місці.`,
   ready: o => `🔥 Замовлення № ${o.no} готове.\n` +
     (o.mode === 'pickup' ? `Чекаємо на вас: ${o.shopName}` : 'Курʼєр уже виїжджає.')
 };
