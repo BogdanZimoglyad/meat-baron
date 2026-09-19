@@ -888,6 +888,9 @@ const closeHour=d=>d.getDay()===0?19:20;               // 0 — неділя
 const grillLastOrder=d=>d.getDay()===0?18*60+20:19*60; // хвилини від опівночі
 const GRILL_FROM=10;                    // мангал з 10:00
 const LEAD_PICKUP=60, LEAD_DELIVERY=100; // хвилин: самовивіз 1 год, доставка 1 год 40 хв (таксі)
+/* Під кінець дня мангал уже розпалений і вугілля готове — останні
+   замовлення на самовивіз встигають за 40 хвилин (власник, 19.09). */
+const LEAD_PICKUP_LATE=40;
 const SLOT_STEP=60;                     // крок слота — 1 година
 const DAYS_AHEAD=7;
 
@@ -2048,7 +2051,10 @@ const grillClosedToday=()=>{ const n=new Date(); return fryWanted && n.getHours(
 
 /* Найраніший можливий час — точний, разом із хвилинами. */
 function earliestExact(mode){
-  const lead=mode==='delivery'?LEAD_DELIVERY:LEAD_PICKUP;
+  const n=new Date(); const nowMin=n.getHours()*60+n.getMinutes();
+  let lead=mode==='delivery'?LEAD_DELIVERY:LEAD_PICKUP;
+  const closeMin=closeHour(n)*60;
+  if(mode!=='delivery' && nowMin+lead>closeMin && nowMin+LEAD_PICKUP_LATE<=closeMin) lead=LEAD_PICKUP_LATE;
   const t=new Date(Date.now()+lead*60000);
   t.setSeconds(0,0);
   const from=openFrom();
@@ -2060,7 +2066,7 @@ function earliestExact(mode){
     t.setHours(from,0,0,0);
   }
   // після останньої видачі — переносимо на завтра
-  if(t.getHours()>=closeHour(t)){
+  if(t.getHours()*60+t.getMinutes()>closeHour(t)*60){
     t.setDate(t.getDate()+1);
     t.setHours(from,0,0,0);
   }
