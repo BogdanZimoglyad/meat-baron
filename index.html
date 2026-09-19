@@ -1097,6 +1097,8 @@ const money=n=>kop(n).toFixed(2).replace(/\.00$/,'')+' ₴';
 const WEIGHT_NOTE='Сума орієнтовна — точну порахуємо, коли зважимо замовлення. Ціна за 100 г не зміниться.';
 /* Чи змінював оператор суму (коментар без суми — не зміна) */
 const adjChanged=o=>(o.adjust||[]).some(a=>a.kind!=='note');
+/* Вартість доставки оператор вписує в боті, коли домовиться з таксі */
+const shipOf=o=>(o.adjust||[]).filter(a=>a.kind==='ship').pop();
 /* 2.55 кг, а не 2.5: вага йде кроком 50 г, і один знак після коми з'їдав 50 г */
 const wLabel=g=>g>=1000?(g/1000).toFixed(g%100?2:g%1000?1:0)+' кг':g+' г';
 /* заглушки: іконка за типом продукту + дим і силует бика */
@@ -2458,15 +2460,16 @@ function openStatus(startStatus){
       ${o.fry?`<div class="sum"><span>Смаження · ${wLabel(o.fg)}</span><span>${money(kop(o.fg/1000*FRY_RATE))}</span></div>`:''}
       ${/* Зміни оператора: кожна окремим рядком — «+39 ₴ · додали соус», коментарі текстом */''}
       ${adjChanged(o)?`<div class="sum"><span>На сайті</span><span>${money(o.totalOrig)}</span></div>`:''}
-      ${(o.adjust||[]).filter(a=>a.kind!=='note').map(a=> a.kind==='fact'
+      ${(o.adjust||[]).filter(a=>a.kind!=='note'&&a.kind!=='ship').map(a=> a.kind==='fact'
         ? `<div class="sum"><span>Зважили на касі${a.note?' · '+esc(a.note):''}</span><span>${money(a.amount)}</span></div>`
         : `<div class="sum"><span>${a.kind==='add'?'+':'−'} ${esc(a.note||'уточнили після зважування')}</span><span>${a.kind==='add'?'+':'−'}${money(a.amount)}</span></div>`).join('')}
+      ${shipOf(o)?`<div class="sum"><span>🚕 Доставка${shipOf(o).note?' · '+esc(shipOf(o).note):''}</span><span>${money(shipOf(o).amount)}</span></div>`:''}
       <div style="display:flex;justify-content:space-between;align-items:baseline;padding-top:10px;border-top:1px solid var(--line)">
         <span style="font-size:13px">${adjChanged(o)?'До сплати':'Разом'}</span><b style="font-family:Oswald;font-size:21px">${money(o.total)}</b></div>
       ${(o.adjust||[]).filter(a=>a.kind==='note').map(a=>`<p class="hint" style="margin:8px 0 0">💬 Оператор: ${esc(a.note)}</p>`).join('')}
       ${adjChanged(o)
-        ? `<p class="hint">Суму уточнив оператор.${o.mode==='delivery'?' Вартість доставки уточнить окремо.':''}</p>`
-        : `${o.mode==='delivery'?'<p class="hint">Оператор зателефонує і уточнить вартість доставки.</p>':''}<p class="weight-note">${WEIGHT_NOTE}</p>`}
+        ? `<p class="hint">Суму уточнив оператор.${o.mode==='delivery'&&!shipOf(o)?' Вартість доставки уточнить окремо.':''}</p>`
+        : `${o.mode==='delivery'&&!shipOf(o)?'<p class="hint">Оператор зателефонує і уточнить вартість доставки.</p>':''}<p class="weight-note">${WEIGHT_NOTE}</p>`}
     </div>
 
     <p class="ord-link">Посилання на замовлення можна зберегти або переслати:<br>
