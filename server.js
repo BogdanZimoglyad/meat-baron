@@ -67,7 +67,7 @@ app.use(express.static(__dirname, { dotfiles: 'ignore' }));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const DB = path.join(DATA_DIR, 'data.json');
 try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
-let db = { orders: {}, shops: {}, counter: 1000, users: {}, tokens: {}, busy: {}, extra: {} };
+let db = { orders: {}, shops: {}, counter: 1000, users: {}, tokens: {}, busy: {}, extra: {}, daySent: {} };
 try {
   db = JSON.parse(fs.readFileSync(DB, 'utf8'));
 } catch (e) {
@@ -448,6 +448,112 @@ bot.on('callback_query', async cq => {
     parse_mode: 'HTML', reply_markup: busyKb(i) }).catch(() => {});
   bot.answerCallbackQuery(cq.id, { text: note });
 });
+
+/* ---------- нагадування про нове замовлення ----------
+   Замовлення, яке ніхто не взяв у роботу, легко губиться в запарці:
+   у групі точки згори падають фото, питання й нові замовлення. Через
+   5 хвилин бот нагадує і далі щохвилини, поки не натиснуть «Прийняти».
+   Щоб не засмічувати чат, попереднє нагадування прибираємо — лишається
+   одне, зате завжди свіже й зі звуком. */
+const REMIND_AFTER = 5 * 60 * 1000;      // скільки чекаємо перше нагадування
+const REMIND_EVERY = 60 * 1000;          // далі — щохвилини
+const REMIND_MAX = 60;                   // година нагадувань, далі мовчимо
+
+/* Прибрати нагадування: замовлення взяли в роботу або скасували */
+function dropRemind(o) {
+  if (!o.remindMsg) return;
+  const id = o.remindMsg;
+  delete o.remindMsg;
+  bot.deleteMessage(o.chatId, id).catch(() => {});
+}
+
+async function remindSweep() {
+  const now = Date.now();
+  for (const no in db.orders) {
+    const o = db.orders[no];
+    if (o.status !== 'new' || !o.chatId || !o.msgId) continue;
+    const age = now - (o.createdAt || 0);
+    if (age < REMIND_AFTER) continue;
+    if (now - (o.remindAt || 0) < REMIND_EVERY) continue;
+    if ((o.remindN || 0) >= REMIND_MAX) continue;
+
+    o.remindAt = now;
+    o.remindN = (o.remindN || 0) + 1;
+    dropRemind(o);
+    save();
+    try {
+      const m = await bot.sendMessage(o.chatId,
+        `⏰ <b>Замовлення № ${o.no}</b> не прийняте вже ${Math.round(age / 60000)} хв.` +
+        (o.when ? `\n🕒 ${esc(o.when)}` : '') +
+        (o.fry ? `\n🔥 На мангал: ${wLabel(o.fg)}` : ''),
+        { parse_mode: 'HTML', reply_to_message_id: o.msgId,
+          reply_markup: { inline_keyboard: [[{ text: '✅ Прийняти в роботу', callback_data: `s:${o.no}:accepted` }]] } });
+      o.remindMsg = m.message_id;
+      save();
+    } catch (e) {
+      console.warn('Нагадування № ' + o.no + ':', e.message);
+    }
+  }
+}
+setInterval(remindSweep, 20 * 1000).unref();
+
+/* ---------- підсумок дня ----------
+   Скільки замовлень, кілограмів і грошей зробила точка за день. Приходить
+   сам після закриття, а до того його можна спитати командою /day. */
+const kyivDate = (ts = Date.now()) =>
+  new Date(ts).toLocaleDateString('sv-SE', { timeZone: 'Europe/Kyiv' });   // 2026-09-19
+
+function dayStats(shop, day) {
+  const list = Object.values(db.orders)
+    .filter(o => o.shop === shop && kyivDate(o.createdAt) === day);
+  const live = list.filter(o => o.status !== CANCELED);
+  const sum = live.reduce((s, o) => s + (o.total || 0), 0);
+  const fg = live.reduce((s, o) => s + (o.fry ? (o.fg || 0) : 0), 0);
+  return {
+    all: list.length,
+    canceled: list.filter(o => o.status === CANCELED).length,
+    open: list.filter(o => !FINAL.has(o.status)).length,
+    pickup: live.filter(o => o.mode === 'pickup').length,
+    delivery: live.filter(o => o.mode === 'delivery').length,
+    ship: live.reduce((s, o) => s + (o.ship || 0), 0),
+    sum, fg
+  };
+}
+
+function dayText(shop, day) {
+  const d = dayStats(shop, day);
+  const [y, m, dd] = day.split('-');
+  if (!d.all) return `📊 <b>${esc(SHOPS[shop])}</b> · ${dd}.${m}\nЗамовлень із сайту сьогодні не було.`;
+  return `📊 <b>Підсумок дня · ${esc(SHOPS[shop])}</b> · ${dd}.${m}\n` +
+    `Замовлень: <b>${d.all - d.canceled}</b> (самовивіз ${d.pickup}, доставка ${d.delivery})\n` +
+    `На мангал: <b>${wLabel(d.fg)}</b>\n` +
+    `Сума: <b>${money(d.sum)}</b>` + (d.ship ? ` (з них доставка ${money(d.ship)})` : '') +
+    (d.canceled ? `\nСкасовано: ${d.canceled}` : '') +
+    (d.open ? `\nЩе в роботі: ${d.open}` : '');
+}
+
+bot.onText(/^\/day(?:@\w+)?/, msg => {
+  const i = Object.keys(db.shops).find(k => db.shops[k] === msg.chat.id);
+  if (i === undefined) return bot.sendMessage(msg.chat.id, 'Цей чат не прив’язаний до точки. /whoami');
+  bot.sendMessage(msg.chat.id, dayText(Number(i), kyivDate()), { parse_mode: 'HTML' });
+});
+
+/* Після закриття надсилаємо самі — один раз на день на точку */
+function daySweep() {
+  const k = kyivNow();
+  const close = k.getDay() === 0 ? 19 : 20;
+  if (k.getHours() < close) return;
+  const day = kyivDate();
+  db.daySent = db.daySent || {};
+  for (const i of Object.keys(db.shops)) {
+    if (db.daySent[i] === day) continue;
+    db.daySent[i] = day;
+    save();
+    bot.sendMessage(db.shops[i], dayText(Number(i), day), { parse_mode: 'HTML' })
+      .catch(e => console.warn('Підсумок дня точці ' + i + ':', e.message));
+  }
+}
+setInterval(daySweep, 5 * 60 * 1000).unref();
 
 /* ---------- текст замовлення ---------- */
 function orderText(o) {
@@ -1013,6 +1119,7 @@ bot.on('callback_query', async cq => {
   }
 
   o.status = st;
+  dropRemind(o);                  // взяли в роботу — нагадування зайве
   o.updatedAt = Date.now();
   save();
 
@@ -1147,6 +1254,7 @@ bot.on('callback_query', async cq => {
     o.adjust = adjustmentsOf(o).slice();
     o.adjust.push({ kind: 'cancel', note: conf.note, by: opName(cq.from), at: Date.now(), from: o.status });
     o.status = CANCELED;
+    dropRemind(o);
     o.updatedAt = Date.now();
     save();
     await bot.editMessageText(orderText(o), {
