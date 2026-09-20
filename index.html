@@ -2651,7 +2651,7 @@ function openStatus(startStatus){
     const tick=async()=>{
       try{const r=await req(API+'/api/order/'+o.no,null,8000);const d=await r.json();
         /* сума могла змінитись: оператор зважив замовлення */
-        if(Number.isFinite(d.total)){o.total=d.total; o.totalOrig=d.totalOrig; o.adjust=d.adjust||[]}
+        if(Number.isFinite(d.total)){o.total=d.total; o.totalOrig=d.totalOrig; o.adjust=d.adjust||[]; if(d.slotAt) o.slotAt=d.slotAt}
         if(pollTick!==tick) return;
         if(d.status){draw(d.status); if(d.status==='done'||d.status==='canceled'){clearInterval(poll);clearLast(o.no)} showActiveBar()}
       }catch(e){}
