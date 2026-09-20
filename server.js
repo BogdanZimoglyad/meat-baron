@@ -978,7 +978,9 @@ app.get('/api/order/:no', (req, res) => {
   }
   const o = db.orders[req.params.no];
   if (!o) return res.status(404).json({ error: 'Замовлення не знайдено' });
-  res.json({ no: o.no, status: o.status, label: LABEL[o.status], total: o.total, mode: o.mode,
+  /* slotAt — щоб сайт знав, що замовлення на інший день, і не писав
+     «готується» напередодні. Часу видачі й так не секрет. */
+  res.json({ no: o.no, status: o.status, label: LABEL[o.status], total: o.total, mode: o.mode, slotAt: o.slotAt || 0,
              ...(adjustmentsOf(o).length ? { totalOrig: o.totalOrig, adjust: pubAdjust(o) } : {}) });   // зміни оператора
 });
 
