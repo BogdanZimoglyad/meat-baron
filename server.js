@@ -502,6 +502,17 @@ setInterval(remindSweep, 20 * 1000).unref();
    сам після закриття, а до того його можна спитати командою /day. */
 const kyivDate = (ts = Date.now()) =>
   new Date(ts).toLocaleDateString('sv-SE', { timeZone: 'Europe/Kyiv' });   // 2026-09-19
+/* Замовлення на інший день: слот припадає на пізнішу київську дату.
+   Такі не готують сьогодні — мангальщики фізично не можуть. */
+const futureDay = o => !!o.slotAt && kyivDate(o.slotAt) > kyivDate();
+/* «21.09» або «завтра» — коротко, для кнопок і картки */
+function dayShort(ms) {
+  const d = kyivDate(ms), t = kyivDate(), tm = kyivDate(Date.now() + 24 * 3600 * 1000);
+  if (d === t) return 'сьогодні';
+  if (d === tm) return 'завтра';
+  const [, m, dd] = d.split('-');
+  return `${dd}.${m}`;
+}
 
 function dayStats(shop, day) {
   const list = Object.values(db.orders)
@@ -581,6 +592,9 @@ function orderText(o) {
 
   const pay = { cash: '💵 Готівкою', card: '💳 Карткою на місці' }[o.pay] || o.pay;
   const when = o.when ? `\n🕒 <b>${esc(o.when)}</b>` : '';
+  /* Замовлення на інший день видно одразу: щоб ніхто не кинувся смажити
+     сьогодні те, що заберуть завтра. */
+  const later = futureDay(o) ? `\n⏳ <b>На ${dayShort(o.slotAt)}</b> — у роботу того дня` : '';
 
   /* Сайт показав клієнту іншу суму: або в нього застарілий кеш після
      зміни цін, або запит підроблено. Правильна — та, що нижче. */
@@ -608,7 +622,7 @@ function orderText(o) {
       `<i>Сума орієнтовна — до «Готується» можна додати ➕ чи відняти ➖</i>\n\n`;
 
   return `<b>Замовлення № ${o.no}</b> — ${LABEL[o.status]}\n` +
-    `${delivery}${when}\n${pay}\n\n${lines}${fry}\n\n` +
+    `${delivery}${when}${later}\n${pay}\n\n${lines}${fry}\n\n` +
     sum +
     `👤 ${esc(o.nm)}\n📞 ${esc(o.tel)}` +
     (o.note ? `\n\n💬 <b>Коментар:</b> ${esc(o.note)}` : '');
@@ -1053,6 +1067,7 @@ const pubOrder = o => ({
   fry: o.fry,
   fg: o.fg || 0,
   when: o.when || '',
+  slotAt: o.slotAt || 0,            // сайту — щоб не обіцяв «готується» напередодні
   total: o.total,
   ...(adjustmentsOf(o).length ? { totalOrig: o.totalOrig, adjust: pubAdjust(o) } : {}),
   lines: Array.isArray(o.lines) ? o.lines : []
@@ -1095,10 +1110,20 @@ app.get('/api/me/active', (req, res) => {
   const a = authOf(req);
   if (!a) return res.status(401).json({ error: 'Потрібно увійти' });
   const DAY = 24 * 3600 * 1000;
-  const o = ordersOf(a.telKey)
-    .filter(o => !FINAL.has(o.status))
-    .filter(o => Date.now() - (o.createdAt || 0) < DAY)[0];
-  res.json({ ok: true, order: o ? pubOrder(o) : null });
+  /* Замовлень у роботі буває кілька: шашлик на вечір і самовивіз на
+     іншій точці. Раніше віддавали лише найсвіжіше, і на сайті нове
+     замовлення закривало собою попереднє.
+     Замовлення «на завтра» живе довше доби, тож тримаємо його, поки не
+     мине година видачі: інакше воно зникало б саме тоді, коли по нього
+     треба їхати. */
+  const live = o => !FINAL.has(o.status) &&
+    (Date.now() - (o.createdAt || 0) < DAY ||
+     (o.slotAt && Date.now() < o.slotAt + 6 * 3600 * 1000));
+  const list = ordersOf(a.telKey).filter(live)
+    .sort((x, y) => (x.slotAt || x.createdAt || 0) - (y.slotAt || y.createdAt || 0))
+    .slice(0, 3);
+  /* order — для сторінок, які лежать у кеші з минулої версії */
+  res.json({ ok: true, order: list[0] ? pubOrder(list[0]) : null, orders: list.map(pubOrder) });
 });
 
 app.get('/api/me/orders', (req, res) => {
@@ -1141,6 +1166,14 @@ bot.on('callback_query', async cq => {
   /* Статус іде лише вперед, на один крок. Старе повідомлення чи швидкий
      подвійний дотик натискали кнопку, якої вже не мало бути, — і
      «Готове» відкочувалось назад у «Готується», у клієнта теж. */
+  /* Готувати наперед не можна: на завтра оператор лише «Приймає в
+     роботу», решта кнопок оживає того дня (власник, 20.09 — заказ на
+     завтра всю ніч висів у клієнта як «Готується»). */
+  if (st !== 'accepted' && futureDay(o)) {
+    return bot.answerCallbackQuery(cq.id, {
+      text: `Замовлення на ${dayShort(o.slotAt)}. Готувати й видавати — того дня.`,
+      show_alert: true });
+  }
   if (!nextBtns(o).some(([next]) => next === st)) {
     await bot.editMessageReplyMarkup(keyboard(o), { chat_id: o.chatId, message_id: o.msgId }).catch(() => {});
     return bot.answerCallbackQuery(cq.id, { text: `Уже «${LABEL[o.status]}» — кнопки оновлено` });

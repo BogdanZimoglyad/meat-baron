@@ -628,7 +628,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .wi.busy{opacity:.4;text-decoration:line-through;cursor:default}
 
 /* активне замовлення */
-.active-bar{margin-top:14px}
+.active-bar{margin-top:14px;display:flex;flex-direction:column;gap:8px}
 .active-bar[hidden]{display:none}
 .act-in{display:flex;align-items:center;gap:11px;width:100%;text-align:left;
   background:linear-gradient(rgba(196,52,42,.12),rgba(196,52,42,.12)),var(--coal);border:1px solid rgba(196,52,42,.4);border-radius:12px;
@@ -2577,9 +2577,12 @@ function openStatus(startStatus){
        «Прийнято» лишалось червоним і після того, як оператор натиснув
        «Прийняти в роботу», і здавалось, що замовлення ще не взяли. */
     const off=status==='canceled';              // скасоване — без кроків і без галочки
+    const laterDay=!!o.slotAt&&new Date(o.slotAt).toDateString()!==new Date().toDateString()&&o.slotAt>Date.now();
     const reached=status==='done'? STK.length-1 : STK.indexOf(status);   // -1 — точка ще не підтвердила
     const steps=[['Прийнято',status==='new'?'чекаємо підтвердження точки':'оператор підтвердив'],
-      ['Готується',o.fry?'мʼясо на мангалі':'збираємо замовлення'],
+      /* Замовлення на інший день сьогодні ніхто не готує — не обіцяємо
+         цього й на сайті: інакше воно всю ніч «готується». */
+      ['Готується', laterDay? 'почнемо у день видачі' : (o.fry?'мʼясо на мангалі':'збираємо замовлення')],
       /* третій елемент — значок у кружечку замість галочки */
       ['Готове',me?'напишемо в Telegram':'надішлемо SMS','🔥'],[o.mode==='pickup'?'Видано':'Передано курʼєру','','🤝']];
     sIn.innerHTML=`<div class="grab-zone"><div class="grab"></div></div>
@@ -2650,7 +2653,7 @@ function openStatus(startStatus){
         /* сума могла змінитись: оператор зважив замовлення */
         if(Number.isFinite(d.total)){o.total=d.total; o.totalOrig=d.totalOrig; o.adjust=d.adjust||[]}
         if(pollTick!==tick) return;
-        if(d.status){draw(d.status); if(d.status==='done'||d.status==='canceled'){clearInterval(poll);clearLast()} showActiveBar()}
+        if(d.status){draw(d.status); if(d.status==='done'||d.status==='canceled'){clearInterval(poll);clearLast(o.no)} showActiveBar()}
       }catch(e){}
     };
     pollTick=tick;
@@ -2702,34 +2705,60 @@ restoreCart();
 })();
 ['histTop'].forEach(id=>{const b=document.getElementById(id); if(b) b.onclick=()=>openHistory()});
 
-/* ---------- активне замовлення ---------- */
-const LAST_KEY='mb-last-order';
+/* ---------- активні замовлення ----------
+   Замовлень може бути кілька одночасно: людина взяла шашлик на вечір,
+   а через годину домовилась іще про самовивіз на іншій точці. Раніше
+   і памʼять браузера, і сервер віддавали лише одне — найсвіжіше, —
+   і нове замовлення просто закривало собою попереднє. */
+const LAST_KEY='mb-last-order';       // стара памʼять: одне замовлення
+const LIST_KEY='mb-orders';           // нова: список
+const KEEP_MS=36*3600*1000;           // скільки тримаємо замовлення в памʼяті
 /* Склад замовлення зберігаємо теж: сервер його не віддає за номером,
    бо тоді чужі замовлення читалися б простим перебором. Без цього
    екран статусу показував порожній список і суму нізвідки. */
-function saveLast(o){
-  try{localStorage.setItem(LAST_KEY,JSON.stringify({
-    no:o.no, shop:o.shop, total:o.total, when:o.when, mode:o.mode,
-    fry:!!o.fry, fg:o.fg||0,
-    lines:(o.lines||[]).map(l=>({name:l.name,grp:l.grp,unit:l.unit,g:l.g,sum:l.sum,fry:!!l.fry,...(l.v?{v:l.v}:{})})),
-    at:Date.now()
-  }))}catch(e){}
-}
-function clearLast(){try{localStorage.removeItem(LAST_KEY)}catch(e){}}
-function readLast(){
+const slim=o=>({
+  no:o.no, shop:o.shop, total:o.total, when:o.when, mode:o.mode, slotAt:o.slotAt||0,
+  fry:!!o.fry, fg:o.fg||0,
+  lines:(o.lines||[]).map(l=>({name:l.name,grp:l.grp,unit:l.unit,g:l.g,sum:l.sum,fry:!!l.fry,...(l.v?{v:l.v}:{})})),
+  at:Date.now()
+});
+function readLastList(){
+  let list=[];
+  try{ list=JSON.parse(localStorage.getItem(LIST_KEY)||'[]') }catch(e){ list=[] }
+  if(!Array.isArray(list)) list=[];
+  /* Старий ключ із одним замовленням — переносимо і прибираємо */
   try{
-    const v=JSON.parse(localStorage.getItem(LAST_KEY)||'null');
-    if(!v||!v.no||v.no==='—') return null;
-    if(Date.now()-v.at > 36*3600*1000){clearLast();return null}   // старше 36 год — забуваємо
-    return v;
-  }catch(e){return null}
+    const old=JSON.parse(localStorage.getItem(LAST_KEY)||'null');
+    if(old&&old.no&&!list.some(v=>String(v.no)===String(old.no))) list.push(old);
+    localStorage.removeItem(LAST_KEY);
+  }catch(e){}
+  const fresh=list.filter(v=>v&&v.no&&v.no!=='—'&&Date.now()-(v.at||0)<KEEP_MS);
+  if(fresh.length!==list.length) writeLastList(fresh);
+  return fresh;
 }
+function writeLastList(list){
+  try{
+    list.length? localStorage.setItem(LIST_KEY,JSON.stringify(list.slice(-3)))
+               : localStorage.removeItem(LIST_KEY);
+  }catch(e){}
+}
+function saveLast(o){
+  const list=readLastList().filter(v=>String(v.no)!==String(o.no));
+  list.push(slim(o));
+  writeLastList(list);
+}
+/* Без номера — прибрати все (вихід із акаунта), з номером — лише його */
+function clearLast(no){
+  writeLastList(no==null? [] : readLastList().filter(v=>String(v.no)!==String(no)));
+}
+function readLast(){ return readLastList().slice(-1)[0]||null }
 /* 'new' — точка ще не підтвердила. Раніше такий заказ показувався
    як «Прийнято», і клієнт думав, що його вже взяли в роботу. */
 const ST_LABEL={new:'Очікує підтвердження',accepted:'Прийнято',
                 cooking:'Готується',ready:'Готове',onway:'У дорозі',
                 done:'Видано',canceled:'Скасовано'};
-/* Замовлення, яке зараз готують, — від сервера. Памʼять браузера знає
+const ST_OVER=st=>st==='done'||st==='canceled';
+/* Замовлення, які зараз у роботі, — від сервера. Памʼять браузера знає
    лише про те, що оформили на цьому пристрої: людина замовляла з
    компʼютера, відкрила сайт у телефоні — і там порожньо. */
 async function serverActive(){
@@ -2738,53 +2767,77 @@ async function serverActive(){
     const r=await req(API+'/api/me/active',{headers:authHead()},8000);
     if(dropMeIf401(r)) return null;
     const d=await r.json();
-    return (d&&d.order)||null;
+    if(!d) return null;
+    /* orders — новий список; order лишився для старих сторінок у кеші */
+    return d.orders||(d.order?[d.order]:[]);
   }catch(e){ return null }
 }
-async function showActiveBar(){
-  const el=document.getElementById('active'); if(!el) return;
-  const srv=await serverActive();
-  const v=srv||readLast();
-  if(!v){el.hidden=true;return}
-  const shopName=srv? srv.shopName : v.shop;
-  let st=srv? srv.status : 'new';
-  if(!srv){
+/* Статуси для замовлень із памʼяті браузера: по одному запиту на кожне */
+async function localActive(){
+  const list=readLastList();
+  const out=[];
+  for(const v of list){
+    let st='new';
     try{
       const r=await req(API+'/api/order/'+v.no,null,8000);
       /* Сервер точно не знає такого замовлення — забуваємо. Інші помилки
          (немає звʼязку, забагато запитів) смужку не прибирають. */
-      if(r.status===404){clearLast();el.hidden=true;return}
+      if(r.status===404){ clearLast(v.no); continue }
       const d=await r.json();
       if(d.status) st=d.status;
     }catch(e){}
+    if(ST_OVER(st)){ clearLast(v.no); continue }
+    out.push({...v, status:st, shopName:v.shop});
   }
-  if(st==='done'||st==='canceled'){if(!srv)clearLast();el.hidden=true;return}
+  return out;
+}
+async function showActiveBar(){
+  const el=document.getElementById('active'); if(!el) return;
+  const srv=await serverActive();
+  const list=(srv&&srv.length? srv : (srv? [] : await localActive()))
+    .filter(o=>o&&!ST_OVER(o.status));
+  if(!list.length){el.hidden=true;el.innerHTML='';return}
+  /* Найближче за часом видачі — зверху: по нього їхати першим */
+  const known=readLastList();
+  const withWhen=list.map(o=>{
+    const mine=known.find(v=>String(v.no)===String(o.no))||{};
+    return {...o, when:o.when||mine.when||'', shopName:o.shopName||mine.shop||''};
+  });
   el.hidden=false;
-  const ready=st==='ready';
-  const sub=ready? 'Можна забирати · '+shopName : shopName+(v.when?' · '+v.when:'');
-  el.innerHTML=`<button class="act-in${ready?' ready':''}" id="actOpen">
-    <span class="act-dot"></span>
-    <span class="act-t"><b>Замовлення № ${v.no} · ${ST_LABEL[st]||'Очікує підтвердження'}</b>
-    <span>${esc(sub)}</span></span>
-    <span class="act-go">Стежити</span></button>`;
-  el.querySelector('#actOpen').onclick=()=>openOrder(v.no,srv);
+  el.innerHTML=withWhen.map(o=>{
+    const ready=o.status==='ready';
+    const sub=ready? 'Можна забирати · '+o.shopName
+                   : o.shopName+(o.when?' · '+o.when:'');
+    return `<button class="act-in${ready?' ready':''}" data-no="${o.no}">
+      <span class="act-dot"></span>
+      <span class="act-t"><b>Замовлення № ${o.no} · ${ST_LABEL[o.status]||'Очікує підтвердження'}</b>
+      <span>${esc(sub)}</span></span>
+      <span class="act-go">Стежити</span></button>`;
+  }).join('');
+  el.querySelectorAll('[data-no]').forEach(b=>b.onclick=()=>{
+    const no=b.dataset.no;
+    openOrder(no, (srv||[]).find(o=>String(o.no)===String(no))||null);
+  });
 }
 async function openOrder(no,known){
   /* Тому, хто увійшов, склад дає сервер — на будь-якому пристрої.
      Інакше беремо його з памʼяті браузера, а для чужого посилання
      памʼяті немає: покажемо лише статус і суму. */
   if(known&&String(known.no)===String(no)){
-    order={no:known.no, shop:known.shopName, when:known.when||'',
+    /* Склад замовлення сервер не віддає — беремо з памʼяті браузера
+       саме за номером: замовлень може бути кілька. */
+    const my=readLastList().find(x=>String(x.no)===String(no))||{};
+    order={no:known.no, shop:known.shopName||my.shop, when:known.when||my.when||'', slotAt:known.slotAt||my.slotAt||0,
            total:known.total, totalOrig:known.totalOrig, adjust:known.adjust||[], mode:known.mode||'pickup',
-           fry:!!known.fry, fg:known.fg||0, lines:known.lines||[]};
+           fry:!!known.fry||!!my.fry, fg:known.fg||my.fg||0, lines:(my.lines&&my.lines.length)?my.lines:(known.lines||[])};
     return openStatus(known.status);
   }
-  const v=readLast()||{};
-  const mine=String(v.no)===String(no);
+  const v=readLastList().find(x=>String(x.no)===String(no))||{};
+  const mine=!!v.no;
   let r=null,d=null;
   try{ r=await req(API+'/api/order/'+no,null,10000); d=await r.json() }catch(e){}
   if(r&&r.ok&&d&&d.no){
-    order={no:d.no, shop:(mine&&v.shop)||SHOPS[shop][0], when:(mine&&v.when)||'',
+    order={no:d.no, shop:(mine&&v.shop)||SHOPS[shop][0], when:(mine&&v.when)||'', slotAt:d.slotAt||(mine&&v.slotAt)||0,
            total:d.total, totalOrig:d.totalOrig, adjust:d.adjust||[], mode:d.mode||'pickup',
            fry:mine&&!!v.fry, fg:(mine&&v.fg)||0, lines:(mine&&v.lines)||[]};
     return openStatus(d.status);
@@ -2794,7 +2847,7 @@ async function openOrder(no,known){
      памʼяті браузера, і стежити за ним було вже ніяк. */
   const gone=!!r&&r.status===404;
   if(gone){
-    if(mine) clearLast();
+    if(mine) clearLast(no);
     const el=document.getElementById('active'); if(el) el.hidden=true;
   }
   open(`<div class="grab-zone"><div class="grab"></div></div>
