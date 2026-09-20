@@ -2856,6 +2856,10 @@ async function openOrder(no,known){
     const my=readLastList().find(x=>String(x.no)===String(no))||{};
     order={no:known.no, shop:known.shopName||my.shop, when:known.when||my.when||'', slotAt:known.slotAt||my.slotAt||0,
            total:known.total, totalOrig:known.totalOrig, adjust:known.adjust||[], mode:known.mode||'pickup',
+           /* Ключ підтвердження отримання лежить у памʼяті браузера. Без
+              нього кнопка «Отримав замовлення» билася об 403 у всіх, хто
+              не входив через Telegram: там перевірка йде саме по ньому. */
+           ckey:my.ckey||'',
            fry:!!known.fry||!!my.fry, fg:known.fg||my.fg||0, lines:(my.lines&&my.lines.length)?my.lines:(known.lines||[])};
     return openStatus(known.status);
   }
@@ -2866,6 +2870,7 @@ async function openOrder(no,known){
   if(r&&r.ok&&d&&d.no){
     order={no:d.no, shop:(mine&&v.shop)||SHOPS[shop][0], when:(mine&&v.when)||'', slotAt:d.slotAt||(mine&&v.slotAt)||0,
            total:d.total, totalOrig:d.totalOrig, adjust:d.adjust||[], mode:d.mode||'pickup',
+           ckey:(mine&&v.ckey)||'',
            fry:mine&&!!v.fry, fg:(mine&&v.fg)||0, lines:(mine&&v.lines)||[]};
     return openStatus(d.status);
   }
