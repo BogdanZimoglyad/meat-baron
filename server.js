@@ -411,6 +411,25 @@ bot.onText(/^\/mangal(?:@\w+)?/, msg => {
   if (i === undefined) return bot.sendMessage(msg.chat.id, 'Цей чат не прив’язаний до точки. /whoami');
   bot.sendMessage(msg.chat.id, busyText(Number(i)), { parse_mode: 'HTML', reply_markup: busyKb(Number(i)) });
 });
+/* Клієнт тисне «✅ Отримав замовлення» у своєму чаті з ботом */
+bot.on('callback_query', async cq => {
+  const [tag, noStr] = (cq.data || '').split(':');
+  if (tag !== 'r') return;
+  const ans = text => bot.answerCallbackQuery(cq.id, { text });
+  const o = db.orders[noStr];
+  if (!o) return ans('Замовлення не знайдено');
+  const u = db.users[o.telKey] || {};
+  /* Лише той, на чий номер оформлено замовлення */
+  if (!cq.from || !u.tgId || cq.from.id !== u.tgId) return ans('Це замовлення іншої людини');
+  const why = receivable(o);
+  if (why === 'ok') return ans('Дякуємо, вже відмічено');
+  if (why) return ans(why);
+  markReceived(o, 'клієнт');
+  await bot.editMessageText(`✅ Дякуємо! Замовлення № ${o.no} позначено як отримане.`,
+    { chat_id: cq.message.chat.id, message_id: cq.message.message_id }).catch(() => {});
+  ans('Дякуємо!');
+});
+
 bot.on('callback_query', async cq => {
   const [tag, iStr, val, arg] = (cq.data || '').split(':');
   if (tag !== 'g') return;
@@ -496,6 +515,28 @@ async function remindSweep() {
   }
 }
 setInterval(remindSweep, 20 * 1000).unref();
+
+/* ---------- автозакриття доставок ----------
+   Клієнт підтверджує отримання сам, але дехто просто не натисне кнопку.
+   Через дві години після передачі курʼєру замовлення закриваємо самі
+   (власник, 20.09): інакше воно назавжди лишиться «у дорозі» — і в
+   смужці на сайті, і в підсумку дня серед «ще в роботі». */
+const AUTO_CLOSE_MS = 2 * 3600 * 1000;
+function autoCloseSweep() {
+  const now = Date.now();
+  for (const no in db.orders) {
+    const o = db.orders[no];
+    if (o.status !== 'onway') continue;
+    const since = o.onwayAt || o.updatedAt || 0;
+    if (!since || now - since < AUTO_CLOSE_MS) continue;
+    markReceived(o, 'автоматично');
+    bot.sendMessage(o.chatId,
+      `⌛ Замовлення № ${o.no} закрито автоматично: минуло дві години після передачі курʼєру, ` +
+      `а клієнт не підтвердив отримання. Якщо щось не так — подзвоніть йому.`,
+      { reply_to_message_id: o.msgId }).catch(() => {});
+  }
+}
+setInterval(autoCloseSweep, 5 * 60 * 1000).unref();
 
 /* ---------- підсумок дня ----------
    Скільки замовлень, кілограмів і грошей зробила точка за день. Приходить
@@ -621,7 +662,11 @@ function orderText(o) {
     : `<b>Разом: ${money(o.total)}</b>${warn}\n` +
       `<i>Сума орієнтовна — до «Готується» можна додати ➕ чи відняти ➖</i>\n\n`;
 
-  return `<b>Замовлення № ${o.no}</b> — ${LABEL[o.status]}\n` +
+  /* Хто підтвердив отримання: клієнт кнопкою чи оператор руками */
+  const got = o.status !== 'done' ? ''
+    : o.gotBy === 'клієнт' ? ' · клієнт підтвердив'
+    : o.gotBy === 'автоматично' ? ' · закрито автоматично' : '';
+  return `<b>Замовлення № ${o.no}</b> — ${LABEL[o.status]}${got}\n` +
     `${delivery}${when}${later}\n${pay}\n\n${lines}${fry}\n\n` +
     sum +
     `👤 ${esc(o.nm)}\n📞 ${esc(o.tel)}` +
@@ -921,6 +966,10 @@ app.post('/api/order', async (req, res) => {
     note: String(b.note || '').slice(0, 400),
     when: String(b.when || '').slice(0, 80),
     slotAt,
+    /* Ключ підтвердження отримання. Номери замовлень ідуть підряд,
+       тож без нього «я отримав» міг би натиснути будь-хто, просто
+       перебравши номери. Ключ віддаємо лише тому, хто замовляв. */
+    ckey: crypto.randomBytes(6).toString('hex'),
     lines,
     total,
     createdAt: Date.now()
@@ -966,10 +1015,55 @@ app.post('/api/order', async (req, res) => {
   }
   save();
   countHit('order', ip);                       // зараховуємо лише те, що дійшло
-  res.json({ ok: true, no, status: o.status, total: o.total });
+  res.json({ ok: true, no, status: o.status, total: o.total, ckey: o.ckey });
 });
 
 /* ---------- статус для сайту ---------- */
+/* ---------- клієнт підтверджує отримання ----------
+   Оператор фізично бачить лише передачу курʼєру, а отримання — клієнт.
+   Тому «Доставлено» тисне саме він: кнопкою в сповіщенні бота або на
+   сторінці замовлення. За оператором лишається запасна кнопка — для
+   тих, хто не підтвердив. */
+function markReceived(o, by) {
+  o.status = 'done';
+  o.gotBy = by;                       // 'клієнт' або імʼя оператора
+  o.updatedAt = Date.now();
+  dropRemind(o);
+  save();
+  bot.editMessageText(orderText(o), {
+    chat_id: o.chatId, message_id: o.msgId, parse_mode: 'HTML', reply_markup: keyboard(o)
+  }).catch(() => {});
+  if (by === 'клієнт') {
+    bot.sendMessage(o.chatId, `✅ Клієнт підтвердив, що отримав замовлення № ${o.no}.`,
+      { reply_to_message_id: o.msgId }).catch(() => {});
+  }
+}
+/* Чи можна зараз підтверджувати отримання */
+function receivable(o) {
+  if (o.status === CANCELED) return 'Замовлення скасовано';
+  if (o.status === 'done') return 'ok';
+  if (o.mode === 'delivery') return o.status === 'onway' ? null : 'Курʼєр ще не виїхав';
+  /* Самовивіз віддають із рук у руки — там «Видано» тисне точка */
+  return 'Самовивіз відмічає точка на місці';
+}
+
+app.post('/api/order/:no/received', (req, res) => {
+  if (tooOften('status', ipOf(req), RATE.status)) {
+    return res.status(429).json({ error: 'Забагато запитів. Зачекайте кілька хвилин.' });
+  }
+  const o = db.orders[req.params.no];
+  if (!o) return res.status(404).json({ error: 'Замовлення не знайдено' });
+  const a = authOf(req);
+  const mine = (a && a.telKey === o.telKey) ||
+               (o.ckey && req.body && req.body.key === o.ckey);
+  if (!mine) return res.status(403).json({ error: 'Це замовлення оформили не з цього пристрою' });
+  const why = receivable(o);
+  if (why === 'ok') return res.json({ ok: true, status: 'done' });
+  if (why) return res.status(409).json({ error: why });
+  markReceived(o, 'клієнт');
+  res.json({ ok: true, status: 'done' });
+});
+
 app.get('/api/order/:no', (req, res) => {
   /* Номери йдуть підряд, тож без ліміту їх можна було б просто перебрати
      і побачити суми всіх замовлень магазину. */
@@ -1182,6 +1276,7 @@ bot.on('callback_query', async cq => {
   }
 
   o.status = st;
+  if (st === 'onway') o.onwayAt = Date.now();   // від цієї миті рахуємо дві години
   dropRemind(o);                  // взяли в роботу — нагадування зайве
   o.updatedAt = Date.now();
   save();
@@ -1508,8 +1603,13 @@ function notify(o, st) {
   const u = db.users[o.telKey] || {};
   if (!u.tgId) return sendSms(o, st);
 
+  /* Доставлене підтверджує сам клієнт: оператор бачить лише передачу
+     курʼєру (власник, 19.09). Кнопка — просто в сповіщенні. */
+  const kb = [[{ text: 'Стежити за замовленням', url: SITE + '?order=' + o.no }]];
+  if (st === 'onway') kb.unshift([{ text: '✅ Отримав замовлення', callback_data: `r:${o.no}` }]);
+
   bot.sendMessage(u.tgId, make(o), {
-    reply_markup: { inline_keyboard: [[{ text: 'Стежити за замовленням', url: SITE + '?order=' + o.no }]] }
+    reply_markup: { inline_keyboard: kb }
   }).catch(e => {
     /* Бота заблокували або чат видалено — не наша біда, але знати варто. */
     console.warn('Сповіщення № ' + o.no + ' не дійшло:', e.message);
