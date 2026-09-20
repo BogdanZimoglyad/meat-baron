@@ -516,6 +516,28 @@ async function remindSweep() {
 }
 setInterval(remindSweep, 20 * 1000).unref();
 
+/* ---------- автозакриття доставок ----------
+   Клієнт підтверджує отримання сам, але дехто просто не натисне кнопку.
+   Через дві години після передачі курʼєру замовлення закриваємо самі
+   (власник, 20.09): інакше воно назавжди лишиться «у дорозі» — і в
+   смужці на сайті, і в підсумку дня серед «ще в роботі». */
+const AUTO_CLOSE_MS = 2 * 3600 * 1000;
+function autoCloseSweep() {
+  const now = Date.now();
+  for (const no in db.orders) {
+    const o = db.orders[no];
+    if (o.status !== 'onway') continue;
+    const since = o.onwayAt || o.updatedAt || 0;
+    if (!since || now - since < AUTO_CLOSE_MS) continue;
+    markReceived(o, 'автоматично');
+    bot.sendMessage(o.chatId,
+      `⌛ Замовлення № ${o.no} закрито автоматично: минуло дві години після передачі курʼєру, ` +
+      `а клієнт не підтвердив отримання. Якщо щось не так — подзвоніть йому.`,
+      { reply_to_message_id: o.msgId }).catch(() => {});
+  }
+}
+setInterval(autoCloseSweep, 5 * 60 * 1000).unref();
+
 /* ---------- підсумок дня ----------
    Скільки замовлень, кілограмів і грошей зробила точка за день. Приходить
    сам після закриття, а до того його можна спитати командою /day. */
@@ -641,7 +663,9 @@ function orderText(o) {
       `<i>Сума орієнтовна — до «Готується» можна додати ➕ чи відняти ➖</i>\n\n`;
 
   /* Хто підтвердив отримання: клієнт кнопкою чи оператор руками */
-  const got = o.status === 'done' && o.gotBy === 'клієнт' ? ' · клієнт підтвердив' : '';
+  const got = o.status !== 'done' ? ''
+    : o.gotBy === 'клієнт' ? ' · клієнт підтвердив'
+    : o.gotBy === 'автоматично' ? ' · закрито автоматично' : '';
   return `<b>Замовлення № ${o.no}</b> — ${LABEL[o.status]}${got}\n` +
     `${delivery}${when}${later}\n${pay}\n\n${lines}${fry}\n\n` +
     sum +
@@ -1252,6 +1276,7 @@ bot.on('callback_query', async cq => {
   }
 
   o.status = st;
+  if (st === 'onway') o.onwayAt = Date.now();   // від цієї миті рахуємо дві години
   dropRemind(o);                  // взяли в роботу — нагадування зайве
   o.updatedAt = Date.now();
   save();
