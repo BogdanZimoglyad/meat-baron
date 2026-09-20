@@ -3139,8 +3139,11 @@ showActiveBar();
 (async function(){
   const q=new URLSearchParams(location.search).get('order');
   if(!q) return;
+  /* serverActive віддає список — раніше тут питали в нього .no, як у
+     одного замовлення, і склад із сервера не підхоплювався ніколи:
+     на чужому пристрої людина бачила лише статус і суму. */
   const srv=await serverActive();
-  openOrder(q, srv&&String(srv.no)===String(q)? srv : null);
+  openOrder(q, (srv||[]).find(o=>String(o.no)===String(q))||null);
 })();
 
 let installEvt=null;
