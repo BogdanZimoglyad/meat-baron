@@ -1280,6 +1280,17 @@ function searchItems(q){
 }
 
 let cat='raw', sub='', cart=[], shop=0, order=null, getMode='pickup', orderNote='';
+/* Обрана точка теж переживає перезавантаження, як і кошик. Раніше вона
+   жила лише в памʼяті сторінки: людина обирала Шевченка, поверталась у
+   застосунок за годину — а в шапці знову перша точка, і замовлення
+   їхало не туди. Тримаємо назву, а не номер: увімкнемо ще одну точку в
+   catalog.js — і номери поїдуть, а назва лишиться собою. */
+const SHOP_KEY='mb-shop';
+try{
+  const i=SHOPS.findIndex(s=>s[0]===localStorage.getItem(SHOP_KEY));
+  if(i>-1) shop=i;
+}catch(e){}
+const rememberShop=()=>{ try{ localStorage.setItem(SHOP_KEY,SHOPS[shop][0]) }catch(e){} };
 
 /* ---------- catalog ---------- */
 /* Категорія, в якій шукаємо. Порожня — шукаємо всюди. Раніше дотик до
@@ -1539,6 +1550,7 @@ function pickShopSheet(back){
   </div>`);
   sIn.onclick=e=>{const b=e.target.closest('[data-s]');if(!b)return;
     shop=+b.dataset.s;
+    rememberShop();
     document.getElementById('shopName').textContent=SHOPS[shop][0];
     const ish=document.getElementById('infoShop'); if(ish) ish.textContent=SHOPS[shop][0];
     const im=document.getElementById('infoMap'); if(im) im.href=routeLink(SHOPS[shop][0]);
