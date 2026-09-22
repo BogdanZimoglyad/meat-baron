@@ -1539,7 +1539,16 @@ function renderCatalog(){
   }).join('');
 }
 function pickCat(id){
-  const q=document.getElementById('q').value.trim();
+  const qEl=document.getElementById('q');
+  /* Добірки не звужують пошук — вони самі по собі добірка, і товарів
+     категорії «top» чи «fav» не існує. Дотик до них скидає пошук,
+     інакше виходило «У «» нічого не знайшли» з порожньою назвою. */
+  if(id==='top'||id==='fav'){
+    qEl.value=''; searchCat=''; cat=id; sub='';
+    renderCats(); renderCatalog();
+    return;
+  }
+  const q=qEl.value.trim();
   if(q){ searchCat=searchCat===id?'':id; if(searchCat&&cat!==searchCat){ cat=searchCat; sub='' } }   // повторний дотик — знову всюди
   else { cat=id; sub='' }
   renderCats(); renderCatalog();
@@ -2979,6 +2988,9 @@ function wake(){
   if(document.hidden) return;
   if(Date.now()-wokeAt<3000) return;     // focus і visibilitychange приходять разом
   wokeAt=Date.now();
+  /* Поки вкладка спала, точка могла зняти позицію — перечитуємо, що є
+     в наявності, інакше людина набирала б кошик із того, чого немає. */
+  loadStock(true);
   if(pollTick) pollTick(); else showActiveBar();
 }
 document.addEventListener('visibilitychange',wake);
