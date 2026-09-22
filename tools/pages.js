@@ -65,8 +65,10 @@ const page = it => {
 <meta name="twitter:card" content="summary_large_image">
 <link rel="canonical" href="${SITE}${to}">
 <link rel="icon" href="/icon-192.png">
-${/* Месенджер прочитає теги вище, а жива людина одразу поїде на сайт */''}
-<meta http-equiv="refresh" content="0;url=${to}">
+${/* Переставляємо лише скриптом. З <meta http-equiv="refresh"> Telegram
+     ішов за перенаправленням на головну, читав теги вже там — і показував
+     голе посилання замість картки (перевірено в бою 22.09). Скрипт
+     краулери не виконують, тож теги вище дістаються саме їм. */''}
 <script>location.replace('${to}')</script>
 <style>body{margin:0;background:#141010;color:#f0e9de;font:16px/1.5 system-ui,sans-serif;
 display:grid;place-items:center;min-height:100vh;text-align:center}a{color:#e04a3c}</style>
