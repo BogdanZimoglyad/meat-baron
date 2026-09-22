@@ -612,6 +612,62 @@ function autoCloseSweep() {
 }
 setInterval(autoCloseSweep, 5 * 60 * 1000).unref();
 
+/* ---------- забутий самовивіз ----------
+   Замовлення готове, мʼясо стигне, місце на мангалі зайняте — а по
+   нього ніхто не йде. Нагадуємо кожні 10 хвилин (власник, 22.09), але
+   не довше години: далі це вже не нагадування, а набридання.
+
+   Рахуємо не від «Готове», а від пізнішого з двох — готовності й часу
+   видачі. Інакше замовлення, зібране на годину раніше за обраний слот,
+   починало б смикати людину тоді, коли вона ще й не збиралась їхати. */
+const PICKUP_EVERY = 10 * 60 * 1000;
+const PICKUP_MAX = 6;                    // година нагадувань
+const PICKUP_TELL_SHOP = 3;              // після третього просимо точку подзвонити
+
+function pickupSweep() {
+  const now = Date.now();
+  /* Після закриття нагадувати нікому: точка вже не видасть. */
+  const k = kyivNow();
+  if (k.getHours() >= (k.getDay() === 0 ? 19 : 20) || k.getHours() < OPEN_HOUR) return;
+
+  for (const no in db.orders) {
+    const o = db.orders[no];
+    if (o.mode !== 'pickup' || o.status !== 'ready') continue;
+    const from = Math.max(o.readyAt || o.updatedAt || 0, o.slotAt || 0);
+    if (!from || now - from < PICKUP_EVERY) continue;
+    if (now - (o.pickAt || 0) < PICKUP_EVERY) continue;
+    if ((o.pickN || 0) >= PICKUP_MAX) continue;
+
+    o.pickAt = now;
+    o.pickN = (o.pickN || 0) + 1;
+    save();
+
+    const waited = Math.round((now - from) / 60000);
+    const u = db.users[o.telKey] || {};
+    if (u.tgId) {
+      bot.sendMessage(u.tgId,
+        o.pickN === 1
+          ? `🔔 Замовлення № ${o.no} чекає на вас: ${o.shopName}.`
+          : `🔔 Замовлення № ${o.no} готове вже ${waited} хв і чекає: ${o.shopName}.` +
+            (o.pickN >= PICKUP_MAX ? '\nЯкщо плани змінились — зателефонуйте, будь ласка, на точку.' : ''),
+        { reply_markup: { inline_keyboard: [[{ text: 'Відкрити замовлення', url: SITE + '?order=' + o.no }]] } })
+        .catch(e => console.warn('Нагадування про самовивіз № ' + o.no + ':', e.message));
+    }
+    /* Хто не входив через Telegram, нагадування не отримає: SMS за кожні
+       10 хвилин — це гроші й роздратування. Тоді просто раніше кажемо
+       точці, щоб зателефонувала. */
+    const tellShop = u.tgId ? o.pickN === PICKUP_TELL_SHOP : o.pickN === 1;
+    if (tellShop && o.chatId) {
+      bot.sendMessage(o.chatId,
+        `⏳ Замовлення № ${o.no} готове вже ${waited} хв, але його не забрали.\n` +
+        `Може, варто зателефонувати: ${o.tel}`,
+        { reply_to_message_id: o.msgId })
+        .catch(e => console.warn('Нагадування точці № ' + o.no + ':', e.message));
+    }
+  }
+}
+setInterval(pickupSweep, 60 * 1000).unref();
+
 /* ---------- підсумок дня ----------
    Скільки замовлень, кілограмів і грошей зробила точка за день. Приходить
    сам після закриття, а до того його можна спитати командою /day. */
@@ -1454,6 +1510,7 @@ bot.on('callback_query', async cq => {
 
   o.status = st;
   if (st === 'onway') o.onwayAt = Date.now();   // від цієї миті рахуємо дві години
+  if (st === 'ready') o.readyAt = Date.now();   // від цієї — нагадування про самовивіз
   dropRemind(o);                  // взяли в роботу — нагадування зайве
   o.updatedAt = Date.now();
   save();
