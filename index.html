@@ -1584,6 +1584,9 @@ function openPhoto(node){
       ${it.unit==='пак'?`<p class="lb-pk">Упаковка ${packLabel(it)} — ${money(it.price*packOf(it)/100)}</p>`:''}
       ${it.cat==='raw'?`<p class="lb-pk">Ціна за 100 г сирого мʼяса. Посмажимо на мангалі за ${FRY_RATE} ₴/кг.</p>`:''}
       ${descOf(it)?`<p class="lb-ds">${descOf(it)}</p>`:''}
+      ${/* Сердечко й «Поділитися» тут теж: людина відкриває фото саме
+           тоді, коли хоче показати товар комусь (власник, 22.09) */''}
+      ${itemActs(it)}
       <button class="cta lb-add" data-add="${it.id}">Додати в кошик</button>
     </div>`;
   const r=node.getBoundingClientRect();
@@ -1598,6 +1601,7 @@ function openPhoto(node){
     card.style.transform='none';
   });
   card.querySelector('.lb-x').onclick=closePhoto;
+  bindItemActs(it,card);
   card.querySelector('.lb-add').onclick=()=>{closePhoto();openItem(it.id)};
 }
 function closePhoto(){
@@ -1745,43 +1749,57 @@ if(SHOPS.length>1){
    ошийок» було нічим. Тепер ?item=<номер> відкриває картку — і кнопкою
    «Поділитися», і в рекламі. */
 const itemLink=it=>location.origin+location.pathname+'?item='+it.id;
+/* Класи, а не id: ці кнопки живуть і в шторці товару, і у вікні з фото,
+   і обидва блоки можуть бути в розмітці одночасно — однакові id
+   переплуталися б між собою. */
 const itemActs=it=>{
   const on=favs.has(it.id);
   return `<div class="it-acts">
-    <button class="it-a${on?' on':''}" id="itFav" role="switch" aria-checked="${on}">
+    <button class="it-a it-fav${on?' on':''}" role="switch" aria-checked="${on}">
       ${HEART.replace('<svg','<svg fill="'+(on?'currentColor':'none')+'"')}
-      <span id="itFavT">${on?'В обраному':'В обране'}</span></button>
-    <button class="it-a" id="itShare">
+      <span class="it-fav-t">${on?'В обраному':'В обране'}</span></button>
+    <button class="it-a it-share">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 16V4"/><path d="M8 7.5 12 3.5l4 4"/><path d="M5 13v6.5h14V13"/></svg>
-      <span id="itShareT">Поділитися</span></button>
+      <span class="it-share-t">Поділитися</span></button>
   </div>`;
 };
 /* На телефоні — системне меню «Поділитися», на компʼютері його немає:
    там просто кладемо посилання в буфер і кажемо про це. */
-async function shareItem(it){
-  const url=itemLink(it), t=document.getElementById('itShareT');
+async function shareItem(it,t){
+  const url=itemLink(it);
   const text=`${it.name} — ${money(it.price)} ${it.unit==='шт'?'за штуку':'за 100 г'}, «Мʼясний Барон»`;
   if(navigator.share){
     try{ await navigator.share({title:it.name,text,url}); return }
     catch(e){ if(e&&e.name==='AbortError') return }    // передумав — не морочимо голову
   }
+  const said=ok=>{ if(t){ t.textContent=ok?'Скопійовано ✓':'Не вдалося скопіювати';
+                          setTimeout(()=>{ if(t) t.textContent='Поділитися' },2000) } };
+  try{ await navigator.clipboard.writeText(url); return said(true) }catch(e){}
+  /* Буфер бува закритий — і в старих браузерах, і коли сторінка не в
+     фокусі. Тоді копіюємо давнім способом, через приховане поле. */
   try{
-    await navigator.clipboard.writeText(url);
-    if(t){ t.textContent='Скопійовано ✓'; setTimeout(()=>{ if(t) t.textContent='Поділитися' },2000) }
-  }catch(e){ if(t) t.textContent=url }
+    const ta=document.createElement('textarea');
+    ta.value=url; ta.setAttribute('readonly','');
+    ta.style.cssText='position:fixed;top:-100px;opacity:0';
+    document.body.appendChild(ta); ta.select();
+    const ok=document.execCommand('copy');
+    ta.remove();
+    said(ok);
+  }catch(e){ said(false) }
 }
-function bindItemActs(it){
-  const f=document.getElementById('itFav');
+function bindItemActs(it,root){
+  const box=(root||document).querySelector('.it-acts'); if(!box) return;
+  const f=box.querySelector('.it-fav');
   if(f) f.onclick=()=>{
     toggleFav(it.id);
     const on=favs.has(it.id);
     f.classList.toggle('on',on); f.setAttribute('aria-checked',on);
     const s=f.querySelector('svg'); if(s) s.setAttribute('fill',on?'currentColor':'none');
-    const t=document.getElementById('itFavT'); if(t) t.textContent=on?'В обраному':'В обране';
+    const t=box.querySelector('.it-fav-t'); if(t) t.textContent=on?'В обраному':'В обране';
   };
-  const sh=document.getElementById('itShare');
-  if(sh) sh.onclick=()=>shareItem(it);
+  const sh=box.querySelector('.it-share');
+  if(sh) sh.onclick=()=>shareItem(it,box.querySelector('.it-share-t'));
 }
 
 /* ---------- item sheet ---------- */
@@ -1822,7 +1840,7 @@ function openItem(id, editIdx){
        <p class="hint" style="text-align:center;margin-top:6px">Закінчилось на точці «${esc(SHOPS[shop][0])}». Завтра зранку знову буде.</p>`
     : `<button class="cta" id="addBtn">${editing?'Зберегти':'Додати в кошик'}</button>`}
   <p class="hint">${por?`Продається штуками, ціна — за вагу: одна приблизно ${por} г. Точну суму порахуємо, коли зважимо.`:`Мінімальна вага — ${it.minG} г, можна ввести свою.`} ${canFry(it)?'Смаження на мангалі позначається в кошику.':''}</p>`);
-  bindItemActs(it);
+  bindItemActs(it,sIn);
   const rg=sIn.querySelector('#rg'),wv=sIn.querySelector('#wv'),tv=sIn.querySelector('#tv');
   const paint=(syncField)=>{
     tv.textContent=money(it.price*g/100);
@@ -1876,7 +1894,7 @@ function openVariants(it,onDone){
   ${itemActs(it)}
   <div class="var-list">${vs.list.map(row).join('')}</div>
   <button class="cta" id="varDone">Готово</button>`);
-  bindItemActs(it);
+  bindItemActs(it,sIn);
   sIn.querySelector('.var-list').onclick=e=>{
     const b=e.target.closest('[data-dv]'); if(!b) return;
     const r=b.closest('[data-v]'), v=r.dataset.v;

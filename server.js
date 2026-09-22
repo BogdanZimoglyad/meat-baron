@@ -665,9 +665,12 @@ bot.on('callback_query', async cq => {
 
 function pickupSweep() {
   const now = Date.now();
-  /* Після закриття нагадувати нікому: точка вже не видасть. */
+  /* Замовкаємо за пів години до закриття (власник, 22.09): нагадування
+     о 19:55 нікому не поможе — людина вже не встигне доїхати. */
   const k = kyivNow();
-  if (k.getHours() >= (k.getDay() === 0 ? 19 : 20) || k.getHours() < OPEN_HOUR) return;
+  const closeMin = (k.getDay() === 0 ? 19 : 20) * 60;
+  const nowMin = k.getHours() * 60 + k.getMinutes();
+  if (nowMin >= closeMin - 30 || k.getHours() < OPEN_HOUR) return;
 
   for (const no in db.orders) {
     const o = db.orders[no];
