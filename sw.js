@@ -37,22 +37,37 @@ self.addEventListener('fetch', e => {
      шляхом, що й фото: з кеша одразу, оновлення — у фоні. */
   const isDict = url.pathname.endsWith('streets.js');
 
-  // Сторінка і код: спершу мережа, кеш лише коли інтернету немає
+  /* Сторінка і код: мережа, але чекаємо на неї лише мить.
+
+     Було просто «спершу мережа»: запуск з іконки на телефоні впирався
+     в мобільний інтернет, і перші пів секунди екран стояв — власник
+     назвав це мікрофризом (22.09). Тепер якщо копія вже є, чекаємо
+     мережу 1,2 секунди й віддаємо що встигло; кеш оновлюється в будь-
+     якому разі, тож наступний запуск буде зі свіжою версією. */
+  const NET_WAIT = 1200;
   if ((isPage || isCode) && !isDict) {
-    e.respondWith(
-      fetch(e.request)
-        .then(r => {
-          /* Лише вдалі відповіді. Інакше сторінка помилки (скажімо, 404,
-             поки GitHub перевстановлює домен) лягала в кеш і потім
-             показувалась замість сайту без інтернету. */
-          if (r.ok) {
-            const copy = r.clone();
-            caches.open(CACHE).then(c => c.put(e.request, copy));
-          }
-          return r;
-        })
-        .catch(() => caches.match(e.request).then(hit => hit || caches.match('./index.html')))
-    );
+    e.respondWith((async () => {
+      const net = fetch(e.request).then(r => {
+        /* Лише вдалі відповіді. Інакше сторінка помилки (скажімо, 404,
+           поки GitHub перевстановлює домен) лягала в кеш і потім
+           показувалась замість сайту без інтернету. */
+        if (r.ok) {
+          const copy = r.clone();
+          caches.open(CACHE).then(c => c.put(e.request, copy));
+        }
+        return r;
+      });
+      const hit = await caches.match(e.request);
+      if (!hit) {
+        try { return await net }
+        catch (err) { return (await caches.match('./index.html')) || Response.error() }
+      }
+      const soon = await Promise.race([
+        net.catch(() => null),
+        new Promise(res => setTimeout(() => res(null), NET_WAIT))
+      ]);
+      return soon || hit;
+    })());
     return;
   }
 
