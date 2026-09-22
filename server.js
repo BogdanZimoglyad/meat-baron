@@ -777,7 +777,7 @@ function tooOften(bucket, ip, max) {
 /* Сайт питає статус раз на 15 секунд, і той, хто увійшов, разом із ним
    питає своє активне замовлення — це вже 80 запитів за вікно. Плюс
    пробудження вкладки. Тому ліміт вищий, ніж був. */
-const RATE = { order: 5, status: 300, history: 20, auth: 10, poll: 120, grill: 120 };
+const RATE = { order: 5, status: 300, history: 20, auth: 10, poll: 120, grill: 120, popular: 60 };
 
 /* ---------- завантаження мангала ----------
    Мангал тягне близько 15 кг за годину (власник, 19.09), але частину
@@ -1087,6 +1087,40 @@ app.get('/api/order/:no', (req, res) => {
              ...(adjustmentsOf(o).length ? { totalOrig: o.totalOrig, adjust: pubAdjust(o) } : {}) });   // зміни оператора
 });
 
+/* ---------- що беруть найчастіше ----------
+   Вкладка «Популярне» на сайті. Рахуємо по справжніх замовленнях за
+   останній місяць, а не по вподобайках: накрутити не можна, і це
+   справді те, що люди купують. Одне замовлення — один голос за позицію,
+   скільки б грамів у ньому не було: інакше нагорі назавжди осіла б
+   курка гриль, яку беруть цілою тушкою. */
+const POPULAR_DAYS = 30;
+const POPULAR_MAX = 12;
+function popularIds() {
+  const edge = Date.now() - POPULAR_DAYS * 24 * 3600 * 1000;
+  const cnt = {};
+  for (const no in db.orders) {
+    const o = db.orders[no];
+    if ((o.createdAt || 0) < edge || o.status === CANCELED) continue;
+    const seen = new Set();
+    for (const l of (o.lines || [])) {
+      if (!l.id || seen.has(l.id)) continue;
+      seen.add(l.id);
+      cnt[l.id] = (cnt[l.id] || 0) + 1;
+    }
+  }
+  return Object.entries(cnt)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, POPULAR_MAX)
+    .map(([id, n]) => ({ id, n }));
+}
+
+app.get('/api/popular', (req, res) => {
+  if (tooOften('popular', ipOf(req), RATE.popular)) {
+    return res.status(429).json({ error: 'Забагато запитів. Зачекайте кілька хвилин.' });
+  }
+  res.json({ ok: true, days: POPULAR_DAYS, top: popularIds() });
+});
+
 /* ---------- вхід ---------- */
 /* Сайт просить ключ і веде людину до бота. Ключ випадковий і живе
    пʼять хвилин: за посиланням, яке хтось підгляне пізніше, увійти
@@ -1122,7 +1156,8 @@ app.get('/api/auth/poll/:sid', (req, res) => {
   if (s.chatId) chatLogin.delete(s.chatId);
   const u = db.users[s.telKey] || {};
   res.json({ ok: true, status: 'ok', token: s.token, tel: u.tel || ('+380' + s.telKey),
-    name: u.name || '', addr: u.addr || '', addrParts: u.addrParts || null, addrs: u.addrs || [] });
+    name: u.name || '', addr: u.addr || '', addrParts: u.addrParts || null, addrs: u.addrs || [],
+    favs: u.favs || [] });
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -1137,8 +1172,17 @@ app.get('/api/me', (req, res) => {
   if (!a) return res.status(401).json({ error: 'Потрібно увійти' });
   const u = a.user;
   res.json({ ok: true, tel: u.tel || ('+380' + a.telKey), name: u.name || '',
-    addr: u.addr || '', addrParts: u.addrParts || null, addrs: u.addrs || [] });
+    addr: u.addr || '', addrParts: u.addrParts || null, addrs: u.addrs || [],
+    favs: u.favs || [] });
 });
+
+/* Обране тримаємо в покупця, а не лише в браузері: людина обирає на
+   телефоні, а замовляє з компʼютера. Номери позицій беремо як є —
+   зняті з продажу сайт просто не покаже. */
+const FAVS_MAX = 200;
+const cleanFavs = raw => Array.isArray(raw)
+  ? [...new Set(raw.filter(x => typeof x === 'string' && x.length < 24))].slice(0, FAVS_MAX)
+  : null;
 
 app.put('/api/me', (req, res) => {
   const a = authOf(req);
@@ -1150,11 +1194,12 @@ app.put('/api/me', (req, res) => {
   u.tel = '+380' + a.telKey;
   if (b.name !== undefined) u.name = String(b.name).trim().slice(0, 60);
   if (b.addr !== undefined) u.addr = String(b.addr).trim().slice(0, 200);
+  if (b.favs !== undefined) { const f = cleanFavs(b.favs); if (f) u.favs = f; }
   u.lastSeen = Date.now();
   db.users[a.telKey] = u;
   save();
   res.json({ ok: true, tel: u.tel, name: u.name || '', addr: u.addr || '',
-    addrParts: u.addrParts || null, addrs: u.addrs || [] });
+    addrParts: u.addrParts || null, addrs: u.addrs || [], favs: u.favs || [] });
 });
 
 /* ---------- історія замовлень ---------- */
