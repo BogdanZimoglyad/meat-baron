@@ -201,6 +201,13 @@ a{color:inherit}
 .add{height:31px;padding:0 14px;border-radius:8px;background:var(--ember);color:#fff;
   display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;transition:.15s}
 .add:active{transform:scale(.96)}
+/* позиція, яку точка зняла на сьогодні: лишаємо в каталозі, але тьмяну
+   й без кнопки — щоб постійний покупець бачив, що товар є в меню */
+.card.off{opacity:.62}
+.card.off .ph img{filter:grayscale(.7)}
+.off-t{height:31px;display:inline-flex;align-items:center;font-size:12.5px;color:var(--smoke)}
+.ln.off .nm{color:var(--smoke)}
+.ln-off{grid-column:1/-1;margin-top:6px;font-size:12px;color:var(--ember-hot)}
 .empty{color:var(--smoke);padding:30px 0;text-align:center;font-size:14px}
 .search-head{margin:14px 2px 0;font-size:13px;color:var(--smoke)}
 
@@ -1327,6 +1334,26 @@ try{
 }catch(e){}
 const rememberShop=()=>{ try{ localStorage.setItem(SHOP_KEY,SHOPS[shop][0]) }catch(e){} };
 
+/* ---------- «сьогодні немає» ----------
+   Точка відмічає в боті, чого в неї закінчилось, — сайт гасить таку
+   позицію: картка лишається, але сіра й без кнопки. Список у кожної
+   точки свій, тож перемикання точки перемальовує каталог. Сервер не
+   відповів — нічого не гасимо: краще зайве замовлення, яке оператор
+   уточнить, ніж каталог, що ховає товар через обрив звʼязку. */
+let stock={shop:-1,off:new Set(),at:0};
+async function loadStock(force){
+  if(!force&&stock.shop===shop&&Date.now()-stock.at<60000) return;
+  try{
+    const r=await req(API+'/api/stock?shop='+shop,null,6000);
+    const d=await r.json();
+    if(d&&d.ok){
+      stock={shop,off:new Set(d.off||[]),at:Date.now()};
+      renderCatalog();
+    }
+  }catch(e){}
+}
+const isOff=id=>stock.shop===shop&&stock.off.has(id);
+
 /* ---------- обране й популярне ----------
    Обране лежить у браузері, а в того, хто увійшов, — ще й на сервері:
    люди дивляться з телефона, а замовляють з компʼютера. Публічного
@@ -1422,7 +1449,8 @@ const favBtn=i=>{
 /* Одна картка товару — і для категорії, і для добірки */
 function cardHtml(i){
   const c=CATS.find(x=>x.id===i.cat)||{};
-  return `<article class="card">
+  const off=isOff(i.id);
+  return `<article class="card${off?' off':''}">
     <button class="ph" ${photoOf(i)?`data-ph="${photoOf(i)}" data-id="${i.id}" aria-label="Показати ${i.name}"`:'disabled'}>${photoOf(i)?`<img src="${photoOf(i)}" alt="${i.name}" loading="lazy">`:ph(i)}</button>
     <div class="c-b">
       <span class="nm">${i.name}</span>
@@ -1430,7 +1458,8 @@ function cardHtml(i){
       ${descOf(i)?`<span class="ds">${descOf(i)}</span>`:''}
       <span class="un">${unitNote(i)}${c.fry?' · мариноване':''}</span>
       <div class="c-f">
-        <button class="add" data-i="${i.id}" aria-label="Додати ${i.name}">+ Додати</button>
+        ${off?'<span class="off-t">Сьогодні немає</span>'
+             :`<button class="add" data-i="${i.id}" aria-label="Додати ${i.name}">+ Додати</button>`}
         ${favBtn(i)}
       </div>
     </div>
@@ -1696,6 +1725,7 @@ function pickShopSheet(back){
   sIn.onclick=e=>{const b=e.target.closest('[data-s]');if(!b)return;
     shop=+b.dataset.s;
     rememberShop();
+    loadStock(true);            // інша точка — свій список того, чого немає
     document.getElementById('shopName').textContent=SHOPS[shop][0];
     const ish=document.getElementById('infoShop'); if(ish) ish.textContent=SHOPS[shop][0];
     const im=document.getElementById('infoMap'); if(im) im.href=routeLink(SHOPS[shop][0]);
@@ -1787,7 +1817,10 @@ function openItem(id, editIdx){
     <span class="wbox"><input id="wv" type="number" inputmode="numeric" min="${lo}" max="${hiQ}" step="${por?1:10}" value="${g/k}" aria-label="${por?'Кількість, шт':'Вага у грамах'}"><i>${por?'шт':'г'}</i></span>
   </div>
   <div class="tot"><span style="color:var(--smoke);font-size:13px">Разом</span><b id="tv">${money(it.price*g/100)}</b></div>
-  <button class="cta" id="addBtn">${editing?'Зберегти':'Додати в кошик'}</button>
+  ${isOff(it.id)&&!editing
+    ? `<button class="cta" id="addBtn" disabled>Сьогодні немає</button>
+       <p class="hint" style="text-align:center;margin-top:6px">Закінчилось на точці «${esc(SHOPS[shop][0])}». Завтра зранку знову буде.</p>`
+    : `<button class="cta" id="addBtn">${editing?'Зберегти':'Додати в кошик'}</button>`}
   <p class="hint">${por?`Продається штуками, ціна — за вагу: одна приблизно ${por} г. Точну суму порахуємо, коли зважимо.`:`Мінімальна вага — ${it.minG} г, можна ввести свою.`} ${canFry(it)?'Смаження на мангалі позначається в кошику.':''}</p>`);
   bindItemActs(it);
   const rg=sIn.querySelector('#rg'),wv=sIn.querySelector('#wv'),tv=sIn.querySelector('#tv');
@@ -1871,7 +1904,7 @@ const MAIN_CATS=['raw','saus','ready'];
 /* Пропонуємо лише те, чого в кошику ще немає */
 const upsellPool=()=>{
   const inCart=new Set(cart.map(l=>l.id));
-  return ITEMS.filter(i=>UPSELL_CATS.includes(i.cat)&&!inCart.has(i.id));
+  return ITEMS.filter(i=>UPSELL_CATS.includes(i.cat)&&!inCart.has(i.id)&&!isOff(i.id));
 };
 const hasUpsell=()=>cart.some(l=>UPSELL_CATS.includes(l.cat));
 const hasMain=()=>cart.some(l=>MAIN_CATS.includes(l.cat));
@@ -2177,7 +2210,7 @@ const sliderFill=(v,lo,hi)=>{const p=hi>lo?Math.round((v-lo)/(hi-lo)*100):0;
 const paintSlider=rg=>rg.setAttribute('style',sliderFill(+rg.value,+rg.min,+rg.max));
 function paintLines(){
   const el=sIn.querySelector('#lines');if(!el)return;
-  el.innerHTML=cart.map((l,i)=>`<div class="ln">
+  el.innerHTML=cart.map((l,i)=>`<div class="ln${isOff(l.id)?' off':''}">
     <div class="ln-th">${photoOf(l)?`<img src="${photoOf(l)}" alt="">`:ph(l)}</div>
     <div class="ln-b"><div class="nm">${esc(lineTitle(l))}</div>
       ${isCount(l)?`<div class="un">${lineQty(l)}</div>`
@@ -2190,7 +2223,8 @@ function paintLines(){
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
     ${isCount(l)||portionOf(l)?'':sliderOf(l,i)}
-    ${canFry(l)?`<button class="fry-cb${l.fry?' on':''}" data-f="${i}" role="checkbox" aria-checked="${!!l.fry}"><span class="cb" aria-hidden="true">${l.fry?'✓':''}</span><span class="fry-t">${fryLabel(l)} · <b>+${money(fryCostOf(l))}</b></span></button>`:''}</div>`).join('');
+    ${canFry(l)?`<button class="fry-cb${l.fry?' on':''}" data-f="${i}" role="checkbox" aria-checked="${!!l.fry}"><span class="cb" aria-hidden="true">${l.fry?'✓':''}</span><span class="fry-t">${fryLabel(l)} · <b>+${money(fryCostOf(l))}</b></span></button>`:''}
+    ${isOff(l.id)?`<p class="ln-off">Сьогодні немає на точці «${esc(SHOPS[shop][0])}» — приберіть або оберіть іншу точку</p>`:''}</div>`).join('');
   /* Повзунок ваги прямо в кошику: «+» додає лише по 100 г, і набрати 3 кг
      було довго. Поки тягнуть — міняємо лише цифри рядка й суму, без
      перемальовування шторки (інакше повзунок вислизав би з-під пальця);
@@ -2757,6 +2791,12 @@ function openCheckout(){
       /* 409 — поки заповнювали форму, цю годину на мангалі розібрали.
          Оновлюємо завантаження й перемальовуємо: час уже інший. */
       if(r.status===409){
+        /* Позицію зняли, поки заповнювали форму: оновлюємо наявність,
+           щоб у кошику вона одразу підсвітилась, і кажемо, чого немає. */
+        if(Array.isArray(d.gone)&&d.gone.length){
+          await loadStock(true); draw();
+          return fail(d.error||'Щось із кошика вже закінчилось. Перевірте кошик.');
+        }
         await loadGrill(true); validateWhen(mode); draw();
         return fail(d.error||'На цю годину мангал уже завантажений. Оберіть інший час.');
       }
@@ -3356,7 +3396,7 @@ function repeatItems(lines){
        зовсім інший товар. */
     const name=RENAMED[l.grp+'/'+l.name]||l.name;
     const it=ITEMS.find(i=>i.name===name&&i.grp===l.grp)||ITEMS.find(i=>i.id===l.id);
-    if(!it){skipped.push(l.name);return}
+    if(!it||isOff(it.id)){skipped.push(l.name);return}   // знятого сьогодні не повторюємо
     const g=isCount(it)? Math.max(1,l.g) : Math.max(it.minG,l.g);
     /* Той самий соус, що й минулого разу — якщо він досі є в списку */
     const vs=variantsOf(it);
@@ -3413,6 +3453,7 @@ if('serviceWorker' in navigator){
 uiReady=true;
 showActiveBar();
 loadPopular();
+loadStock();
 /* Посилання на товар: ?item=<номер> відкриває його картку. Замовлення
    важливіше — якщо в адресі є і воно, картку не чіпаємо. */
 (function(){

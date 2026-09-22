@@ -67,7 +67,7 @@ app.use(express.static(__dirname, { dotfiles: 'ignore' }));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const DB = path.join(DATA_DIR, 'data.json');
 try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
-let db = { orders: {}, shops: {}, counter: 1000, users: {}, tokens: {}, busy: {}, extra: {}, daySent: {} };
+let db = { orders: {}, shops: {}, counter: 1000, users: {}, tokens: {}, busy: {}, extra: {}, daySent: {}, stop: {} };
 try {
   db = JSON.parse(fs.readFileSync(DB, 'utf8'));
 } catch (e) {
@@ -475,6 +475,71 @@ bot.on('callback_query', async cq => {
   await bot.editMessageText(busyText(i), { chat_id: chatId, message_id: cq.message.message_id,
     parse_mode: 'HTML', reply_markup: busyKb(i) }).catch(() => {});
   bot.answerCallbackQuery(cq.id, { text: note });
+});
+
+/* ---------- /stop: чого сьогодні немає ---------- */
+const shopOfChat = chatId => {
+  const i = Object.keys(db.shops).find(k => db.shops[k] === chatId);
+  return i === undefined ? null : Number(i);
+};
+function stopText(shop) {
+  const off = stopOf(shop), ids = Object.keys(off);
+  const names = ids.map(id => (byId.get(id) || {}).name).filter(Boolean);
+  return `<b>Чого сьогодні немає · ${esc(SHOPS[shop])}</b>\n` +
+    (names.length ? names.map(n => `🚫 ${esc(n)}`).join('\n') + `\n\nПовертається саме о ${OPEN_HOUR}:00.`
+                  : 'Усе в наявності.') +
+    `\n\nЩоб прибрати позицію з продажу — напишіть <code>/stop назва</code>\nНаприклад: <code>/stop ошийок</code>`;
+}
+const stopKb = shop => {
+  const rows = Object.keys(stopOf(shop))
+    .map(id => byId.get(id)).filter(Boolean)
+    .map(it => ([{ text: `✅ Є: ${it.name}`, callback_data: `sy:${shop}:${it.id}` }]));
+  return { inline_keyboard: rows };
+};
+
+bot.onText(/^\/stop(?:@\w+)?(?:\s+(.+))?$/, (msg, m) => {
+  const shop = shopOfChat(msg.chat.id);
+  if (shop === null) return bot.sendMessage(msg.chat.id, 'Цей чат не привʼязаний до точки. /whoami');
+  const q = (m[1] || '').trim();
+  if (!q) {
+    return bot.sendMessage(msg.chat.id, stopText(shop),
+      { parse_mode: 'HTML', reply_markup: stopKb(shop) });
+  }
+  const found = findItems(q);
+  if (!found.length) {
+    return bot.sendMessage(msg.chat.id, `Не знайшли «${esc(q)}» у прайсі. Спробуйте коротше: <code>/stop ошийок</code>`,
+      { parse_mode: 'HTML' });
+  }
+  const off = stopOf(shop);
+  bot.sendMessage(msg.chat.id, `Що саме закінчилось? Позиція зникне з сайту до ${OPEN_HOUR}:00.`, {
+    reply_markup: {
+      inline_keyboard: found.map(it => ([off[it.id]
+        ? { text: `✅ Є: ${it.grp} · ${it.name}`, callback_data: `sy:${shop}:${it.id}` }
+        : { text: `🚫 Немає: ${it.grp} · ${it.name}`, callback_data: `st:${shop}:${it.id}` }]))
+    }
+  });
+});
+
+bot.on('callback_query', async cq => {
+  const [tag, shopStr, id] = (cq.data || '').split(':');
+  if (tag !== 'st' && tag !== 'sy') return;
+  const shop = Number(shopStr), chatId = cq.message && cq.message.chat.id;
+  /* Тільки зі свого чату: чужа точка не має знімати товар сусідам */
+  if (db.shops[shop] !== chatId) return bot.answerCallbackQuery(cq.id, { text: 'Це інша точка' });
+  const it = byId.get(id);
+  if (!it) return bot.answerCallbackQuery(cq.id, { text: 'Немає такої позиції' });
+
+  db.stop = db.stop || {};
+  const list = db.stop[shop] || (db.stop[shop] = {});
+  if (tag === 'st') list[id] = nextOpenMs(); else delete list[id];
+  save();
+
+  await bot.editMessageText(stopText(shop),
+    { chat_id: chatId, message_id: cq.message.message_id, parse_mode: 'HTML', reply_markup: stopKb(shop) })
+    .catch(() => {});
+  bot.answerCallbackQuery(cq.id, {
+    text: tag === 'st' ? `${it.name}: прибрали з сайту до ${OPEN_HOUR}:00` : `${it.name}: знову в продажу`
+  });
 });
 
 /* ---------- нагадування про нове замовлення ----------
@@ -944,6 +1009,17 @@ app.post('/api/order', async (req, res) => {
     });
   }
 
+  /* Позицію могли зняти, поки людина набирала кошик. Кажемо, чого саме
+     немає: «замовлення не прийнято» без пояснення — найгірше, що можна
+     показати людині з повним кошиком. */
+  const gone = lines.filter(l => isStopped(shopIndex, l.id)).map(l => l.name);
+  if (gone.length) {
+    return res.status(409).json({
+      error: `Сьогодні вже немає: ${gone.join(', ')}. Приберіть з кошика — решту приймемо.`,
+      gone: lines.filter(l => isStopped(shopIndex, l.id)).map(l => l.id)
+    });
+  }
+
   /* Година, на яку записується мангал. Сайт рахує те саме, але
      перевіряємо тут: поки людина заповнювала форму, годину могли
      розібрати, та й запит до API можна надіслати повз сайт. */
@@ -1087,6 +1163,50 @@ app.get('/api/order/:no', (req, res) => {
              ...(adjustmentsOf(o).length ? { totalOrig: o.totalOrig, adjust: pubAdjust(o) } : {}) });   // зміни оператора
 });
 
+/* ---------- «сьогодні немає» ----------
+   Мʼясо закінчується серед дня, і людина дізнавалась про це вже по
+   телефону від оператора — розмова з тих, що псують день обом
+   (власник, 22.09). Тепер точка тисне в боті «🚫 Немає», і позиція
+   гасне на сайті: картка лишається сірою, без кнопки.
+
+   Список у кожної точки свій: у Шевченка закінчився ошийок, а на
+   Свободі він є. Відмітка діє до ранку — о 8:00 усе повертається саме,
+   бо інакше хтось забуде натиснути «є» і точка торгуватиме половиною
+   меню. */
+const OPEN_HOUR = 8;
+/* Наступне відкриття в абсолютному часі: сервер живе за UTC, точка — за
+   київським, тому рахуємо різницю, а не годину напряму. */
+function nextOpenMs() {
+  const k = kyivNow(), d = new Date(k);
+  if (k.getHours() >= OPEN_HOUR) d.setDate(d.getDate() + 1);
+  d.setHours(OPEN_HOUR, 0, 0, 0);
+  return Date.now() + (d - k);
+}
+/* Те, чого немає саме зараз: протухлі відмітки не рахуємо й не чистимо
+   окремо — вони відпадають самі. */
+function stopOf(shop) {
+  const all = (db.stop || {})[shop] || {}, now = Date.now(), out = {};
+  for (const id in all) if (all[id] > now) out[id] = all[id];
+  return out;
+}
+const isStopped = (shop, id) => !!stopOf(shop)[id];
+/* Пошук позиції за назвою для команди /stop: «ошийок», «стейк» */
+const foldName = s => String(s || '').toLowerCase().replace(/[ʼ'’`]/g, '');
+const findItems = q => {
+  const f = foldName(q);
+  if (f.length < 2) return [];
+  return CATALOG.ITEMS.filter(i => foldName(i.grp + ' ' + i.name).includes(f)).slice(0, 8);
+};
+
+app.get('/api/stock', (req, res) => {
+  if (tooOften('grill', ipOf(req), RATE.grill)) {
+    return res.status(429).json({ error: 'Забагато запитів. Зачекайте кілька хвилин.' });
+  }
+  let shop = Number(req.query.shop);
+  if (!Number.isInteger(shop) || shop < 0 || shop >= SHOPS.length) shop = 0;
+  res.json({ ok: true, off: Object.keys(stopOf(shop)) });
+});
+
 /* ---------- що беруть найчастіше ----------
    Вкладка «Популярне» на сайті. Рахуємо по справжніх замовленнях за
    останній місяць, а не по вподобайках: накрутити не можна, і це
@@ -1103,7 +1223,10 @@ function popularIds() {
     if ((o.createdAt || 0) < edge || o.status === CANCELED) continue;
     const seen = new Set();
     for (const l of (o.lines || [])) {
-      if (!l.id || seen.has(l.id)) continue;
+      /* Замовлення з давніх часів пам'ятають номери старого зразка
+         ('p0'), і таких позицій у прайсі вже немає — сайт їх однаково
+         не покаже, а місце в топі вони займали. */
+      if (!l.id || seen.has(l.id) || !byId.has(l.id)) continue;
       seen.add(l.id);
       cnt[l.id] = (cnt[l.id] || 0) + 1;
     }
