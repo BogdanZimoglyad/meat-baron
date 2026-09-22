@@ -314,9 +314,18 @@ bot.on('contact', msg => {
   chatLogin.delete(msg.chat.id);
 
   console.log('Вхід покупця:', u.tel);
+  /* Двома повідомленнями, бо Telegram не дає прибрати клавіатуру й
+     одразу дати кнопку: remove_keyboard і inline_keyboard в одному
+     reply_markup не живуть.
+     Кнопка потрібна, бо вхід забирає екран собі: сайт відкривали з
+     Telegram, він переключився на бота — і дороги назад людина не
+     знаходила (власник, 22.09). */
   bot.sendMessage(msg.chat.id,
-    `Готово, ${u.name || 'вітаємо'}. Поверніться на сайт — ви вже увійшли.`,
-    { reply_markup: { remove_keyboard: true } });
+    `Готово, ${u.name || 'вітаємо'}. Номер підтверджено.`,
+    { reply_markup: { remove_keyboard: true } })
+    .then(() => bot.sendMessage(msg.chat.id, 'Ви вже увійшли — поверніться на сайт і замовляйте.',
+      { reply_markup: { inline_keyboard: [[{ text: '↩️ Повернутися на сайт', url: SITE }]] } }))
+    .catch(e => console.warn('Вітання після входу:', e.message));
 });
 
 bot.onText(/\/points/, msg => {
