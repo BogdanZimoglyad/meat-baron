@@ -767,6 +767,95 @@ bot.onText(/^\/day(?:@\w+)?/, msg => {
   bot.sendMessage(msg.chat.id, dayText(Number(i), kyivDate()), { parse_mode: 'HTML' });
 });
 
+/* ---------- підсумки за тиждень і місяць ----------
+   `/day` бачить лише сьогодні й лише свою точку. Власнику потрібне
+   інше: як ідуть справи взагалі й куди рухається кожна точка — щоб
+   рішення (ціни, години, закупівля) стояли на цифрах (власник, 22.09).
+
+   У чаті точки команда показує свою точку, в особистих із власником —
+   обидві й разом. Хто власник, бот знає зі змінної OWNER_ID: цифри
+   виторгу не для випадкового чату. */
+const OWNER_ID = Number(process.env.OWNER_ID || 0);
+const isOwner = msg => !!OWNER_ID && msg.from && msg.from.id === OWNER_ID;
+const kyivHour = ms => Number(new Date(ms)
+  .toLocaleString('en-US', { timeZone: 'Europe/Kyiv', hour: 'numeric', hour12: false }));
+
+function statsRange(shopList, from, to) {
+  const list = Object.values(db.orders).filter(o =>
+    shopList.includes(o.shop) && (o.createdAt || 0) >= from && (o.createdAt || 0) < to);
+  const live = list.filter(o => o.status !== CANCELED);
+  const sum = live.reduce((s, o) => s + (o.total || 0), 0);
+  const items = {}, hours = {};
+  for (const o of live) {
+    const seen = new Set();
+    for (const l of (o.lines || [])) {
+      if (!l.id || seen.has(l.id) || !byId.has(l.id)) continue;
+      seen.add(l.id);
+      items[l.id] = (items[l.id] || 0) + 1;
+    }
+    /* Рахуємо за часом видачі, а не оформлення: точці важливо, коли до
+       неї приходять, а не коли натиснули кнопку на сайті. */
+    const t = o.slotAt || o.createdAt;
+    if (t) { const h = kyivHour(t); hours[h] = (hours[h] || 0) + 1; }
+  }
+  return {
+    n: live.length,
+    canceled: list.length - live.length,
+    sum, avg: live.length ? sum / live.length : 0,
+    fg: live.reduce((s, o) => s + (o.fry ? (o.fg || 0) : 0), 0),
+    pickup: live.filter(o => o.mode === 'pickup').length,
+    delivery: live.filter(o => o.mode === 'delivery').length,
+    ship: live.reduce((s, o) => s + (o.ship || 0), 0),
+    items, hours
+  };
+}
+/* «▲ +12% до попередніх» — без порівняння цифра нічого не каже */
+const cmp = (a, b) => {
+  if (!b) return '';
+  const d = Math.round((a - b) / b * 100);
+  return d ? ` <i>(${d > 0 ? '▲ +' : '▼ '}${d}%)</i>` : ' <i>(без змін)</i>';
+};
+function statsText(shopList, days, title) {
+  const now = Date.now(), span = days * 24 * 3600 * 1000;
+  const cur = statsRange(shopList, now - span, now);
+  const prev = statsRange(shopList, now - 2 * span, now - span);
+  const head = title || (shopList.length === 1 ? SHOPS[shopList[0]] : 'Разом по мережі');
+  if (!cur.n) return `📈 <b>${esc(head)}</b> · ${days} днів\nЗамовлень із сайту не було.`;
+  const top = Object.entries(cur.items).sort((a, b) => b[1] - a[1]).slice(0, 5)
+    .map(([id, n], k) => `${k + 1}. ${esc((byId.get(id) || {}).name || id)} — ${n}`).join('\n');
+  const hours = Object.entries(cur.hours).sort((a, b) => b[1] - a[1]).slice(0, 3)
+    .map(([h, n]) => `${String(h).padStart(2, '0')}:00 — ${n}`).join(' · ');
+  return `📈 <b>${esc(head)}</b> · останні ${days} днів\n` +
+    `Замовлень: <b>${cur.n}</b>${cmp(cur.n, prev.n)}\n` +
+    `Сума: <b>${money(cur.sum)}</b>${cmp(cur.sum, prev.sum)}\n` +
+    `Середній чек: <b>${money(Math.round(cur.avg))}</b>${cmp(cur.avg, prev.avg)}\n` +   // копійки тут ні до чого
+    `Самовивіз ${cur.pickup} · доставка ${cur.delivery}` +
+    (cur.ship ? ` (доставка ${money(cur.ship)})` : '') + `\n` +
+    `На мангал: <b>${wLabel(Math.round(cur.fg))}</b>${cmp(cur.fg, prev.fg)}\n` +
+    (cur.canceled ? `Скасовано: ${cur.canceled}\n` : '') +
+    `\n<b>Що беруть найчастіше</b>\n${top}\n` +
+    (hours ? `\n<b>Коли забирають</b>\n${hours}` : '');
+}
+
+bot.onText(/^\/(week|month)(?:@\w+)?/, (msg, m) => {
+  const days = m[1] === 'week' ? 7 : 30;
+  const shop = shopOfChat(msg.chat.id);
+  if (shop !== null) {
+    return bot.sendMessage(msg.chat.id, statsText([shop], days), { parse_mode: 'HTML' });
+  }
+  if (msg.chat.type !== 'private') {
+    return bot.sendMessage(msg.chat.id, 'Цей чат не привʼязаний до точки. /whoami');
+  }
+  if (!isOwner(msg)) {
+    return bot.sendMessage(msg.chat.id, OWNER_ID
+      ? 'Ці цифри доступні точкам і власнику.'
+      : 'Щоб бачити підсумки тут, додайте у змінні проєкту OWNER_ID зі своїм номером — його покаже /whoami.');
+  }
+  const parts = SHOPS.map((_, i) => statsText([i], days));
+  if (SHOPS.length > 1) parts.push(statsText(SHOPS.map((_, i) => i), days, 'Разом по мережі'));
+  bot.sendMessage(msg.chat.id, parts.join('\n\n'), { parse_mode: 'HTML' });
+});
+
 /* Після закриття надсилаємо самі — один раз на день на точку */
 function daySweep() {
   const k = kyivNow();
