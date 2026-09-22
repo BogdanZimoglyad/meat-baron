@@ -182,7 +182,22 @@ a{color:inherit}
 .c-b .ds{font-size:12.5px;color:var(--smoke);line-height:1.45;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .c-b .un{font-size:12px;color:var(--smoke);line-height:1.45}
-.c-f{display:flex;align-items:center;justify-content:flex-start;margin-top:auto;padding-top:8px}
+.c-f{display:flex;align-items:center;justify-content:flex-start;gap:8px;margin-top:auto;padding-top:8px}
+/* сердечко: обране лише для себе, лічильника вподобайок немає */
+.fav{height:31px;width:34px;border-radius:8px;border:1px solid var(--line);color:var(--smoke);
+  display:inline-flex;align-items:center;justify-content:center;background:transparent;transition:.15s}
+.fav svg{width:17px;height:17px}
+.fav:hover{border-color:var(--line-2);color:var(--bone)}
+.fav.on{color:var(--ember-hot);border-color:rgba(224,74,60,.45)}
+.fav:active{transform:scale(.94)}
+/* кнопки в картці товару: в обране й поділитися */
+.it-acts{display:flex;gap:8px;margin:10px 0 2px}
+.it-a{flex:1;height:38px;border-radius:9px;border:1px solid var(--line);color:var(--bone);
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;font-size:13px;transition:.15s}
+.it-a svg{width:17px;height:17px}
+.it-a:hover{border-color:var(--line-2)}
+.it-a.on{color:var(--ember-hot);border-color:rgba(224,74,60,.45)}
+.it-a:active{transform:scale(.98)}
 .add{height:31px;padding:0 14px;border-radius:8px;background:var(--ember);color:#fff;
   display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;transition:.15s}
 .add:active{transform:scale(.96)}
@@ -1312,20 +1327,140 @@ try{
 }catch(e){}
 const rememberShop=()=>{ try{ localStorage.setItem(SHOP_KEY,SHOPS[shop][0]) }catch(e){} };
 
+/* ---------- обране й популярне ----------
+   Обране лежить у браузері, а в того, хто увійшов, — ще й на сервері:
+   люди дивляться з телефона, а замовляють з компʼютера. Публічного
+   лічильника вподобайок навмисно немає: при нашому потоці під товаром
+   світилося б «1», і це працювало б проти магазину. «Популярне» ж
+   рахує сервер за справжніми замовленнями за місяць. */
+const FAV_KEY='mb-favs';
+let favs=new Set();
+try{
+  const a=JSON.parse(localStorage.getItem(FAV_KEY)||'[]');
+  if(Array.isArray(a)) favs=new Set(a.filter(x=>typeof x==='string'));
+}catch(e){}
+let favPush=null;
+function pushFavs(){
+  if(!me) return;
+  /* Сердечка тиснуть пачкою — не сиплемо запитами на кожне */
+  clearTimeout(favPush);
+  favPush=setTimeout(()=>{
+    req(API+'/api/me',{method:'PUT',headers:{'Content-Type':'application/json',...authHead()},
+      body:JSON.stringify({favs:[...favs]})},8000).catch(()=>{});
+  },800);
+}
+function saveFavs(){
+  try{ localStorage.setItem(FAV_KEY,JSON.stringify([...favs])) }catch(e){}
+  pushFavs();
+}
+function toggleFav(id){
+  favs.has(id)? favs.delete(id) : favs.add(id);
+  saveFavs();
+  /* Пішла остання позиція з обраного — вкладка зникає, і стояти на ній
+     ні до чого: повертаємось до мʼяса. */
+  if(cat==='fav'&&!favs.size) cat='raw';
+  renderCats(); renderCatalog();
+}
+/* Те, що людина позначила до входу, не втрачаємо: зливаємо зі списком
+   із сервера і дописуємо назад. */
+function mergeFavs(list){
+  if(!Array.isArray(list)) return;
+  const was=favs.size, known=new Set(list);
+  list.forEach(id=>favs.add(id));
+  try{ localStorage.setItem(FAV_KEY,JSON.stringify([...favs])) }catch(e){}
+  if([...favs].some(id=>!known.has(id))) pushFavs();   // у нас є те, чого сервер не знає
+  if(favs.size!==was){ renderCats(); renderCatalog() }
+}
+const favItems=()=>ITEMS.filter(i=>favs.has(i.id));
+
+/* Топ позицій за місяць — питаємо раз на завантаження сторінки.
+   Вкладку показуємо, лише коли топ не куций: «Популярне» з двох позицій
+   виглядає як порожній магазин. */
+const POPULAR_MIN=4;
+let popular=[];
+function loadPopular(){
+  req(API+'/api/popular',null,8000)
+    .then(r=>r.json())
+    .then(d=>{
+      const top=((d&&d.top)||[]).map(x=>ITEMS.find(i=>i.id===x.id)).filter(Boolean);
+      if(top.length<POPULAR_MIN) return;
+      popular=top;
+      renderCats(); if(cat==='top') renderCatalog();
+    })
+    .catch(()=>{});          // немає звʼязку — просто без вкладки
+}
+
 /* ---------- catalog ---------- */
 /* Категорія, в якій шукаємо. Порожня — шукаємо всюди. Раніше дотик до
    категорії стирав пошук: людина вводила «ковбаски», тиснула вкладку — і
    все, що набрала, зникало. Тепер вкладка звужує результати. */
 let searchCat='';
+/* Вкладки: спершу добірки (є що показати — є вкладка), далі категорії */
+const tabs=()=>[
+  ...(popular.length? [{id:'top',t:'★ Популярне'}] : []),
+  ...(favs.size?     [{id:'fav',t:`♥ Обрані · ${favs.size}`}] : []),
+  ...CATS
+];
 function renderCats(){
   const q=document.getElementById('q')?document.getElementById('q').value.trim():'';
   const active=q?searchCat:cat;
-  document.getElementById('cats').innerHTML=CATS.map(c=>
+  const list=tabs();
+  document.getElementById('cats').innerHTML=list.map(c=>
     `<button class="cat" role="tab" aria-selected="${c.id===active}" data-c="${c.id}">${c.t}</button>`).join('');
-  document.getElementById('sideCats').innerHTML=CATS.map(c=>
+  document.getElementById('sideCats').innerHTML=list.map(c=>
     `<button class="side-cat" aria-selected="${c.id===active}" data-c="${c.id}">${c.t}</button>`).join('');
 }
+/* Сердечко малюємо в одному місці: воно стоїть і в категоріях, і в
+   добірках, і після пошуку. */
+const HEART='<svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 20.3S4.4 15.3 4.4 10.2A4.3 4.3 0 0 1 12 7.3a4.3 4.3 0 0 1 7.6 2.9c0 5.1-7.6 10.1-7.6 10.1z"/></svg>';
+const favBtn=i=>{
+  const on=favs.has(i.id);
+  return `<button class="fav${on?' on':''}" data-fav="${i.id}" role="switch" aria-checked="${on}"
+    aria-label="${on?'Прибрати з обраного':'Додати в обране'}: ${esc(i.name)}"
+    style="${on?'':''}">${HEART.replace('<svg','<svg fill="'+(on?'currentColor':'none')+'"')}</button>`;
+};
+/* Одна картка товару — і для категорії, і для добірки */
+function cardHtml(i){
+  const c=CATS.find(x=>x.id===i.cat)||{};
+  return `<article class="card">
+    <button class="ph" ${photoOf(i)?`data-ph="${photoOf(i)}" data-id="${i.id}" aria-label="Показати ${i.name}"`:'disabled'}>${photoOf(i)?`<img src="${photoOf(i)}" alt="${i.name}" loading="lazy">`:ph(i)}</button>
+    <div class="c-b">
+      <span class="nm">${i.name}</span>
+      ${variantsOf(i)?'':`<span class="pr-top">${money(i.price)}</span>`}
+      ${descOf(i)?`<span class="ds">${descOf(i)}</span>`:''}
+      <span class="un">${unitNote(i)}${c.fry?' · мариноване':''}</span>
+      <div class="c-f">
+        <button class="add" data-i="${i.id}" aria-label="Додати ${i.name}">+ Додати</button>
+        ${favBtn(i)}
+      </div>
+    </div>
+  </article>`;
+}
+/* Добірки: «Популярне» (рахує сервер за замовленнями) і «Обрані».
+   Без підкатегорій і без груп — порядок тут свій: у популярному за
+   частотою, в обраному як у каталозі. */
+function renderPicks(){
+  const box=document.getElementById('catalog'), subBox=document.getElementById('subs');
+  subBox.innerHTML='';
+  const top=cat==='top';
+  const list=top? popular : favItems();
+  if(!list.length){
+    box.innerHTML=top
+      ? '<p class="empty">Поки нема що показати — заходьте пізніше.</p>'
+      : `<p class="empty">Тут буде те, що ви позначите сердечком.<br>
+         <button class="lnk" id="toCatalog" type="button">До каталогу</button></p>`;
+    return;
+  }
+  box.innerHTML=`<section class="grp"><div class="grp-h"><h2>${top?'Популярне':'Обрані'}</h2>
+    <em>${top?`що найчастіше беруть за місяць`:`${list.length} ${plural(list.length,['позиція','позиції','позицій'])}`}</em></div>
+    <div class="grid">${list.map(cardHtml).join('')}</div></section>`;
+}
+
 function renderCatalog(){
+  if(cat==='top'||cat==='fav'){
+    const q=document.getElementById('q').value.trim();
+    if(!q) return renderPicks();      // під час пошуку добірка поступається результатам
+  }
   const q=document.getElementById('q').value.trim().toLowerCase();
   const searching=!!q;
   const found=searching? searchItems(q) : null;
@@ -1361,19 +1496,7 @@ function renderCatalog(){
     const c=CATS.find(c=>c.id===list.find(i=>i.grp===g).cat);
     return `<section class="grp"><div class="grp-h"><h2>${g}</h2><em>${c.u}</em></div>
     ${GRP_NOTE[g]?`<p class="grp-note">${GRP_NOTE[g]}</p>`:''}
-    <div class="grid">${list.filter(i=>i.grp===g).map(i=>`
-      <article class="card">
-        <button class="ph" ${photoOf(i)?`data-ph="${photoOf(i)}" data-id="${i.id}" aria-label="Показати ${i.name}"`:'disabled'}>${photoOf(i)?`<img src="${photoOf(i)}" alt="${i.name}" loading="lazy">`:ph(i)}</button>
-        <div class="c-b">
-          <span class="nm">${i.name}</span>
-          ${variantsOf(i)?'':`<span class="pr-top">${money(i.price)}</span>`}
-          ${descOf(i)?`<span class="ds">${descOf(i)}</span>`:''}
-          <span class="un">${unitNote(i)}${c.fry?' · мариноване':''}</span>
-          <div class="c-f">
-            <button class="add" data-i="${i.id}" aria-label="Додати ${i.name}">+ Додати</button>
-          </div>
-        </div>
-      </article>`).join('')}</div></section>`;
+    <div class="grid">${list.filter(i=>i.grp===g).map(cardHtml).join('')}</div></section>`;
   }).join('');
 }
 function pickCat(id){
@@ -1384,6 +1507,7 @@ function pickCat(id){
 }
 document.getElementById('catalog').addEventListener('click',e=>{
   if(e.target.id==='searchAll'){ searchCat=''; renderCats(); renderCatalog() }
+  if(e.target.id==='toCatalog') pickCat('raw');
 });
 /* Дотик до категорії під час пошуку не має ховати клавіатуру: не даємо
    кнопці забрати фокус у поля й повертаємо його після перемальовування. */
@@ -1408,6 +1532,7 @@ document.getElementById('q').oninput=()=>{
   renderCats();renderCatalog();
 };
 document.getElementById('catalog').onclick=e=>{
+  const f=e.target.closest('[data-fav]'); if(f){toggleFav(f.dataset.fav);return}
   const b=e.target.closest('.add'); if(b){openItem(b.dataset.i);return}
   const p=e.target.closest('[data-ph]'); if(p) openPhoto(p);
 };
@@ -1585,6 +1710,50 @@ if(SHOPS.length>1){
   sb.classList.add('single'); sb.disabled=true;
 }
 
+/* ---------- в обране й поділитися ----------
+   Посилання на товар: сайт одностáрінковий, і надіслати другові «ось цей
+   ошийок» було нічим. Тепер ?item=<номер> відкриває картку — і кнопкою
+   «Поділитися», і в рекламі. */
+const itemLink=it=>location.origin+location.pathname+'?item='+it.id;
+const itemActs=it=>{
+  const on=favs.has(it.id);
+  return `<div class="it-acts">
+    <button class="it-a${on?' on':''}" id="itFav" role="switch" aria-checked="${on}">
+      ${HEART.replace('<svg','<svg fill="'+(on?'currentColor':'none')+'"')}
+      <span id="itFavT">${on?'В обраному':'В обране'}</span></button>
+    <button class="it-a" id="itShare">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 16V4"/><path d="M8 7.5 12 3.5l4 4"/><path d="M5 13v6.5h14V13"/></svg>
+      <span id="itShareT">Поділитися</span></button>
+  </div>`;
+};
+/* На телефоні — системне меню «Поділитися», на компʼютері його немає:
+   там просто кладемо посилання в буфер і кажемо про це. */
+async function shareItem(it){
+  const url=itemLink(it), t=document.getElementById('itShareT');
+  const text=`${it.name} — ${money(it.price)} ${it.unit==='шт'?'за штуку':'за 100 г'}, «Мʼясний Барон»`;
+  if(navigator.share){
+    try{ await navigator.share({title:it.name,text,url}); return }
+    catch(e){ if(e&&e.name==='AbortError') return }    // передумав — не морочимо голову
+  }
+  try{
+    await navigator.clipboard.writeText(url);
+    if(t){ t.textContent='Скопійовано ✓'; setTimeout(()=>{ if(t) t.textContent='Поділитися' },2000) }
+  }catch(e){ if(t) t.textContent=url }
+}
+function bindItemActs(it){
+  const f=document.getElementById('itFav');
+  if(f) f.onclick=()=>{
+    toggleFav(it.id);
+    const on=favs.has(it.id);
+    f.classList.toggle('on',on); f.setAttribute('aria-checked',on);
+    const s=f.querySelector('svg'); if(s) s.setAttribute('fill',on?'currentColor':'none');
+    const t=document.getElementById('itFavT'); if(t) t.textContent=on?'В обраному':'В обране';
+  };
+  const sh=document.getElementById('itShare');
+  if(sh) sh.onclick=()=>shareItem(it);
+}
+
 /* ---------- item sheet ---------- */
 function openItem(id, editIdx){
   const it=ITEMS.find(i=>i.id===id);
@@ -1610,6 +1779,7 @@ function openItem(id, editIdx){
   <div class="sh-h"><h3>${it.name}</h3><button class="x" onclick="close_()">✕</button></div>
   <p class="hint" style="margin-top:-6px">${sheetLead(it)}${it.cat==='raw'?`Ціна за 100 г сирого мʼяса — ${money(it.price)}. Посмажимо на мангалі за ${FRY_RATE} ₴/кг.`:`Ціна за 100 г — ${money(it.price)}.`}</p>
   ${descOf(it)?`<p class="hint sh-desc">${descOf(it)}</p>`:''}
+  ${itemActs(it)}
   <span class="lbl">${por?'Оберіть кількість':'Оберіть вагу'}</span>
   <div class="wgrid">${quick.map(v=>`<button class="w" data-g="${v}" aria-pressed="${v===g}">${wLabel(v)}${por?`<i>${v/por} шт</i>`:''}</button>`).join('')}</div>
   <div class="rowline">
@@ -1619,6 +1789,7 @@ function openItem(id, editIdx){
   <div class="tot"><span style="color:var(--smoke);font-size:13px">Разом</span><b id="tv">${money(it.price*g/100)}</b></div>
   <button class="cta" id="addBtn">${editing?'Зберегти':'Додати в кошик'}</button>
   <p class="hint">${por?`Продається штуками, ціна — за вагу: одна приблизно ${por} г. Точну суму порахуємо, коли зважимо.`:`Мінімальна вага — ${it.minG} г, можна ввести свою.`} ${canFry(it)?'Смаження на мангалі позначається в кошику.':''}</p>`);
+  bindItemActs(it);
   const rg=sIn.querySelector('#rg'),wv=sIn.querySelector('#wv'),tv=sIn.querySelector('#tv');
   const paint=(syncField)=>{
     tv.textContent=money(it.price*g/100);
@@ -1669,8 +1840,10 @@ function openVariants(it,onDone){
   open(`<div class="grab-zone"><div class="grab"></div></div>
   <div class="sh-h"><h3>${esc(it.name)}</h3><button class="x" onclick="close_()">✕</button></div>
   ${descOf(it)?`<p class="hint" style="margin-top:-6px">${esc(descOf(it))}</p>`:''}
+  ${itemActs(it)}
   <div class="var-list">${vs.list.map(row).join('')}</div>
   <button class="cta" id="varDone">Готово</button>`);
+  bindItemActs(it);
   sIn.querySelector('.var-list').onclick=e=>{
     const b=e.target.closest('[data-dv]'); if(!b) return;
     const r=b.closest('[data-v]'), v=r.dataset.v;
@@ -2992,6 +3165,8 @@ function setMe(v){
   me=v;
   try{ v? localStorage.setItem(AUTH_KEY,JSON.stringify(v)) : localStorage.removeItem(AUTH_KEY) }catch(e){}
   if(v&&v.tel) rememberTel(v.tel);
+  /* Обране з сервера зливаємо з тим, що людина позначила до входу */
+  if(v&&v.favs) mergeFavs(v.favs);
   paintAuth();
   /* Інший акаунт — інша історія: стару відповідь про минуле замовлення
      викидаємо, бо смужка «Повторити» показала б чуже. */
@@ -3020,7 +3195,7 @@ paintAuth();
 if(me) req(API+'/api/me',{headers:authHead()},8000)
   .then(r=>{
     if(r.status===401) return setMe(null);
-    return r.json().then(d=>{ if(d&&d.ok) setMe({...me,tel:d.tel,name:d.name||'',addr:d.addr||'',addrParts:d.addrParts||null,addrs:d.addrs||[]}) });
+    return r.json().then(d=>{ if(d&&d.ok) setMe({...me,tel:d.tel,name:d.name||'',addr:d.addr||'',addrParts:d.addrParts||null,addrs:d.addrs||[],favs:d.favs||[]}) });
   })
   .catch(()=>{});   // немає звʼязку — лишаємо як є, кабінет відкриється офлайн
 
@@ -3084,7 +3259,7 @@ async function startLogin(){
       const d=await r.json();
       if(d.status==='ok'){
         clearInterval(loginPoll);
-        setMe({token:d.token,tel:d.tel,name:d.name||'',addr:d.addr||'',addrParts:d.addrParts||null,addrs:d.addrs||[]});
+        setMe({token:d.token,tel:d.tel,name:d.name||'',addr:d.addr||'',addrParts:d.addrParts||null,addrs:d.addrs||[],favs:d.favs||[]});
         if(box.isConnected) openCabinet();   // вхід зберігаємо в будь-якому разі, а кабінет — лише якщо людина ще на екрані входу
       } else if(d.status==='expired'){ clearInterval(loginPoll); expiredLogin() }
     }catch(e){ if(st) st.textContent='Звʼязок пропав. Чекаємо…' }
@@ -3237,6 +3412,15 @@ if('serviceWorker' in navigator){
 /* стартуємо після того, як усе оголошено */
 uiReady=true;
 showActiveBar();
+loadPopular();
+/* Посилання на товар: ?item=<номер> відкриває його картку. Замовлення
+   важливіше — якщо в адресі є і воно, картку не чіпаємо. */
+(function(){
+  const p=new URLSearchParams(location.search);
+  if(p.get('order')) return;
+  const it=ITEMS.find(i=>i.id===p.get('item'));
+  if(it) openItem(it.id);
+})();
 /* Посилання «Стежити» з повідомлення бота. Хто увійшов — тому склад
    дасть сервер, тож спершу питаємо своє активне замовлення. */
 (async function(){
