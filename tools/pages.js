@@ -63,7 +63,10 @@ const page = it => {
 <meta property="og:image" content="${esc(img)}">
 <meta property="og:url" content="${SITE}/t/${it.id}.html">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="canonical" href="${SITE}${to}">
+${/* canonical — на саму себе. Коли він вів на «?item=…», Telegram
+     сприймав це як «справжня сторінка там», ішов на головну й брав її
+     теги: у превʼю замість фото товару був логотип (перевірено 22.09). */''}
+<link rel="canonical" href="${SITE}/t/${it.id}.html">
 <link rel="icon" href="/icon-192.png">
 ${/* Переставляємо лише скриптом. З <meta http-equiv="refresh"> Telegram
      ішов за перенаправленням на головну, читав теги вже там — і показував
