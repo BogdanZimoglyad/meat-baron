@@ -657,6 +657,21 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .act-t b{display:block;font-weight:500;font-size:14px}
 .act-t span{display:block;font-size:12px;color:var(--smoke);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .act-go{flex:0 0 auto;font-size:12.5px;color:var(--ember-hot)}
+
+/* повторити минуле замовлення — спокійніше за смужку активного:
+   це пропозиція, а не те, що вже готується */
+.repeat-bar{margin-top:14px}
+.repeat-bar[hidden]{display:none}
+.rep-in{display:flex;align-items:center;gap:11px;width:100%;text-align:left;
+  background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:12px 14px;transition:.14s}
+.rep-in:hover{border-color:rgba(224,74,60,.45)}
+.rep-in:active{transform:scale(.995)}
+.rep-ic{flex:0 0 auto;width:20px;height:20px;color:var(--ember-hot)}
+.rep-ic svg{width:100%;height:100%}
+.rep-t{flex:1;min-width:0;line-height:1.35}
+.rep-t b{display:block;font-weight:500;font-size:14px}
+.rep-t span{display:block;font-size:12px;color:var(--smoke);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rep-go{flex:0 0 auto;font-size:12.5px;color:var(--ember-hot)}
 .ready-note{display:flex;align-items:center;gap:11px;margin-bottom:12px;padding:13px 14px;
   border-radius:12px;background:rgba(123,168,79,.14);border:1px solid rgba(123,168,79,.45)}
 .ready-note svg{width:22px;height:22px;color:var(--ok);flex:0 0 auto}
@@ -797,6 +812,7 @@ body:has(.inst) .bar{bottom:66px}
   </section>
 
   <div class="active-bar" id="active" hidden></div>
+  <div class="repeat-bar" id="repeat" hidden></div>
 
   <div class="layout">
 
@@ -1280,6 +1296,10 @@ function searchItems(q){
 }
 
 let cat='raw', sub='', cart=[], shop=0, order=null, getMode='pickup', orderNote='';
+/* Сторінка ще збирається: смужки вгорі малюємо лише коли все оголошено.
+   paintBar кличуть із відновлення кошика — тобто раніше, ніж зʼявиться
+   вхід (`me`), і без цього прапорця воно падало б на ньому. */
+let uiReady=false;
 /* Обрана точка теж переживає перезавантаження, як і кошик. Раніше вона
    жила лише в памʼяті сторінки: людина обирала Шевченка, поверталась у
    застосунок за годину — а в шапці знову перша точка, і замовлення
@@ -1875,6 +1895,7 @@ function paintBar(){
   document.getElementById('barL').textContent=`Кошик · ${n} ${plural(n,['позиція','позиції','позицій'])}`;   // 21 позиція, а не «21 позицій»
   document.getElementById('barR').textContent=money(cartTotal());
   saveCart();            // paintBar кличуть після кожної зміни кошика — тут і зберігаємо
+  showRepeatBar();       // набрали кошик — пропозиція повторити зайва, спорожнів — знову доречна
 }
 
 /* ---------- кошик переживає перезавантаження ----------
@@ -2571,6 +2592,7 @@ function openCheckout(){
       order={...payload,no:d.no,shop:SHOPS[shop][0],st:d.status||'new',lines:payload.lines,ckey:d.ckey||'',
              total:Number.isFinite(d.total)?d.total:payload.total};
       if(!me) rememberTel(tel);          // наступного разу номер уже буде в полі
+      lastOrderP=null;                   // тепер «минуле замовлення» — оце
       cart=[];orderNote='';paintBar();   // прапорець допродажу зніме paintBar
       saveLast(order);
       openStatus(order.st);
@@ -2830,7 +2852,13 @@ async function localActive(){
   }
   return out;
 }
+/* Смужка активних і смужка «Повторити» ходять парою: друга зʼявляється
+   лише тоді, коли першої немає, тож малюємо їх одним рухом. */
 async function showActiveBar(){
+  await paintActiveBar();
+  showRepeatBar();
+}
+async function paintActiveBar(){
   const el=document.getElementById('active'); if(!el) return;
   const srv=await serverActive();
   const list=(srv&&srv.length? srv : (srv? [] : await localActive()))
@@ -2858,6 +2886,46 @@ async function showActiveBar(){
     openOrder(no, (srv||[]).find(o=>String(o.no)===String(no))||null);
   });
 }
+/* ---------- смужка «Повторити минуле замовлення» ----------
+   Кнопка «Повторити» жила в кабінеті, під списком замовлень, і її майже
+   не знаходили. Тепер минуле замовлення пропонуємо просто під шапкою.
+   Лише тому, хто увійшов: склад дає сервер, і працює це на будь-якому
+   пристрої. Памʼять браузера тут не годиться — вона тримає замовлення
+   36 годин і забуває його одразу після видачі. */
+let lastOrderP=null;          // одна відповідь на завантаження сторінки
+function lastOrdered(){
+  if(!me) return Promise.resolve(null);
+  if(!lastOrderP) lastOrderP=req(API+'/api/me/orders',{headers:authHead()},10000)
+    .then(r=>dropMeIf401(r)? null : r.json())
+    .then(d=>((d&&d.orders)||[]).find(o=>(o.lines||[]).length)||null)
+    .catch(()=>null);          // немає звʼязку — просто не показуємо смужку
+  return lastOrderP;
+}
+async function showRepeatBar(){
+  const el=document.getElementById('repeat'); if(!el||!uiReady) return;
+  const off=()=>{ el.hidden=true; el.innerHTML='' };
+  const act=document.getElementById('active');
+  /* Набраний кошик і замовлення в роботі важливіші за пропозицію
+     повторити: там людина вже щось робить. */
+  const idle=()=>!!me&&!cart.length&&(!act||act.hidden);
+  if(!idle()) return off();
+  const o=await lastOrdered();
+  if(!o||!idle()) return off();          // поки чекали відповідь, усе могло змінитись
+  const {items}=repeatItems(o.lines);
+  if(!items.length) return off();        // усі позиції зняті з продажу
+  const names=items.map(x=>lineTitle({...x.it,v:x.v}));
+  const head=names.slice(0,2).join(', ')+(names.length>2? ` і ще ${names.length-2}` : '');
+  el.innerHTML=`<button class="rep-in" data-rep="1">
+    <span class="rep-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><path d="M20.5 4.5V10h-5.5"/></svg></span>
+    ${/* Коротко: «Повторити минуле замовлення» на телефоні лізло у два
+         рядки, і «У кошик» від'їжджало вгору */''}
+    <span class="rep-t"><b>Повторити замовлення</b><span>${esc(head)} · ${money(repeatSum(items))}</span></span>
+    <span class="rep-go">У кошик</span></button>`;
+  el.hidden=false;
+  el.querySelector('[data-rep]').onclick=()=>repeatOrder(o.lines||[]);
+}
+
 async function openOrder(no,known){
   /* Тому, хто увійшов, склад дає сервер — на будь-якому пристрої.
      Інакше беремо його з памʼяті браузера, а для чужого посилання
@@ -2925,6 +2993,9 @@ function setMe(v){
   try{ v? localStorage.setItem(AUTH_KEY,JSON.stringify(v)) : localStorage.removeItem(AUTH_KEY) }catch(e){}
   if(v&&v.tel) rememberTel(v.tel);
   paintAuth();
+  /* Інший акаунт — інша історія: стару відповідь про минуле замовлення
+     викидаємо, бо смужка «Повторити» показала б чуже. */
+  lastOrderP=null;
   /* Увійшли — смужка «стежити» має зʼявитися одразу, навіть якщо
      замовлення робили з іншого пристрою. Вийшли — зникнути. */
   showActiveBar();
@@ -3098,9 +3169,13 @@ async function loadMyOrders(){
    без цього «Повторити» писало б «немає в наявності».
    Ключ — «Група/Стара назва», значення — нова назва. */
 const RENAMED={'Курка/Стейк':'Стейк курячий'};
-function repeatOrder(lines){
-  let added=0, skipped=[];
-  lines.forEach(l=>{
+/* Що з минулого замовлення реально можна покласти в кошик сьогодні.
+   Один розрахунок на дві сторони: сама кнопка «Повторити» і смужка
+   вгорі, яка показує суму наперед — інакше вона обіцяла б одне, а в
+   кошик лягало інше. */
+function repeatItems(lines){
+  const items=[], skipped=[];
+  (lines||[]).forEach(l=>{
     /* Спершу за назвою: старі замовлення зберігають номери позицій
        у колишньому форматі, і збіг за номером міг би підставити
        зовсім інший товар. */
@@ -3111,11 +3186,26 @@ function repeatOrder(lines){
     /* Той самий соус, що й минулого разу — якщо він досі є в списку */
     const vs=variantsOf(it);
     const v=vs&&l.v&&vs.list.some(x=>x[0]===l.v)? l.v : '';
+    items.push({it,g,v,fry:!!l.fry&&canFry(it)});   // що смажили минулого разу
+  });
+  return {items,skipped};
+}
+/* Скільки коштуватиме повтор за сьогоднішнім прайсом: ціни могли
+   змінитись, і стара сума замовлення тут була б обіцянкою навмання. */
+function repeatSum(items){
+  const goods=items.reduce((s,x)=>
+    s+lineSum({unit:x.it.unit,price:priceOf(x.it,x.v),g:x.g,grp:x.it.grp,name:x.it.name}),0);
+  const fg=items.reduce((s,x)=>s+(x.fry? fryableG({...x.it,g:x.g}) : 0),0);
+  return kop(goods+(fg>=MIN_G? kop(fg/1000*FRY_RATE) : 0));
+}
+function repeatOrder(lines){
+  const {items,skipped}=repeatItems(lines);
+  let added=0;
+  items.forEach(({it,g,v,fry})=>{
     const ex=cart.find(c=>c.id===it.id&&(c.v||'')===v);
     if(ex) ex.g+=g;
     else cart.push({id:it.id,name:it.name,grp:it.grp,price:priceOf(it,v),unit:it.unit,cat:it.cat,minG:it.minG,g,
-                    fry:!!l.fry&&canFry(it),     // що смажили минулого разу
-                    ...(v?{v}:{})});
+                    fry,...(v?{v}:{})});
     added++;
   });
   paintBar();
@@ -3145,6 +3235,7 @@ if('serviceWorker' in navigator){
   });
 }
 /* стартуємо після того, як усе оголошено */
+uiReady=true;
 showActiveBar();
 /* Посилання «Стежити» з повідомлення бота. Хто увійшов — тому склад
    дасть сервер, тож спершу питаємо своє активне замовлення. */
