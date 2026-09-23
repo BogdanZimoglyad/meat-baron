@@ -1350,15 +1350,27 @@ const rememberShop=()=>{ try{ localStorage.setItem(SHOP_KEY,SHOPS[shop][0]) }cat
    точки свій, тож перемикання точки перемальовує каталог. Сервер не
    відповів — нічого не гасимо: краще зайве замовлення, яке оператор
    уточнить, ніж каталог, що ховає товар через обрив звʼязку. */
+const STOCK_KEY='mb-stock';
 let stock={shop:-1,off:new Set(),at:0};
+/* Підхоплюємо з памʼяті браузера ще до відповіді сервера: інакше при
+   відкритті з іконки на телефоні каталог малювався двічі — спершу без
+   знятих позицій, а за пів секунди наново, і це видно як ривок. */
+try{
+  const c=JSON.parse(localStorage.getItem(STOCK_KEY)||'null');
+  if(c&&c.shop===shop&&Date.now()-(c.at||0)<10*60000) stock={shop,off:new Set(c.off||[]),at:0};
+}catch(e){}
+const sameSet=(a,b)=>a.size===b.size&&[...a].every(x=>b.has(x));
 async function loadStock(force){
   if(!force&&stock.shop===shop&&Date.now()-stock.at<60000) return;
   try{
     const r=await req(API+'/api/stock?shop='+shop,null,6000);
     const d=await r.json();
     if(d&&d.ok){
-      stock={shop,off:new Set(d.off||[]),at:Date.now()};
-      renderCatalog();
+      const next=new Set(d.off||[]);
+      const changed=stock.shop!==shop||!sameSet(next,stock.off);
+      stock={shop,off:next,at:Date.now()};
+      try{ localStorage.setItem(STOCK_KEY,JSON.stringify({shop,off:[...next],at:Date.now()})) }catch(e){}
+      if(changed) renderCatalog();     // нічого не змінилось — не смикаємо каталог
     }
   }catch(e){}
 }
@@ -1414,13 +1426,27 @@ const favItems=()=>ITEMS.filter(i=>favs.has(i.id));
    Вкладку показуємо, лише коли топ не куций: «Популярне» з двох позицій
    виглядає як порожній магазин. */
 const POPULAR_MIN=4;
+const POP_KEY='mb-popular';
 let popular=[];
+/* Той самий клопіт, що й з наявністю: без памʼяті вкладка «Популярне»
+   зʼявлялась за пів секунди після відкриття і зсувала всю стрічку
+   категорій убік. Тепер вона є одразу, а відповідь сервера лише
+   уточнює склад. */
+try{
+  const c=JSON.parse(localStorage.getItem(POP_KEY)||'null');
+  if(c&&Array.isArray(c.ids)&&Date.now()-(c.at||0)<24*3600000){
+    const top=c.ids.map(id=>ITEMS.find(i=>i.id===id)).filter(Boolean);
+    if(top.length>=POPULAR_MIN) popular=top;
+  }
+}catch(e){}
 function loadPopular(){
   req(API+'/api/popular',null,8000)
     .then(r=>r.json())
     .then(d=>{
       const top=((d&&d.top)||[]).map(x=>ITEMS.find(i=>i.id===x.id)).filter(Boolean);
       if(top.length<POPULAR_MIN) return;
+      try{ localStorage.setItem(POP_KEY,JSON.stringify({ids:top.map(i=>i.id),at:Date.now()})) }catch(e){}
+      if(top.map(i=>i.id).join()===popular.map(i=>i.id).join()) return;   // те саме — не перемальовуємо
       popular=top;
       renderCats(); if(cat==='top') renderCatalog();
     })
@@ -1539,7 +1565,16 @@ function renderCatalog(){
   }).join('');
 }
 function pickCat(id){
-  const q=document.getElementById('q').value.trim();
+  const qEl=document.getElementById('q');
+  /* Добірки не звужують пошук — вони самі по собі добірка, і товарів
+     категорії «top» чи «fav» не існує. Дотик до них скидає пошук,
+     інакше виходило «У «» нічого не знайшли» з порожньою назвою. */
+  if(id==='top'||id==='fav'){
+    qEl.value=''; searchCat=''; cat=id; sub='';
+    renderCats(); renderCatalog();
+    return;
+  }
+  const q=qEl.value.trim();
   if(q){ searchCat=searchCat===id?'':id; if(searchCat&&cat!==searchCat){ cat=searchCat; sub='' } }   // повторний дотик — знову всюди
   else { cat=id; sub='' }
   renderCats(); renderCatalog();
@@ -2979,6 +3014,9 @@ function wake(){
   if(document.hidden) return;
   if(Date.now()-wokeAt<3000) return;     // focus і visibilitychange приходять разом
   wokeAt=Date.now();
+  /* Поки вкладка спала, точка могла зняти позицію — перечитуємо, що є
+     в наявності, інакше людина набирала б кошик із того, чого немає. */
+  loadStock(true);
   if(pollTick) pollTick(); else showActiveBar();
 }
 document.addEventListener('visibilitychange',wake);
