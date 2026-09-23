@@ -941,7 +941,7 @@ body:has(.inst) .bar{bottom:66px}
 
 <!-- Прайс і правила рахунку. Той самий файл читає сервер,
      тому підроблену суму замовлення видно одразу. -->
-<script src="catalog.js"></script>
+<script src="catalog.js?v=caff9e95"></script>
 <script>
 /* Категорії, зняті з продажу, відсіює CATS_OFF із catalog.js —
    вкладка зникає разом із товарами. */
@@ -1453,6 +1453,12 @@ function loadPopular(){
     .catch(()=>{});          // немає звʼязку — просто без вкладки
 }
 
+/* Прайс і розмітка оновлюються різними файлами, і в браузері вони
+   можуть на мить розійтися: свіжий index.html і старий catalog.js із
+   кеша телефона. Раніше на такому поєднанні каталог просто не
+   малювався — порожній екран (власник, 23.09). Тепер нова розмітка
+   питає про акції обережно. */
+const sale=it=>(typeof saleOf==='function'? saleOf(it) : '');
 /* ---------- catalog ---------- */
 /* Категорія, в якій шукаємо. Порожня — шукаємо всюди. Раніше дотик до
    категорії стирав пошук: людина вводила «ковбаски», тиснула вкладку — і
@@ -1487,7 +1493,7 @@ function cardHtml(i){
   const c=CATS.find(x=>x.id===i.cat)||{};
   const off=isOff(i.id);
   return `<article class="card${off?' off':''}">
-    <button class="ph" ${photoOf(i)?`data-ph="${photoOf(i)}" data-id="${i.id}" aria-label="Показати ${i.name}"`:'disabled'}>${photoOf(i)?`<img src="${photoOf(i)}" alt="${i.name}" loading="lazy">`:ph(i)}${saleOf(i)?`<span class="badge fire">${esc(saleOf(i))}</span>`:''}</button>
+    <button class="ph" ${photoOf(i)?`data-ph="${photoOf(i)}" data-id="${i.id}" aria-label="Показати ${i.name}"`:'disabled'}>${photoOf(i)?`<img src="${photoOf(i)}" alt="${i.name}" loading="lazy">`:ph(i)}${sale(i)?`<span class="badge fire">${esc(sale(i))}</span>`:''}</button>
     <div class="c-b">
       <span class="nm">${i.name}</span>
       ${variantsOf(i)?'':`<span class="pr-top">${money(i.price)}</span>`}
@@ -1625,7 +1631,7 @@ function openPhoto(node){
     </div>
     <div class="lb-b">
       <h3>${it.name}</h3>
-      <p class="lb-pr">${variantsOf(it)? variantsNote(it) : money(it.price)+`<span class="lb-un">${it.unit==='шт'?(countUnitOf(it)?' / '+countUnitOf(it).w[0]+(unitInside(countUnitOf(it))?' · '+unitInside(countUnitOf(it)):''):' / шт'):' / 100 г'}</span>`}${saleOf(it)?` <span class="badge fire" style="position:static;font-size:11px;vertical-align:middle">${esc(saleOf(it))}</span>`:''}</p>
+      <p class="lb-pr">${variantsOf(it)? variantsNote(it) : money(it.price)+`<span class="lb-un">${it.unit==='шт'?(countUnitOf(it)?' / '+countUnitOf(it).w[0]+(unitInside(countUnitOf(it))?' · '+unitInside(countUnitOf(it)):''):' / шт'):' / 100 г'}</span>`}${sale(it)?` <span class="badge fire" style="position:static;font-size:11px;vertical-align:middle">${esc(sale(it))}</span>`:''}</p>
       ${it.unit==='пак'?`<p class="lb-pk">Упаковка ${packLabel(it)} — ${money(it.price*packOf(it)/100)}</p>`:''}
       ${it.cat==='raw'?`<p class="lb-pk">Ціна за 100 г сирого мʼяса. Посмажимо на мангалі за ${FRY_RATE} ₴/кг.</p>`:''}
       ${descOf(it)?`<p class="lb-ds">${descOf(it)}</p>`:''}
@@ -1875,7 +1881,7 @@ function openItem(id, editIdx){
   open(`<div class="grab-zone"><div class="grab"></div></div>
   <div class="hero-img${/\.jpe?g$/.test(photoOf(it)||'')?' has-bg':''}">${photoOf(it)?`<img src="${photoOf(it)}" alt="${it.name}">`:ph(it,1)}</div>
   <div class="sh-h"><h3>${it.name}</h3><button class="x" onclick="close_()">✕</button></div>
-  <p class="hint" style="margin-top:-6px">${sheetLead(it)}${it.cat==='raw'?`Ціна за 100 г сирого мʼяса — ${money(it.price)}. Посмажимо на мангалі за ${FRY_RATE} ₴/кг.`:`Ціна за 100 г — ${money(it.price)}.`}${saleOf(it)?` <b style="color:var(--ember-hot)">${esc(saleOf(it))}</b>`:''}</p>
+  <p class="hint" style="margin-top:-6px">${sheetLead(it)}${it.cat==='raw'?`Ціна за 100 г сирого мʼяса — ${money(it.price)}. Посмажимо на мангалі за ${FRY_RATE} ₴/кг.`:`Ціна за 100 г — ${money(it.price)}.`}${sale(it)?` <b style="color:var(--ember-hot)">${esc(sale(it))}</b>`:''}</p>
   ${descOf(it)?`<p class="hint sh-desc">${descOf(it)}</p>`:''}
   ${itemActs(it)}
   <span class="lbl">${por?'Оберіть кількість':'Оберіть вагу'}</span>
