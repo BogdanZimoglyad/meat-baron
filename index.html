@@ -941,7 +941,7 @@ body:has(.inst) .bar{bottom:66px}
 
 <!-- Прайс і правила рахунку. Той самий файл читає сервер,
      тому підроблену суму замовлення видно одразу. -->
-<script src="catalog.js?v=caff9e95"></script>
+<script src="catalog.js?v=fe442564"></script>
 <script>
 /* Категорії, зняті з продажу, відсіює CATS_OFF із catalog.js —
    вкладка зникає разом із товарами. */
@@ -2714,7 +2714,9 @@ function openCheckout(){
 
     <span class="lbl">Оплата</span>
     <button class="pay" data-pay="cash" aria-pressed="${pay==='cash'}"><span class="dot"></span>Готівкою ${mode==='pickup'?'на місці':'курʼєру'}</button>
-    <button class="pay" data-pay="card" aria-pressed="${pay==='card'}"><span class="dot"></span>Карткою ${mode==='pickup'?'на місці':'курʼєру'}</button>
+    ${/* Курʼєру — лише готівка: термінал є на точці, а не в таксі
+         (власник, 23.09). Онлайн-оплати поки немає взагалі. */''}
+    ${mode==='pickup'?`<button class="pay" data-pay="card" aria-pressed="${pay==='card'}"><span class="dot"></span>Карткою на місці</button>`:''}
 
     <span class="lbl">Контакти</span>
     <input class="fld" id="nm" placeholder="Імʼя" autocomplete="name" value="${esc(nmV)}">
@@ -2779,7 +2781,11 @@ function openCheckout(){
       draw();
     });
     sIn.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{
-      mode=b.dataset.mode; validateWhen(mode); draw()});
+      mode=b.dataset.mode;
+      /* Переклали на доставку з обраною карткою — вибір мовчки лишався
+         б на «картці», якої в курʼєра немає. */
+      if(mode==='delivery'&&pay==='card') pay='cash';
+      validateWhen(mode); draw()});
     sIn.querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>{pay=b.dataset.pay;draw()});
     /* Увімкнули мангал — найраніший час зсувається на 10:00,
        і вже обраний ранній слот може стати неможливим. */
