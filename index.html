@@ -3185,18 +3185,29 @@ function lastOrdered(){
     .catch(()=>null);          // немає звʼязку — просто не показуємо смужку
   return lastOrderP;
 }
-async function showRepeatBar(){
-  const el=document.getElementById('repeat'); if(!el||!uiReady) return;
-  const off=()=>{ el.hidden=true; el.innerHTML='' };
-  const act=document.getElementById('active');
-  /* Набраний кошик і замовлення в роботі важливіші за пропозицію
-     повторити: там людина вже щось робить. */
-  const idle=()=>!!me&&!cart.length&&(!act||act.hidden);
-  if(!idle()) return off();
-  const o=await lastOrdered();
-  if(!o||!idle()) return off();          // поки чекали відповідь, усе могло змінитись
-  const {items}=repeatItems(o.lines);
-  if(!items.length) return off();        // усі позиції зняті з продажу
+/* Склад минулого замовлення памʼятаємо в браузері: без цього смужка
+   вискакувала за пів секунди після відкриття — рівно тоді, коли людина
+   вже дивилась у каталог, — і зсувала його вниз (власник, 23.09).
+   Тримаємо разом із номером телефону: на одному телефоні може увійти
+   інша людина, і чужий склад їй показувати ні до чого. */
+const REP_KEY='mb-repeat';
+function repeatCached(){
+  try{
+    const c=JSON.parse(localStorage.getItem(REP_KEY)||'null');
+    if(!c||!Array.isArray(c.lines)) return null;
+    if(Date.now()-(c.at||0)>7*24*3600000) return null;
+    if(!me||c.tel!==me.tel) return null;
+    return c.lines;
+  }catch(e){ return null }
+}
+/* Малюємо лише коли справді щось змінилось: інакше відповідь сервера
+   перемальовувала ту саму смужку і вона мигала. */
+function paintRepeat(lines){
+  const el=document.getElementById('repeat'); if(!el) return;
+  const {items}=repeatItems(lines);
+  if(!items.length){ el.hidden=true; el.innerHTML=''; el.dataset.sig=''; return }
+  const sig=items.map(x=>`${x.it.id}:${x.g}:${x.v||''}${x.fry?'f':''}`).join('|');
+  if(el.dataset.sig===sig&&!el.hidden) return;
   const names=items.map(x=>lineTitle({...x.it,v:x.v}));
   const head=names.slice(0,2).join(', ')+(names.length>2? ` і ще ${names.length-2}` : '');
   el.innerHTML=`<button class="rep-in" data-rep="1">
@@ -3206,8 +3217,27 @@ async function showRepeatBar(){
          рядки, і «У кошик» від'їжджало вгору */''}
     <span class="rep-t"><b>Повторити замовлення</b><span>${esc(head)} · ${money(repeatSum(items))}</span></span>
     <span class="rep-go">У кошик</span></button>`;
+  el.dataset.sig=sig;
   el.hidden=false;
-  el.querySelector('[data-rep]').onclick=()=>repeatOrder(o.lines||[]);
+  el.querySelector('[data-rep]').onclick=()=>repeatOrder(lines||[]);
+}
+async function showRepeatBar(){
+  const el=document.getElementById('repeat'); if(!el||!uiReady) return;
+  const off=()=>{ el.hidden=true; el.innerHTML=''; el.dataset.sig='' };
+  const act=document.getElementById('active');
+  /* Набраний кошик і замовлення в роботі важливіші за пропозицію
+     повторити: там людина вже щось робить. */
+  const idle=()=>!!me&&!cart.length&&(!act||act.hidden);
+  if(!idle()) return off();
+  /* Спершу з памʼяті — але лише якщо на цьому пристрої немає замовлень
+     у роботі: інакше смужка встигла б зʼявитись і одразу поступитись
+     смужці «Стежити», а це той самий стрибок. */
+  const cached=repeatCached();
+  if(cached&&!readLastList().length) paintRepeat(cached);
+  const o=await lastOrdered();
+  if(!o||!idle()) return off();          // поки чекали відповідь, усе могло змінитись
+  try{ localStorage.setItem(REP_KEY,JSON.stringify({tel:me.tel,lines:o.lines,at:Date.now()})) }catch(e){}
+  paintRepeat(o.lines);
 }
 
 async function openOrder(no,known){
@@ -3282,6 +3312,7 @@ function setMe(v){
   /* Інший акаунт — інша історія: стару відповідь про минуле замовлення
      викидаємо, бо смужка «Повторити» показала б чуже. */
   lastOrderP=null;
+  if(!v) try{ localStorage.removeItem('mb-repeat') }catch(e){}   // вийшли — забуваємо склад
   /* Увійшли — смужка «стежити» має зʼявитися одразу, навіть якщо
      замовлення робили з іншого пристрою. Вийшли — зникнути. */
   showActiveBar();
