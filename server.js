@@ -837,6 +837,88 @@ function statsText(shopList, days, title) {
     (hours ? `\n<b>Коли забирають</b>\n${hours}` : '');
 }
 
+/* ---------- обнулення бази перед запуском ----------
+   Поки сайт не в роботі, у базі лежать замовлення, які власник із
+   працівниками наклацали на тестах. Вони псують «Популярне» (клієнти
+   побачили б натиснуте, а не куплене) і перший же підсумок тижня, бо
+   порівнюватиметься з тестовим. Тому перед запуском усе стираємо.
+
+   Команда лише в особистих із власником і лише з підтвердженням.
+   Прив'язки точок не чіпаємо: без них замовлення перестануть
+   доходити в чати. Стару базу перед стиранням відкладаємо копією —
+   диск на Railway постійний, місця це майже не займе. */
+const resetAsks = new Map();
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, a] of resetAsks) if (now - a.at > 5 * 60 * 1000) resetAsks.delete(k);
+}, 60 * 1000).unref();
+
+bot.onText(/^\/reset(?:@\w+)?/, msg => {
+  if (!msg.chat || msg.chat.type !== 'private') {
+    return bot.sendMessage(msg.chat.id, 'Обнулення бази — лише в особистих із власником.');
+  }
+  if (!isOwner(msg)) {
+    return bot.sendMessage(msg.chat.id, OWNER_ID
+      ? 'Ця команда лише для власника.'
+      : 'Спершу додайте у змінні проєкту OWNER_ID — ваш номер покаже /whoami.');
+  }
+  const id = crypto.randomBytes(4).toString('hex');
+  resetAsks.set(id, { at: Date.now() });
+  bot.sendMessage(msg.chat.id,
+    `⚠️ <b>Стерти всі дані?</b>\n\n` +
+    `Замовлень: <b>${Object.keys(db.orders).length}</b>\n` +
+    `Покупців: <b>${Object.keys(db.users).length}</b>\n\n` +
+    `Наступне замовлення отримає № 1001. Усі, хто входив на сайті, ` +
+    `вийдуть і зайдуть заново. Прив'язки точок лишаються.\n` +
+    `Стара база збережеться копією на диску.`,
+    { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[
+      { text: '🗑 Так, стерти', callback_data: `rs:${id}` },
+      { text: 'Скасувати', callback_data: `rx:${id}` }
+    ]] } });
+});
+
+bot.on('callback_query', async cq => {
+  const [tag, id] = (cq.data || '').split(':');
+  if (tag !== 'rs' && tag !== 'rx') return;
+  const ask = resetAsks.get(id);
+  if (!ask) return bot.answerCallbackQuery(cq.id, { text: 'Підтвердження застаріло — наберіть /reset ще раз' });
+  resetAsks.delete(id);
+  if (!OWNER_ID || !cq.from || cq.from.id !== OWNER_ID) {
+    return bot.answerCallbackQuery(cq.id, { text: 'Лише для власника' });
+  }
+  const chatId = cq.message.chat.id, msgId = cq.message.message_id;
+  if (tag === 'rx') {
+    await bot.editMessageText('Обнулення скасовано — усе лишилось як було.',
+      { chat_id: chatId, message_id: msgId }).catch(() => {});
+    return bot.answerCallbackQuery(cq.id, { text: 'Скасовано' });
+  }
+
+  const had = { orders: Object.keys(db.orders).length, users: Object.keys(db.users).length };
+  let keep = '';
+  try {
+    writeNow();                                   // спершу зберігаємо те, що є
+    keep = DB.replace(/\.json$/, '') + '.before-reset-' + Date.now() + '.json';
+    fs.copyFileSync(DB, keep);
+  } catch (e) {
+    console.error('Копія перед обнуленням не вдалась:', e.message);
+    await bot.editMessageText('Не вдалося зробити копію бази — нічого не стирав. ' + e.message,
+      { chat_id: chatId, message_id: msgId }).catch(() => {});
+    return bot.answerCallbackQuery(cq.id, { text: 'Скасовано' });
+  }
+
+  db.orders = {}; db.users = {}; db.tokens = {};
+  db.busy = {}; db.extra = {}; db.daySent = {}; db.stop = {};
+  db.counter = 1000;                              // наступне замовлення — № 1001
+  writeNow();
+  console.log('База обнулена власником. Копія:', keep);
+
+  await bot.editMessageText(
+    `🗑 <b>Готово.</b>\n\nСтерто замовлень: ${had.orders}, покупців: ${had.users}.\n` +
+    `Наступне замовлення — № 1001.\nКопія: <code>${esc(keep)}</code>`,
+    { chat_id: chatId, message_id: msgId, parse_mode: 'HTML' }).catch(() => {});
+  bot.answerCallbackQuery(cq.id, { text: 'База обнулена' });
+});
+
 bot.onText(/^\/(week|month)(?:@\w+)?/, (msg, m) => {
   const days = m[1] === 'week' ? 7 : 30;
   const shop = shopOfChat(msg.chat.id);
