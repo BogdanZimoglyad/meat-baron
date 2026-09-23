@@ -86,6 +86,20 @@ display:grid;place-items:center;min-height:100vh;text-align:center}a{color:#e04a
 `;
 };
 
+/* Заразом проставляємо версію прайсу в index.html: сторінка має тягнути
+   саме той catalog.js, з яким її зібрано. Без цього в телефоні
+   змішувались свіжа розмітка і старий прайс із кеша — і каталог не
+   малювався взагалі (власник, 23.09). */
+(function stampCatalogVersion() {
+  const v = require('crypto').createHash('md5')
+    .update(fs.readFileSync(path.join(root, 'catalog.js'))).digest('hex').slice(0, 8);
+  const file = path.join(root, 'index.html');
+  const was = fs.readFileSync(file, 'utf8');
+  const now = was.replace(/<script src="catalog\.js(\?v=[a-f0-9]+)?"><\/script>/,
+    `<script src="catalog.js?v=${v}"></script>`);
+  if (now !== was) { fs.writeFileSync(file, now); console.log(`Версію прайсу в index.html оновлено: ${v}`) }
+})();
+
 fs.mkdirSync(OUT, { recursive: true });
 /* Прибираємо старі: позицію могли перейменувати або зняти з продажу,
    і її сторінка вела б у нікуди. */

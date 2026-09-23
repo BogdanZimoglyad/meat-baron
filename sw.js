@@ -57,7 +57,12 @@ self.addEventListener('fetch', e => {
         }
         return r;
       });
-      const hit = await caches.match(e.request);
+      /* Прайс підключається з версією в адресі (catalog.js?v=…), тож
+         точного збігу в кеші може не бути — тоді беремо копію без
+         урахування «?v=»: без інтернету краще трохи старіший прайс,
+         ніж порожня сторінка. */
+      const hit = (await caches.match(e.request)) ||
+                  (await caches.match(e.request, { ignoreSearch: true }));
       if (!hit) {
         try { return await net }
         catch (err) { return (await caches.match('./index.html')) || Response.error() }
