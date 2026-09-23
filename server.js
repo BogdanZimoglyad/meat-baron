@@ -2084,9 +2084,18 @@ function sendSms(o, st) {
   // TODO: fetch('https://api.turbosms.ua/message/send.json', {...})
 }
 
+/* Коли з чату здається, що бот «не бачить» нової команди, перше
+   питання — чи Railway уже підняв новий код. Раніше перевірити це було
+   нічим, і ми гадали (23.09). Тепер сервер каже, з якого коміту
+   запущений і скільки працює. */
+const BUILD = (process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7);
+const STARTED = Date.now();
+
 app.get('/api/health', (req, res) => {
   res.json({
     ok: true,
+    build: BUILD || 'невідомо',
+    uptimeMin: Math.round((Date.now() - STARTED) / 60000),
     shops: SHOPS.map((name, i) => ({ i: i + 1, name, connected: !!db.shops[i] })),
     orders: Object.keys(db.orders).length,
     users: Object.keys(db.users).length,
