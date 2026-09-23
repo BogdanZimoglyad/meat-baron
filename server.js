@@ -1421,7 +1421,12 @@ app.post('/api/order', async (req, res) => {
     });
   } catch (e) {
     const detail = (e.response && e.response.body && e.response.body.description) || e.message;
-    console.error('Telegram error:', detail, '· замовлення не збережено:', JSON.stringify(o));
+    /* Раніше в лог летіло все замовлення цілком — разом з іменем,
+       телефоном і адресою доставки. Для розбору польотів досить суми,
+       складу й способу отримання; телефон — під маскою. */
+    console.error('Telegram error:', detail, '· замовлення не збережено:',
+      JSON.stringify({ shop: o.shopName, mode: o.mode, total: o.total, fry: o.fg,
+        tel: telLog(o.tel), lines: o.lines.map(l => `${l.name} ${l.g}`) }));
     /* Номер не повертаємо: поки чекали на Telegram, його міг зайняти
        наступний клієнт. Пропуск у нумерації нікому не заважає. */
     return res.status(500).json({ error: 'Не вдалося передати замовлення на точку', detail });
