@@ -195,6 +195,9 @@ const normTel = t => {
   else if (d.startsWith('0')) d = d.slice(1);
   return d.slice(0, 9);
 };
+/* У логи Railway телефон повністю не пишемо: доступ до логів має
+   не лише той, хто його дав нам (власник питав про захист 23.09). */
+const telLog = t => String(t || '').replace(/^(\+380\d{2})\d{3}(\d{2})(\d{2})$/, '$1***$2$3');
 const esc = t => String(t == null ? '' : t)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 /* 2.55 кг, а не 2.5: оператор має бачити точну вагу, крок на сайті — 50 г */
@@ -325,7 +328,7 @@ bot.on('contact', msg => {
   save();
   chatLogin.delete(msg.chat.id);
 
-  console.log('Вхід покупця:', u.tel);
+  console.log('Вхід покупця:', telLog(u.tel));
   /* Двома повідомленнями, бо Telegram не дає прибрати клавіатуру й
      одразу дати кнопку: remove_keyboard і inline_keyboard в одному
      reply_markup не живуть.
@@ -848,6 +851,64 @@ function statsText(shopList, days, title) {
     `\n<b>Що беруть найчастіше</b>\n${top}\n` +
     (hours ? `\n<b>Коли забирають</b>\n${hours}` : '');
 }
+
+/* ---------- щоденна копія бази ----------
+   Телефони, адреси й історія покупців живуть на одному диску Railway.
+   Скінчиться кредит, злетить сервіс — і все це зникне без сліду
+   (власник питав про захист 23.09). Тепер раз на добу після закриття
+   бот надсилає власнику файл бази в особисті: це і резервна копія, і
+   спосіб забрати дані з собою, якщо колись переїжджатимемо з Railway.
+   Файл маленький — кілька сотень кілобайтів навіть із сотнями
+   замовлень. Руками копію можна попросити командою /backup. */
+const BACKUP_HOUR = 21;                 // після закриття точки
+async function sendBackup(to, why) {
+  writeNow();                           // спершу скидаємо на диск усе, що в памʼяті
+  const day = kyivDate();
+  const size = (() => { try { return fs.statSync(DB).size } catch (e) { return 0 } })();
+  return bot.sendDocument(to, DB, {
+    caption: `🗄 Копія бази · ${day}${why ? ' · ' + why : ''}\n` +
+      `Замовлень: ${Object.keys(db.orders).length}, покупців: ${Object.keys(db.users).length}, ` +
+      `розмір: ${Math.max(1, Math.round(size / 1024))} КБ`
+  }, { filename: `meat-baron-${day}.json`, contentType: 'application/json' });
+}
+
+function backupSweep() {
+  if (!OWNER_ID) return;
+  const k = kyivNow();
+  if (k.getHours() < BACKUP_HOUR) return;
+  const day = kyivDate();
+  if (db.backupSent === day) return;
+  db.backupSent = day;
+  save();
+  sendBackup(OWNER_ID).catch(e => {
+    console.warn('Копія бази не надіслалась:', e.message);
+    db.backupSent = '';                 // спробуємо ще раз наступного такту
+    save();
+  });
+}
+setInterval(backupSweep, 10 * 60 * 1000).unref();
+
+bot.onText(/^\/backup(?:@\w+)?/, msg => {
+  if (!msg.chat || msg.chat.type !== 'private' || !isOwner(msg)) return;
+  sendBackup(msg.chat.id, 'на запит').catch(e =>
+    bot.sendMessage(msg.chat.id, 'Не вдалося надіслати копію: ' + e.message));
+});
+
+/* Що зараз коїться на сервері — власнику в особисті. Раніше це показував
+   відкритий /api/health, але кількість замовлень і покупців стороннім
+   знати ні до чого. */
+bot.onText(/^\/status(?:@\w+)?/, msg => {
+  if (!msg.chat || msg.chat.type !== 'private' || !isOwner(msg)) return;
+  const up = Math.round((Date.now() - STARTED) / 60000);
+  bot.sendMessage(msg.chat.id,
+    `⚙️ <b>Сервер</b>\n` +
+    `Код: <code>${BUILD || 'невідомо'}</code>, працює ${up < 60 ? up + ' хв' : Math.round(up / 60) + ' год'}\n` +
+    `Замовлень у базі: <b>${Object.keys(db.orders).length}</b>, покупців: <b>${Object.keys(db.users).length}</b>\n` +
+    `Сховище: ${process.env.DATA_DIR ? 'постійний диск' : '⚠️ тимчасове'}\n\n` +
+    SHOPS.map((s, i) => `${db.shops[i] ? '✅' : '⚠️'} ${esc(s)}`).join('\n') +
+    `\n\nКопія бази: /backup`,
+    { parse_mode: 'HTML' });
+});
 
 /* ---------- обнулення бази перед запуском ----------
    Поки сайт не в роботі, у базі лежать замовлення, які власник із
@@ -2017,7 +2078,7 @@ function notifyCancel(o, why) {
   const tel = (CATALOG_SHOPS[o.shop] || [])[1] || '';
   const text = `✖️ Замовлення № ${o.no} скасовано.\nПричина: ${why}` +
     (tel ? `\nЯкщо це непорозуміння — зателефонуйте: ${tel}` : '');
-  if (!u.tgId) return console.log('[SMS →', o.tel + ']', text.replace(/\n/g, ' '));
+  if (!u.tgId) return console.log('[SMS →', telLog(o.tel) + ']', text.replace(/\n/g, ' '));
   bot.sendMessage(u.tgId, text, {
     reply_markup: { inline_keyboard: [[{ text: 'Відкрити замовлення', url: SITE + '?order=' + o.no }]] }
   }).catch(e => console.warn('Скасування № ' + o.no + ' не дійшло до клієнта:', e.message));
@@ -2095,7 +2156,7 @@ function sendSms(o, st) {
   const text = o.mode === 'pickup'
     ? `Мясний Барон: замовлення №${o.no} готове. Чекаємо за адресою ${o.shopName}.`
     : `Мясний Барон: замовлення №${o.no} готове, курєр виїжджає.`;
-  console.log('[SMS →', o.tel + ']', text);
+  console.log('[SMS →', telLog(o.tel) + ']', text);
   // TODO: fetch('https://api.turbosms.ua/message/send.json', {...})
 }
 
@@ -2106,17 +2167,13 @@ function sendSms(o, st) {
 const BUILD = (process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7);
 const STARTED = Date.now();
 
+/* Живий чи ні — і більше нічого. Раніше звідси було видно, скільки в
+   нас замовлень, покупців і які точки підключені: стороннім ця
+   статистика ні до чого (власник питав про захист 23.09). Повна
+   картина тепер у боті командою /status, номер збірки лишаємо —
+   він потрібен, щоб перевіряти, чи доїхав викат. */
 app.get('/api/health', (req, res) => {
-  res.json({
-    ok: true,
-    build: BUILD || 'невідомо',
-    uptimeMin: Math.round((Date.now() - STARTED) / 60000),
-    shops: SHOPS.map((name, i) => ({ i: i + 1, name, connected: !!db.shops[i] })),
-    orders: Object.keys(db.orders).length,
-    users: Object.keys(db.users).length,
-    login: BOT_NAME ? 'через @' + BOT_NAME : 'імʼя бота ще не відоме',
-    storage: process.env.DATA_DIR ? 'постійне (' + process.env.DATA_DIR + ')' : 'тимчасове — дані зникнуть при перезапуску'
-  });
+  res.json({ ok: true, build: BUILD || 'невідомо' });
 });
 
 app.listen(PORT, () => console.log('Сервер працює на порту', PORT));
