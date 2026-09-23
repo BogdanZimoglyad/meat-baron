@@ -755,6 +755,10 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .lnk-copy{font-size:12.5px;color:var(--ember-hot);text-decoration:underline;padding:4px}
 /* посилання всередині підказки: «Увійти через Telegram», «Це не я» */
 .lnk{background:none;border:none;padding:0;font:inherit;color:var(--ember-hot);text-decoration:underline;cursor:pointer}
+/* «Очистити кошик» — непримітна, поки не спитали вдруге */
+.clear-cart{display:block;margin:14px auto 4px;font-size:13px;color:var(--smoke);text-decoration:none;padding:8px 12px}
+.clear-cart:hover{color:var(--bone)}
+.clear-cart.sure{color:var(--ember-hot);font-weight:500}
 
 :focus-visible{outline:2px solid var(--ember-hot);outline-offset:2px}
 .up-scroll{max-height:52vh;max-height:52dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;margin:0 -4px 14px;padding:0 4px;
@@ -2256,11 +2260,29 @@ function openCart(){
   <div class="tot"><span style="color:var(--smoke);font-size:13px">Разом<small class="tot-sub" id="cartSub">${cartSub()}</small></span><b id="cartTot">${money(cartTotal())}</b></div>
   <p class="weight-note">${WEIGHT_NOTE}</p>
   <button class="cta" id="toCheckout">Оформити замовлення</button>
-  <button class="cta ghost" onclick="close_()">Додати ще</button>`);
+  <button class="cta ghost" onclick="close_()">Додати ще</button>
+  ${/* Кошик збирають довго, тож стирати його одним промахом не можна:
+       перший дотик лише перепитує, другий чистить (власник, 23.09) */''}
+  <button class="lnk clear-cart" id="clearCart">Очистити кошик</button>`);
   paintLines();
   const fa=sIn.querySelector('[data-fall]');
   if(fa) fa.onclick=()=>{toggleFryAll(); paintBar(); openCart()};
   bindUpsellGrid();
+  const cc=sIn.querySelector('#clearCart');
+  if(cc) cc.onclick=()=>{
+    if(cc.dataset.sure!=='1'){
+      cc.dataset.sure='1';
+      cc.textContent='Точно очистити?';
+      cc.classList.add('sure');
+      /* Передумав — за кілька секунд кнопка стає звичайною сама */
+      clearTimeout(cc._t);
+      cc._t=setTimeout(()=>{ if(cc.isConnected){ cc.dataset.sure=''; cc.textContent='Очистити кошик'; cc.classList.remove('sure') } },4000);
+      return;
+    }
+    cart=[]; orderNote='';
+    paintBar();          // сам сховає нижню смужку й поверне допродаж
+    openCart();          // покаже порожній кошик із «До каталогу»
+  };
   const nt=sIn.querySelector('#note');
   if(nt) nt.oninput=()=>{orderNote=nt.value;saveCart()};
   /* Коментар знімаємо до допродажу: екран «Що до мʼяса?» перемалює
