@@ -76,6 +76,15 @@ html::before{
     opacity:.35;mix-blend-mode:screen;
     animation:smoke-b 52s ease-in-out infinite alternate}
 }
+/* На телефоні дим не прибиваємо до екрана, а пускаємо разом зі
+   сторінкою. Нерухомий шар на весь екран Safari перемальовує щоразу,
+   коли сторінка рухається чи ховається рядок адреси, — саме це власник
+   і побачив як підвисання середини екрана (23.09). Прокручуваний шар
+   малюється один раз. Видно його там, де й потрібно: за шапкою й
+   заголовком; нижче картки й так непрозорі. */
+@media(max-width:899px){
+  html::before{position:absolute;height:min(1400px,180vh);will-change:auto}
+}
 @keyframes smoke-a{
   0%{transform:translate3d(-4%,1.5%,0) scale(1)}
   50%{transform:translate3d(0,-2%,0) scale(1.07)}
@@ -3611,7 +3620,13 @@ if('serviceWorker' in navigator){
 (function(){
   const vv=window.visualViewport; if(!vv) return;
   const set=()=>{
-    const gap=Math.round(innerHeight-vv.height-vv.offsetTop);
+    /* Саме clientHeight, а не innerHeight: у Safari на айфоні innerHeight
+       уже дорівнює видимій частині, тож різниця завжди виходила нулем і
+       кнопки не піднімались (перша спроба, 23.09). clientHeight — це вся
+       смуга, на яку браузер кладе прибиті до низу елементи, включно з
+       тим, що ховається під панеллю. */
+    const layout=document.documentElement.clientHeight||innerHeight;
+    const gap=Math.round(layout-vv.height-vv.offsetTop);
     /* Велика різниця — це клавіатура, а не панель: тоді нічого не
        піднімаємо, інакше кнопки стрибали б через пів екрана. */
     document.documentElement.style.setProperty('--vv-bottom',
