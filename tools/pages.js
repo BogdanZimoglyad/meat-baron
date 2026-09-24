@@ -46,7 +46,7 @@ const page = it => {
   const photo = PHOTO[it.grp + '/' + it.name] || PHOTO[it.name];
   const img = photo ? `${SITE}/photo/${photo}` : `${SITE}/logo-square.png`;
   const desc = DESC[it.grp + '/' + it.name] || DESC[it.name] || '';
-  const title = `${it.name} — ${priceLine(it)}`;
+  const title = `${CAT.nameOf(it)} — ${priceLine(it)}`;
   const text = (desc || 'Свіже мясо, ковбаски власного виробництва та мясо зі смокеру.').slice(0, 300);
   const to = `/?item=${it.id}`;
   return `<!doctype html>
@@ -78,7 +78,7 @@ display:grid;place-items:center;min-height:100vh;text-align:center}a{color:#e04a
 </head>
 <body>
 <div>
-  <p>${esc(it.name)} — ${esc(priceLine(it))}</p>
+  <p>${esc(CAT.nameOf(it))} — ${esc(priceLine(it))}</p>
   <p><a href="${to}">Відкрити в каталозі «Мʼясного Барона»</a></p>
 </div>
 </body>

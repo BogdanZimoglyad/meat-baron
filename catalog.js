@@ -176,10 +176,22 @@ const priceOf=(it,v)=>{
   const row=vs&&vs.list.find(x=>x[0]===v);
   return row&&row[2]!=null? row[2] : it.price;
 };
+/* Як позиція зветься для людини. Потрібне там, де назва йде без групи:
+   у кошику, в повідомленні точці, в пошуку. «Люля кебаб» у нас двоє —
+   курячий і баранячий, і оператор бачив два однакові рядки (власник,
+   23.09). Номер позиції рахується від `name`, тож саму назву в прайсі
+   не чіпаємо: інакше злетіли б обране, посилання на товар і «Повторити».
+   Ключ — «Група/Назва». */
+const LABEL={
+ 'Курка/Люля кебаб':'Люля кебаб курячий',
+ 'Баранина/Люля кебаб':'Люля кебаб з баранини'
+};
+const nameOf=l=>LABEL[l.grp+'/'+l.name]||l.name;
+
 /* Назва рядка кошика: «Соус «Ткемалі»» для різновиду, інакше назва товару */
 const lineTitle=l=>{
   const vs=l.v&&variantsOf(l);
-  return vs? `${vs.label} «${l.v}»` : l.name;
+  return vs? `${vs.label} «${l.v}»` : nameOf(l);
 };
 const servingOf=it=>(countUnitOf(it)||{}).g||0;
 /* Одне джерело правди: і підказка в картці товару, і підрахунок ваги */
@@ -197,5 +209,5 @@ function fryableG(l){
 if(typeof module!=='undefined'&&module.exports){
   module.exports={P,ITEMS,itemId,CATS_OFF,SHOPS_ALL,SHOPS,FRY_RATE,MIN_G,PACK_G,PACK_SIZE,packOf,packLabel,kop,lineSum,
                   NO_FRY,READY_MADE,PORTION,portionOf,COUNT_UNIT,countUnitOf,servingOf,
-                  VARIANTS,variantsOf,priceOf,lineTitle,canFry,fryableG,SALE,saleOf};
+                  VARIANTS,variantsOf,priceOf,lineTitle,canFry,fryableG,SALE,saleOf,LABEL,nameOf};
 }

@@ -25,7 +25,7 @@ const crypto = require('crypto');
 /* Прайс, правила рахунку і список точок — той самий файл, що підключає
    сайт. Сервер не вірить ні сумі, ні назві точки з браузера. */
 const CATALOG = require('./catalog.js');
-const { FRY_RATE, MIN_G, kop, lineSum, fryableG, canFry, countUnitOf, variantsOf, priceOf, lineTitle, packLabel, portionOf } = CATALOG;
+const { FRY_RATE, MIN_G, kop, lineSum, fryableG, canFry, countUnitOf, variantsOf, priceOf, lineTitle, packLabel, portionOf, nameOf } = CATALOG;
 const CATALOG_SHOPS = CATALOG.SHOPS;
 const byId = new Map(CATALOG.ITEMS.map(it => [it.id, it]));
 
@@ -499,7 +499,7 @@ const shopOfChat = chatId => {
 };
 function stopText(shop) {
   const off = stopOf(shop), ids = Object.keys(off);
-  const names = ids.map(id => (byId.get(id) || {}).name).filter(Boolean);
+  const names = ids.map(id => { const it = byId.get(id); return it && nameOf(it) }).filter(Boolean);
   return `<b>Чого сьогодні немає · ${esc(SHOPS[shop])}</b>\n` +
     (names.length ? names.map(n => `🚫 ${esc(n)}`).join('\n') + `\n\nПовертається саме о ${OPEN_HOUR}:00.`
                   : 'Усе в наявності.') +
@@ -508,7 +508,7 @@ function stopText(shop) {
 const stopKb = shop => {
   const rows = Object.keys(stopOf(shop))
     .map(id => byId.get(id)).filter(Boolean)
-    .map(it => ([{ text: `✅ Є: ${it.name}`, callback_data: `sy:${shop}:${it.id}` }]));
+    .map(it => ([{ text: `✅ Є: ${nameOf(it)}`, callback_data: `sy:${shop}:${it.id}` }]));
   return { inline_keyboard: rows };
 };
 
@@ -529,8 +529,8 @@ bot.onText(/^\/stop(?:@\w+)?(?:\s+(.+))?$/, (msg, m) => {
   bot.sendMessage(msg.chat.id, `Що саме закінчилось? Позиція зникне з сайту до ${OPEN_HOUR}:00.`, {
     reply_markup: {
       inline_keyboard: found.map(it => ([off[it.id]
-        ? { text: `✅ Є: ${it.grp} · ${it.name}`, callback_data: `sy:${shop}:${it.id}` }
-        : { text: `🚫 Немає: ${it.grp} · ${it.name}`, callback_data: `st:${shop}:${it.id}` }]))
+        ? { text: `✅ Є: ${it.grp} · ${nameOf(it)}`, callback_data: `sy:${shop}:${it.id}` }
+        : { text: `🚫 Немає: ${it.grp} · ${nameOf(it)}`, callback_data: `st:${shop}:${it.id}` }]))
     }
   });
 });
@@ -837,7 +837,7 @@ function statsText(shopList, days, title) {
   const head = title || (shopList.length === 1 ? SHOPS[shopList[0]] : 'Разом по мережі');
   if (!cur.n) return `📈 <b>${esc(head)}</b> · ${days} днів\nЗамовлень із сайту не було.`;
   const top = Object.entries(cur.items).sort((a, b) => b[1] - a[1]).slice(0, 5)
-    .map(([id, n], k) => `${k + 1}. ${esc((byId.get(id) || {}).name || id)} — ${n}`).join('\n');
+    .map(([id, n], k) => { const it = byId.get(id); return `${k + 1}. ${esc(it ? nameOf(it) : id)} — ${n}` }).join('\n');
   const hours = Object.entries(cur.hours).sort((a, b) => b[1] - a[1]).slice(0, 3)
     .map(([h, n]) => `${String(h).padStart(2, '0')}:00 — ${n}`).join(' · ');
   return `📈 <b>${esc(head)}</b> · останні ${days} днів\n` +
@@ -1359,7 +1359,7 @@ app.post('/api/order', async (req, res) => {
   /* Позицію могли зняти, поки людина набирала кошик. Кажемо, чого саме
      немає: «замовлення не прийнято» без пояснення — найгірше, що можна
      показати людині з повним кошиком. */
-  const gone = lines.filter(l => isStopped(shopIndex, l.id)).map(l => l.name);
+  const gone = lines.filter(l => isStopped(shopIndex, l.id)).map(l => nameOf(l));
   if (gone.length) {
     return res.status(409).json({
       error: `Сьогодні вже немає: ${gone.join(', ')}. Приберіть з кошика — решту приймемо.`,

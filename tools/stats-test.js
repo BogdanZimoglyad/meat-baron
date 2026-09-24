@@ -19,6 +19,7 @@ const byId = new Map(CAT.ITEMS.map(i => [i.id, i]));
 const id = name => CAT.ITEMS.find(i => i.name === name).id;
 const env = {
   byId,
+  nameOf: CAT.nameOf,          // підпис позиції: «Люля кебаб курячий» замість двох однакових
   SHOPS: ['Свободи 52', 'Шевченка 142а'],
   CANCELED: 'canceled',
   esc: s => String(s),
