@@ -454,42 +454,64 @@ bot.on('callback_query', async cq => {
   ans('Дякуємо!');
 });
 
+/* ---------- один шлях для мангала й стоп-листа ----------
+   Те саме правило, що зі статусами й сумами: кнопки в чаті й екрани в
+   панелі на планшеті кличуть ці дві функції, а не повторюють їхню
+   логіку в себе. Інакше точка бачила б у боті одне, а в панелі інше.
+   Повертають {ok:true, note:'що сказати оператору'} або {err:'чому ні'}. */
+function applyGrill(shop, act, arg) {
+  db.busy = db.busy || {};
+  db.extra = db.extra || {};
+  if (act === 'add') {
+    const slot = hourFloor(Number(arg) || 0);
+    if (!slot || slot < hourFloor(Date.now())) {
+      return { err: 'Ця година вже минула — відкрийте мангал ще раз' };
+    }
+    const e = db.extra[shop] || (db.extra[shop] = {});
+    e[slot] = (e[slot] || 0) + ADD_STEP_G;
+    /* Надбавка означає «беремо ще», тож знімаємо і загальне блокування */
+    if (db.busy[shop] && slot < db.busy[shop]) db.busy[shop] = slot;
+    save();
+    return { ok: true, note: `+${wLabel(ADD_STEP_G)} на ${hhmm(slot)}` };
+  }
+  if (act === 'noadd') { db.extra[shop] = {}; save(); return { ok: true, note: 'Надбавки прибрано' } }
+  if (act === 'free') { db.busy[shop] = 0; save(); return { ok: true, note: 'Мангал знову приймає' } }
+  if (act === 'day') {
+    db.busy[shop] = Date.now() + tillCloseMs();
+    save();
+    return { ok: true, note: 'Закрито до кінця дня' };
+  }
+  /* решта — «зайнятий на N хвилин»; межа щоб випадкове число не закрило мангал назавжди */
+  const min = Number(act) || 0;
+  if (!(min > 0 && min <= 600)) return { err: 'Невідома дія' };
+  db.busy[shop] = Date.now() + min * 60000;
+  save();
+  return { ok: true, note: `Закрито до ${hhmm(db.busy[shop])}` };
+}
+
+function applyStock(shop, id, off) {
+  const it = byId.get(id);
+  if (!it) return { err: 'Немає такої позиції' };
+  db.stop = db.stop || {};
+  const list = db.stop[shop] || (db.stop[shop] = {});
+  /* Позиція повертається сама на відкритті — щоб ніхто не забув її ввімкнути */
+  if (off) list[id] = nextOpenMs(); else delete list[id];
+  save();
+  return { ok: true, it,
+    note: off ? `${nameOf(it)}: прибрали з сайту до ${OPEN_HOUR}:00` : `${nameOf(it)}: знову в продажу` };
+}
+
 bot.on('callback_query', async cq => {
   const [tag, iStr, val, arg] = (cq.data || '').split(':');
   if (tag !== 'g') return;
   const i = Number(iStr), chatId = cq.message && cq.message.chat.id;
   /* Тільки зі свого чату: чужа точка не має чіпати мангал сусідам */
   if (db.shops[i] !== chatId) return bot.answerCallbackQuery(cq.id, { text: 'Це інша точка' });
-  db.busy = db.busy || {};
-  db.extra = db.extra || {};
-  let note;
-  if (val === 'add') {
-    const slot = hourFloor(Number(arg) || 0);
-    if (!slot || slot < hourFloor(Date.now())) {
-      return bot.answerCallbackQuery(cq.id, { text: 'Ця година вже минула — відкрийте /mangal ще раз' });
-    }
-    const e = db.extra[i] || (db.extra[i] = {});
-    e[slot] = (e[slot] || 0) + ADD_STEP_G;
-    /* Надбавка означає «беремо ще», тож знімаємо і загальне блокування */
-    if (db.busy[i] && slot < db.busy[i]) db.busy[i] = slot;
-    note = `+${wLabel(ADD_STEP_G)} на ${hhmm(slot)}`;
-  } else if (val === 'noadd') {
-    db.extra[i] = {};
-    note = 'Надбавки прибрано';
-  } else if (val === 'free') {
-    db.busy[i] = 0;
-    note = 'Мангал знову приймає';
-  } else if (val === 'day') {
-    db.busy[i] = Date.now() + tillCloseMs();
-    note = 'Закрито до кінця дня';
-  } else {
-    db.busy[i] = Date.now() + (Number(val) || 60) * 60000;
-    note = `Закрито до ${hhmm(db.busy[i])}`;
-  }
-  save();
+  const r = applyGrill(i, val, arg);
+  if (r.err) return bot.answerCallbackQuery(cq.id, { text: r.err });
   await bot.editMessageText(busyText(i), { chat_id: chatId, message_id: cq.message.message_id,
     parse_mode: 'HTML', reply_markup: busyKb(i) }).catch(() => {});
-  bot.answerCallbackQuery(cq.id, { text: note });
+  bot.answerCallbackQuery(cq.id, { text: r.note });
 });
 
 /* ---------- /stop: чого сьогодні немає ---------- */
@@ -541,20 +563,13 @@ bot.on('callback_query', async cq => {
   const shop = Number(shopStr), chatId = cq.message && cq.message.chat.id;
   /* Тільки зі свого чату: чужа точка не має знімати товар сусідам */
   if (db.shops[shop] !== chatId) return bot.answerCallbackQuery(cq.id, { text: 'Це інша точка' });
-  const it = byId.get(id);
-  if (!it) return bot.answerCallbackQuery(cq.id, { text: 'Немає такої позиції' });
-
-  db.stop = db.stop || {};
-  const list = db.stop[shop] || (db.stop[shop] = {});
-  if (tag === 'st') list[id] = nextOpenMs(); else delete list[id];
-  save();
+  const r = applyStock(shop, id, tag === 'st');
+  if (r.err) return bot.answerCallbackQuery(cq.id, { text: r.err });
 
   await bot.editMessageText(stopText(shop),
     { chat_id: chatId, message_id: cq.message.message_id, parse_mode: 'HTML', reply_markup: stopKb(shop) })
     .catch(() => {});
-  bot.answerCallbackQuery(cq.id, {
-    text: tag === 'st' ? `${it.name}: прибрали з сайту до ${OPEN_HOUR}:00` : `${it.name}: знову в продажу`
-  });
+  bot.answerCallbackQuery(cq.id, { text: r.note });
 });
 
 /* ---------- нагадування про нове замовлення ----------
@@ -910,6 +925,58 @@ app.post('/api/op/order/:no/adjust', async (req, res) => {
   const r = await applyAdjust(o, kind, amount, note, 'панель · ' + SHOPS[a.shop]);
   if (r.err) return res.status(409).json({ error: r.err, order: opOrder(o) });
   res.json({ ok: true, order: opOrder(o) });
+});
+
+/* ---------- стоп-лист і мангал у панелі ----------
+   У боті це /stop і /mangal. На планшеті оператору зручніше екраном:
+   пошук по прайсу під палець і завантаження годин одразу видно.
+   Стан обох екранів віддаємо однією відповіддю — панель і так опитує
+   сервер по колу, зайвий запит їй ні до чого. */
+const opShopState = shop => {
+  /* Показуємо лише години, коли точка ще працює: після закриття мангал
+     нічого не візьме, а зайві рядки на планшеті тільки заважають. */
+  const closeAt = Date.now() + tillCloseMs();
+  const slots = nextSlots(5).filter(ms => ms < closeAt);
+  return {
+    /* Час і година відкриття їдуть у кожній відповіді: планшет може стояти
+       з будь-яким годинником, а «закрито до 19:40» рахується від нашого. */
+    now: Date.now(), openHour: OPEN_HOUR,
+    stop: Object.keys(stopOf(shop)),
+    grill: {
+      cap: GRILL_CAP_G, step: ADD_STEP_G,
+      busyUntil: grillBusyUntil(shop),
+      extra: extraOf(shop),
+      load: grillLoad(shop),
+      slots,
+      /* Панель малює час київський, а планшет може стояти з будь-яким —
+         тож години підписує сервер, а не браузер. */
+      labels: slots.map(hhmm)
+    }
+  };
+};
+
+app.get('/api/op/shop', (req, res) => {
+  const a = panelOf(req);
+  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  res.json({ ok: true, ...opShopState(a.shop) });
+});
+
+app.post('/api/op/stock', (req, res) => {
+  const a = panelOf(req);
+  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  const b = req.body || {};
+  const r = applyStock(a.shop, String(b.id || ''), !!b.off);
+  if (r.err) return res.status(400).json({ error: r.err });
+  res.json({ ok: true, note: r.note, ...opShopState(a.shop) });
+});
+
+app.post('/api/op/grill', (req, res) => {
+  const a = panelOf(req);
+  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  const b = req.body || {};
+  const r = applyGrill(a.shop, String(b.act || ''), b.slot);
+  if (r.err) return res.status(400).json({ error: r.err });
+  res.json({ ok: true, note: r.note, ...opShopState(a.shop) });
 });
 
 app.post('/api/op/order/:no/status', async (req, res) => {

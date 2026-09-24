@@ -84,6 +84,43 @@ button{font:inherit;cursor:pointer;border:none}
 .form .ok{background:var(--ember);color:#fff;font-weight:600}
 .form .no{background:var(--coal);border:1px solid var(--line-2);color:var(--bone)}
 .form .hint{font-size:12.5px;color:var(--smoke)}
+/* перемикач екранів: замовлення / стоп-лист / мангал */
+.tabs{display:flex;gap:6px;width:100%;order:3}
+.tabs button{flex:1;min-height:42px;border-radius:10px;background:var(--coal);
+  border:1px solid var(--line);color:var(--smoke);font-size:15px}
+.tabs button.on{background:var(--ember);border-color:var(--ember);color:#fff;font-weight:600}
+
+/* стоп-лист і мангал */
+.screen{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.screen h2{font-size:15px;color:var(--smoke);font-weight:500;margin:6px 0 0}
+.search{width:100%;min-height:52px;border-radius:12px;background:var(--coal);
+  border:1px solid var(--line-2);color:var(--bone);font-size:17px;padding:0 14px}
+.srow{display:flex;align-items:center;gap:10px;background:var(--coal);
+  border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.srow span{flex:1;min-width:0;font-size:15px}
+.srow button{min-height:42px;min-width:118px;border-radius:10px;background:var(--char);
+  border:1px solid var(--line-2);color:var(--bone);font-size:14px;padding:0 12px}
+.srow .danger{color:var(--ember-hot);border-color:rgba(224,74,60,.4)}
+.srow .back{color:var(--ok);border-color:rgba(123,168,79,.45)}
+.hint2{color:var(--smoke);font-size:14px;padding:4px 2px}
+.state{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:15px}
+.state.shut{border-color:rgba(224,74,60,.5);color:var(--ember-hot)}
+.gslot{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:10px 12px;
+  display:flex;flex-direction:column;gap:8px}
+.gtop{display:flex;align-items:baseline;gap:10px;font-size:15px}
+.gtop b{font-size:17px}
+.gtop span{margin-left:auto;color:var(--smoke);font-size:14px}
+.gtop .full{color:var(--ember-hot)}
+.bar{height:8px;border-radius:999px;background:var(--char);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ok)}
+.bar i.hot{background:var(--ember)}
+.gslot button{min-height:40px;border-radius:10px;background:var(--char);
+  border:1px solid var(--line-2);color:var(--bone);font-size:14px}
+.gacts{display:flex;gap:8px;flex-wrap:wrap}
+.gacts button{flex:1;min-width:150px;min-height:48px;border-radius:12px;background:var(--coal);
+  border:1px solid var(--line-2);color:var(--bone);font-size:15px}
+.gacts .free{color:var(--ok);border-color:rgba(123,168,79,.45)}
+.gacts .shut{color:var(--ember-hot);border-color:rgba(224,74,60,.4)}
 .empty{color:var(--smoke);text-align:center;padding:60px 20px;font-size:17px}
 .enter{max-width:460px;margin:60px auto;padding:22px;background:var(--coal);
   border:1px solid var(--line);border-radius:14px;text-align:center}
@@ -105,12 +142,20 @@ button{font:inherit;cursor:pointer;border:none}
     <span class="pill hot" id="cNew" hidden>нових: 0</span>
     <span class="pill" id="cWork">у роботі: 0</span>
   </div>
+  <nav class="tabs" id="tabs">
+    <button data-view="orders" class="on">Замовлення</button>
+    <button data-view="stock">🚫 Стоп-лист</button>
+    <button data-view="grill">🔥 Мангал</button>
+  </nav>
 </div>
 
 <div class="wrap" id="wrap">
   <p class="empty">Завантажую…</p>
 </div>
 
+<!-- Прайс для стоп-листа беремо звідти ж, звідки його бере сайт і сервер:
+     другої копії назв і номерів позицій у панелі немає. -->
+<script src="catalog.js?v=b2000c4c"></script>
 <script>
 /* ---------- доступ ----------
    Код приходить у чат точки командою /panel і живе в адресі після
@@ -145,6 +190,7 @@ function askEnter(msg){
     бот дасть посилання. Відкрийте його тут один раз, далі просто заходьте на цю сторінку.</p>
   </div>`;
   $('net').textContent='немає доступу';
+  $('tabs').hidden=true;                 // без ключа перемикати нічого
 }
 
 /* ---------- малюємо ---------- */
@@ -157,7 +203,13 @@ const nextOf=o=> o.status==='ready'
 /* Поки відкрита форма — опитування сервера стоїть: перемальовка стерла б
    набране оператором просто під пальцями. */
 let prevNew=0, lastOk=0, form=null;
+/* Три екрани в одній вкладці: замовлення, стоп-лист, мангал. Лічильники
+   в шапці живуть завжди — оператор має бачити нове замовлення, навіть
+   поки прибирає позицію зі стоп-листа. */
+let view='orders', SHOP=null, stockQ='', DATA=null;
+
 function draw(d){
+  DATA=d;
   shopName=d.shopName||shopName;
   $('shop').textContent=shopName;
   const now=d.now||Date.now();
@@ -170,6 +222,7 @@ function draw(d){
   if(fresh>prevNew) beep();          // новий заказ, поки оператор у касовій програмі
   prevNew=fresh;
 
+  if(view!=='orders') return;        // лічильники оновили, а екран зараз інший
   if(!d.orders.length){
     $('wrap').innerHTML='<p class="empty">Замовлень зараз немає.</p>';
     return;
@@ -267,6 +320,141 @@ function formHtml(o,kind){
   </div>`;
 }
 
+/* ---------- стоп-лист ----------
+   Назви й номери позицій беремо з catalog.js — того самого файлу, що
+   тримає прайс сайту й сервера. Через це «Люля кебаб» у панелі
+   підписаний так само, як у боті: курячий і з баранини. */
+const fold=s=>String(s||'').toLowerCase().replace(/[ʼ'’`]/g,'');
+const priceList=()=>(typeof ITEMS==='undefined'?[]:ITEMS);
+const title=it=>(typeof nameOf==='function'?nameOf(it):it.name);
+
+function drawStock(){
+  /* Поле пошуку створюємо один раз: якби воно перемальовувалось разом
+     зі списком, набране зникало б на кожному оновленні. */
+  if(!$('stockBox')){
+    $('wrap').innerHTML=`<div class="screen">
+      <input class="search" id="sq" type="text" autocomplete="off" autocorrect="off"
+             placeholder="Знайти позицію: ошийок, крильця…">
+      <div id="stockBox"><p class="empty">Завантажую…</p></div>
+    </div>`;
+    $('sq').value=stockQ;
+    $('sq').oninput=()=>{ stockQ=$('sq').value; paintStock() };
+  }
+  paintStock();
+}
+
+function paintStock(){
+  const box=$('stockBox');
+  if(!box) return;
+  if(!SHOP) return;
+  const off=new Set(SHOP.stop||[]);
+  const q=fold(stockQ).trim();
+  const gone=priceList().filter(i=>off.has(i.id));
+  const hits=q.length>=2 ? priceList().filter(i=>fold(i.grp+' '+i.name).includes(q)) : [];
+  /* Те, що вже знято, лишається лише у верхньому списку — інакше та сама
+     позиція стояла б на екрані двічі й оператор не знав би, яку тиснути. */
+  const found=hits.filter(i=>!off.has(i.id)).slice(0,30);
+  const row=(it,isOff)=>`<div class="srow">
+      <span>${esc(it.grp)} · ${esc(title(it))}</span>
+      <button data-stock="${esc(it.id)}" data-off="${isOff?0:1}" class="${isOff?'back':'danger'}">
+        ${isOff?'✅ Є':'🚫 Немає'}</button>
+    </div>`;
+  box.innerHTML=
+    (gone.length
+      ? `<h2>Сьогодні немає — на сайті не показуємо${SHOP.openHour?` (повернуться о ${SHOP.openHour}:00)`:''}</h2>`
+        +gone.map(i=>row(i,true)).join('')
+      : '<p class="hint2">Зараз усе в наявності.</p>')
+   +(q.length>=2
+      ? (found.length ? '<h2>Знайдено в прайсі</h2>'+found.map(i=>row(i,false)).join('')
+       : hits.length  ? '<p class="hint2">Усе знайдене вже в списку вище.</p>'
+       : '<p class="hint2">Нічого схожого не знайшли. Спробуйте коротше: «ошийок».</p>')
+      : '<p class="hint2">Наберіть хоча б дві літери, щоб знайти позицію.</p>');
+  box.querySelectorAll('[data-stock]').forEach(b=>b.onclick=()=>stockAct(b));
+}
+
+async function stockAct(btn){
+  btn.disabled=true; const was=btn.textContent; btn.textContent='…';
+  const r=await post('/api/op/stock',{id:btn.dataset.stock,off:btn.dataset.off==='1'});
+  if(!r){ btn.disabled=false; btn.textContent=was; return }
+  paintStock();
+}
+
+/* ---------- мангал ----------
+   Те саме, що /mangal у боті: скільки на кожну годину вже записано,
+   можна закрити найближчі години або, навпаки, додати кілограмів. */
+function drawGrill(){
+  if(!SHOP) return $('wrap').innerHTML='<p class="empty">Завантажую…</p>';
+  const g=SHOP.grill, now=SHOP.now||Date.now();
+  const shut=g.busyUntil>now;
+  const slots=g.slots.map((ms,i)=>{
+    const cap=g.cap+(g.extra[ms]||0), used=g.load[ms]||0;
+    const pct=cap?Math.min(100,Math.round(used/cap*100)):100;
+    const full=used>=cap;
+    return `<div class="gslot">
+      <div class="gtop"><b>${esc(g.labels[i])}</b>
+        <span class="${full?'full':''}">${wLabel(used)} з ${wLabel(cap)}${full?' · забито':''}${
+          g.extra[ms]?` · +${wLabel(g.extra[ms])} від вас`:''}</span></div>
+      <div class="bar"><i class="${full?'hot':''}" style="width:${pct}%"></i></div>
+      <button data-grill="add" data-slot="${ms}">+${wLabel(g.step)} на ${esc(g.labels[i])}</button>
+    </div>`;
+  }).join('')
+  || '<p class="hint2">До закриття годин уже не лишилось — мангал на сьогодні все.</p>';
+  $('wrap').innerHTML=`<div class="screen">
+    <div class="state ${shut?'shut':''}">${shut
+      ? `Для сайту мангал закритий до <b>${hhmm(g.busyUntil)}</b>.`
+      : 'Мангал приймає замовлення з сайту.'}
+      <div class="hint2">Сайту віддано ${wLabel(g.cap)} на годину — решту тримаємо на тих,
+      хто прийшов чи подзвонив.</div></div>
+    ${slots}
+    <div class="gacts">
+      <button class="shut" data-grill="60">🔥 Зайнятий на годину</button>
+      <button class="shut" data-grill="120">🔥 На дві</button>
+      <button class="shut" data-grill="day">🔥 До кінця дня</button>
+      <button class="free" data-grill="free">✅ Вільний, приймаємо</button>
+      <button data-grill="noadd">♻️ Прибрати надбавки</button>
+    </div>
+  </div>`;
+  $('wrap').querySelectorAll('[data-grill]').forEach(b=>b.onclick=()=>grillAct(b));
+}
+
+async function grillAct(btn){
+  btn.disabled=true; const was=btn.textContent; btn.textContent='…';
+  const r=await post('/api/op/grill',{act:btn.dataset.grill,slot:Number(btn.dataset.slot)||0});
+  if(!r){ btn.disabled=false; btn.textContent=was; return }
+  drawGrill();
+}
+
+/* Один шлях для обох екранів: відправили, показали помилку, якщо є,
+   і поклали свіжий стан точки, який сервер віддає у відповіді. */
+async function post(path,body){
+  try{
+    const r=await fetch(API+path,{method:'POST',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+      body:JSON.stringify(body)});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){ alert(d.error||'Не вдалося'); return null }
+    SHOP=Object.assign({},SHOP,d);
+    return d;
+  }catch(e){ alert('Немає звʼязку'); return null }
+}
+
+async function loadShop(){
+  try{
+    const r=await fetch(API+'/api/op/shop',{headers:{Authorization:'Bearer '+token}});
+    if(r.status===401) return;                 // те саме скаже опитування замовлень
+    const d=await r.json();
+    if(d.ok) SHOP=d;
+  }catch(e){}
+}
+
+function setView(v){
+  view=v; form=null;
+  $('tabs').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.view===v));
+  $('wrap').innerHTML='<p class="empty">Завантажую…</p>';
+  if(v==='orders'){ if(DATA) draw(DATA); load(); return }
+  loadShop().then(()=>{ if(view===v) v==='stock'?drawStock():drawGrill() });
+}
+
 /* Короткий сигнал: планшет стоїть поруч із касою, і панель часто в фоні */
 let ac=null;
 function beep(){
@@ -333,6 +521,11 @@ async function load(){
     $('net').textContent='оновлено '+hhmm(lastOk);
     $('net').classList.remove('off');
     draw(d);
+    /* Стоп-лист і мангал міняють і з бота — тримаємо екран свіжим */
+    if(view!=='orders'){
+      await loadShop();
+      if(view==='stock') paintStock(); else if(view==='grill') drawGrill();
+    }
   }catch(e){
     $('net').textContent=lastOk? 'звʼязку немає · останнє '+hhmm(lastOk) : 'звʼязку немає';
     $('net').classList.add('off');
@@ -345,6 +538,7 @@ async function load(){
     try{ await claim(code) }catch(e){ return askEnter(e.message) }
   }
   if(!token) return askEnter();
+  $('tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>setView(b.dataset.view));
   await load();
   setInterval(load,10000);
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) load() });

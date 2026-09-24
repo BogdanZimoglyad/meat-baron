@@ -93,11 +93,14 @@ display:grid;place-items:center;min-height:100vh;text-align:center}a{color:#e04a
 (function stampCatalogVersion() {
   const v = require('crypto').createHash('md5')
     .update(fs.readFileSync(path.join(root, 'catalog.js'))).digest('hex').slice(0, 8);
-  const file = path.join(root, 'index.html');
-  const was = fs.readFileSync(file, 'utf8');
-  const now = was.replace(/<script src="catalog\.js(\?v=[a-f0-9]+)?"><\/script>/,
-    `<script src="catalog.js?v=${v}"></script>`);
-  if (now !== was) { fs.writeFileSync(file, now); console.log(`Версію прайсу в index.html оновлено: ${v}`) }
+  /* op.html теж тягне прайс — назви позицій для стоп-листа точки */
+  for (const name of ['index.html', 'op.html']) {
+    const file = path.join(root, name);
+    const was = fs.readFileSync(file, 'utf8');
+    const now = was.replace(/<script src="catalog\.js(\?v=[a-f0-9]+)?"><\/script>/,
+      `<script src="catalog.js?v=${v}"></script>`);
+    if (now !== was) { fs.writeFileSync(file, now); console.log(`Версію прайсу в ${name} оновлено: ${v}`) }
+  }
 })();
 
 fs.mkdirSync(OUT, { recursive: true });
