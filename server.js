@@ -875,6 +875,11 @@ function panelOf(req) {
 const opOrder = o => ({
   no: o.no, status: o.status, label: LABEL[o.status],
   mode: o.mode, slotAt: o.slotAt || 0, when: o.when || '',
+  /* Порожньо для сьогоднішніх, «завтра» чи «26.09» — для решти. Без цього
+     в картці стояв самий час, і замовлення на завтра на 17:00 виглядало
+     так само, як сьогоднішнє на 17:00. Дату рахує сервер: планшет може
+     стояти з будь-яким часовим поясом. */
+  day: futureDay(o) ? dayShort(o.slotAt) : '',
   createdAt: o.createdAt, readyAt: o.readyAt || 0, onwayAt: o.onwayAt || 0,
   total: o.total, totalOrig: o.totalOrig, adjust: adjustmentsOf(o),
   fry: !!o.fry, fg: o.fg || 0, pay: o.pay,

@@ -47,6 +47,9 @@ button{font:inherit;cursor:pointer;border:none}
 .card.ready .hd .st{background:rgba(123,168,79,.25);color:var(--ok)}
 .hd .time{margin-left:auto;font-size:17px;font-weight:600}
 .hd .time small{display:block;font-size:12px;font-weight:400;color:var(--smoke);text-align:right}
+/* «завтра» чи «26.09» біля часу — щоб замовлення на інший день
+   не читалось як сьогоднішнє */
+.hd .time em{font-style:normal;color:var(--warn)}
 .meta{font-size:14px;color:var(--smoke)}
 .meta b{color:var(--bone);font-weight:500}
 .lines{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:8px 0;
@@ -141,6 +144,7 @@ button{font:inherit;cursor:pointer;border:none}
     <div class="shop" id="shop">—</div>
   </div>
   <div class="cnt">
+    <span class="pill off" id="mute" hidden>🔇 торкніться екрана, щоб увімкнути звук</span>
     <span class="pill" id="net">звʼязок…</span>
     <span class="pill hot" id="cNew" hidden>нових: 0</span>
     <span class="pill" id="cWork">у роботі: 0</span>
@@ -205,7 +209,7 @@ const nextOf=o=> o.status==='ready'
 
 /* Поки відкрита форма — опитування сервера стоїть: перемальовка стерла б
    набране оператором просто під пальцями. */
-let prevNew=0, lastOk=0, form=null;
+let seenNew=new Set(), lastOk=0, form=null;
 /* Три екрани в одній вкладці: замовлення, стоп-лист, мангал. Лічильники
    в шапці живуть завжди — оператор має бачити нове замовлення, навіть
    поки прибирає позицію зі стоп-листа. */
@@ -222,8 +226,12 @@ function draw(d){
   $('cNew').hidden=!fresh;
   $('cNew').textContent='нових: '+fresh;
   document.title=(fresh?`(${fresh}) `:'')+'Замовлення · Мʼясний Барон';
-  if(fresh>prevNew) beep();          // новий заказ, поки оператор у касовій програмі
-  prevNew=fresh;
+  /* Сигналимо на кожне замовлення, якого ще не бачили, а не на зростання
+     лічильника: якщо за ті самі десять секунд оператор прийняв одне й
+     прийшло інше, лічильник не змінився б — і нове проїхало б мовчки. */
+  const freshNos=live.filter(o=>o.status==='new').map(o=>o.no);
+  if(freshNos.some(no=>!seenNew.has(no))) beep();
+  seenNew=new Set(freshNos);
 
   if(view!=='orders') return;        // лічильники оновили, а екран зараз інший
   if(!d.orders.length){
@@ -261,7 +269,7 @@ function card(o,now){
     <div class="hd">
       <span class="no">№ ${o.no}</span>
       <span class="st">${esc(o.label)}</span>
-      <span class="time">${esc(when)}<small>${o.mode==='delivery'?'доставка':'самовивіз'}</small></span>
+      <span class="time">${o.day?`<em>${esc(o.day)}</em> `:''}${esc(when)}<small>${o.mode==='delivery'?'доставка':'самовивіз'}</small></span>
     </div>
     <div class="meta">
       <b>${esc(o.nm)}</b> · ${esc(o.tel)}
@@ -461,11 +469,28 @@ function setView(v){
   loadShop().then(()=>{ if(view===v) v==='stock'?drawStock():drawGrill() });
 }
 
-/* Короткий сигнал: планшет стоїть поруч із касою, і панель часто в фоні */
+/* Короткий сигнал: планшет стоїть поруч із касою, і панель часто в фоні.
+   Браузер не дає вмикати звук до першого дотику до сторінки, а панель
+   може простояти відкритою й недоторканою півдня — тоді нове замовлення
+   приїхало б мовчки. Тож заводимо звук на першому ж дотику, а поки він
+   не працює, чесно пишемо про це в шапці. */
 let ac=null;
-function beep(){
+function audioOn(){
   try{
     ac=ac||new (window.AudioContext||window.webkitAudioContext)();
+    /* resume() відповідає не одразу — перемальовуємо позначку, коли дозволить */
+    if(ac.state==='suspended') ac.resume().then(paintMute,()=>{});
+  }catch(e){}
+  paintMute();
+}
+function paintMute(){
+  const bad=!ac||ac.state!=='running';
+  $('mute').hidden=!bad;
+}
+function beep(){
+  audioOn();
+  if(!ac||ac.state!=='running') return;
+  try{
     const o=ac.createOscillator(), g=ac.createGain();
     o.connect(g); g.connect(ac.destination);
     o.frequency.value=880; g.gain.value=.08;
@@ -545,6 +570,8 @@ async function load(){
   }
   if(!token) return askEnter();
   $('tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>setView(b.dataset.view));
+  document.addEventListener('pointerdown',audioOn);   // будь-який дотик заводить звук
+  audioOn();                                          // а раптом браузер і так дозволяє
   await load();
   setInterval(load,10000);
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) load() });
