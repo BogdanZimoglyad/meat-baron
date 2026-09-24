@@ -59,6 +59,9 @@ html::before{
   height:100vh;height:100lvh;
   background:url('smoke-page.jpg') center/cover no-repeat;
   opacity:.9;
+  /* Окремий шар для відеокарти: інакше Safari перемальовує дим на
+     кожен рух сторінки разом з усім, що над ним. */
+  transform:translateZ(0);
 }
 /* На компʼютері дим повільно рухається: основний шар дрейфує й дихає,
    другий — дзеркальний і блідіший — пливе назустріч, тож клуби ніби
@@ -104,6 +107,15 @@ a{color:inherit}
 /* padding-top — під годинник і «чубчик» iPhone: коли сайт відкрито з іконки на екрані «Додому»,
    сторінка йде під рядок стану (black-translucent), і шапку з точкою та «Замовленнями» було не видно */
 .top{position:sticky;top:0;z-index:40;padding-top:env(safe-area-inset-top);background:rgba(20,16,16,.94);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+/* На телефоні розмиття під шапкою знімаємо, а фон робимо щільним.
+   Розмиття поверх нерухомого диму — найдорожча пара для Safari: на
+   айфоні воно підвисало щоразу, коли рядок адреси ховається чи
+   зʼявляється (власник, 23.09). На вигляд різниці майже немає, бо
+   шапка і так майже непрозора. */
+@media(max-width:899px){
+  .top{-webkit-backdrop-filter:none;backdrop-filter:none;background:rgba(20,16,16,.985)}
+  .to-top{-webkit-backdrop-filter:none;backdrop-filter:none;background:rgba(27,28,31,.97)}
+}
 .top-in{display:flex;align-items:center;gap:12px;padding:10px 0}
 .mark{width:38px;height:38px;border-radius:50%;object-fit:cover;flex:0 0 auto;display:block}
 .shop{flex:1;min-width:0;text-align:left;display:flex;align-items:center;gap:10px;
@@ -331,28 +343,33 @@ a{color:inherit}
 
 /* cart bar */
 /* без підкладки: темна смуга на всю ширину різко обривалась над димом */
-.bar{position:fixed;left:0;right:0;bottom:0;z-index:45;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:none;pointer-events:none}
+/* --vv-bottom — скільки екрана з'їдає нижня панель браузера. У Safari на
+   айфоні вона накриває все, що прибите до низу: кнопку «нагору» не було
+   видно взагалі (власник, 23.09). env(safe-area-inset-bottom) тут не
+   рятує — то про смужку «додому», а не про панель. Значення рахує
+   скрипт унизу сторінки; у застосунку з іконки воно нульове. */
+.bar{position:fixed;left:0;right:0;bottom:0;z-index:45;padding:10px 16px calc(10px + env(safe-area-inset-bottom) + var(--vv-bottom,0px));background:none;pointer-events:none}
 .bar-in{pointer-events:auto}
 /* width:100% — кнопка інакше стискалась до ширини тексту, і «Кошик · 10 позицій» налазив на суму */
 .bar-in{width:100%;max-width:588px;margin:0 auto;background:var(--ember);border-radius:12px;padding:13px 16px;display:flex;align-items:center;justify-content:space-between;gap:14px;color:#fff;font-weight:500;box-shadow:0 10px 30px rgba(0,0,0,.5)}
 .bar-in span:last-child{font-family:'Oswald';font-size:17px;white-space:nowrap}
 .bar[hidden]{display:none}
 /* кнопка «нагору»: зʼявляється, коли догортали каталог, і піднімається над кошиком */
-.to-top{position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:44;
+.to-top{position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom) + var(--vv-bottom,0px));z-index:44;
   width:46px;height:46px;border-radius:50%;background:rgba(27,28,31,.92);border:1px solid var(--line-2);
   color:var(--bone);display:grid;place-items:center;box-shadow:0 8px 24px rgba(0,0,0,.45);
   -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);opacity:0;transform:translateY(8px);transition:opacity .18s,transform .18s}
 .to-top.on{opacity:1;transform:none}
 .to-top svg{width:22px;height:22px}
 .to-top[hidden]{display:none}
-body.has-bar .to-top{bottom:calc(84px + env(safe-area-inset-bottom))}
+body.has-bar .to-top{bottom:calc(84px + env(safe-area-inset-bottom) + var(--vv-bottom,0px))}
 
 /* sheet */
 .veil{position:fixed;inset:0;background:rgba(8,6,6,.72);z-index:60;opacity:0;pointer-events:none;transition:.2s}
 .veil.on{opacity:1;pointer-events:auto}
 .sheet{position:fixed;left:0;right:0;bottom:0;z-index:61;background:var(--char);border-radius:18px 18px 0 0;border-top:1px solid var(--line-2);max-height:92vh;max-height:calc(92dvh - env(safe-area-inset-top));overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;transform:translateY(101%);transition:transform .26s cubic-bezier(.3,.9,.3,1)}
 .sheet.on{transform:none}
-.sheet-in{max-width:620px;margin:0 auto;padding:8px 16px calc(20px + env(safe-area-inset-bottom))}
+.sheet-in{max-width:620px;margin:0 auto;padding:8px 16px calc(20px + env(safe-area-inset-bottom) + var(--vv-bottom,0px))}
 .grab{width:44px;height:5px;border-radius:3px;background:var(--line-2);margin:0 auto;
   cursor:grab}
 .grab-zone{padding:10px 0 12px;cursor:grab;touch-action:none}
@@ -807,7 +824,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
    і без цього ціни в стрічці стояли б на різній висоті */
 .up-c .pr{display:block;margin-top:auto;padding-top:3px;font-size:11px;color:var(--smoke)}
 .up-c .up-add{position:absolute;top:11px;right:11px;width:22px;height:22px;font-size:15px;line-height:1}
-.inst{position:fixed;left:0;right:0;bottom:0;z-index:50;padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
+.inst{position:fixed;left:0;right:0;bottom:0;z-index:50;padding:10px 16px calc(10px + env(safe-area-inset-bottom) + var(--vv-bottom,0px))}
 .inst-b{max-width:588px;margin:0 auto;background:var(--coal);border:1px solid var(--line-2);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:11px;box-shadow:0 10px 30px rgba(0,0,0,.55)}
 .inst-t{flex:1;min-width:0;line-height:1.35}
 .inst-t b{display:block;font-weight:500;font-size:14px}
@@ -3585,6 +3602,26 @@ if('serviceWorker' in navigator){
     }).catch(()=>{});
   });
 }
+/* ---------- нижня панель браузера ----------
+   У Safari на айфоні панель із кнопками накриває все, що прибите до
+   низу: кнопку «нагору» не було видно взагалі, смужка кошика ховалась
+   під нею (власник, 23.09). Сам браузер каже, скільки екрана лишилось
+   насправді, — звідси й рахуємо. У застосунку з іконки панелі немає,
+   і значення лишається нульовим. */
+(function(){
+  const vv=window.visualViewport; if(!vv) return;
+  const set=()=>{
+    const gap=Math.round(innerHeight-vv.height-vv.offsetTop);
+    /* Велика різниця — це клавіатура, а не панель: тоді нічого не
+       піднімаємо, інакше кнопки стрибали б через пів екрана. */
+    document.documentElement.style.setProperty('--vv-bottom',
+      (gap>0&&gap<180? gap : 0)+'px');
+  };
+  vv.addEventListener('resize',set);
+  vv.addEventListener('scroll',set);
+  set();
+})();
+
 /* стартуємо після того, як усе оголошено */
 uiReady=true;
 showActiveBar();
