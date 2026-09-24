@@ -435,7 +435,9 @@ async function grillAct(btn){
   btn.disabled=true; const was=btn.textContent; btn.textContent='…';
   const r=await post('/api/op/grill',{act:btn.dataset.grill,slot:Number(btn.dataset.slot)||0});
   if(!r){ btn.disabled=false; btn.textContent=was; return }
-  drawGrill();
+  /* Поки йшов запит, оператор міг перемкнутись на замовлення — тоді
+     малювати мангал уже нікуди. */
+  if(view==='grill') drawGrill();
 }
 
 /* Один шлях для обох екранів: відправили, показали помилку, якщо є,

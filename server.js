@@ -477,7 +477,12 @@ function applyGrill(shop, act, arg) {
   if (act === 'noadd') { db.extra[shop] = {}; save(); return { ok: true, note: 'Надбавки прибрано' } }
   if (act === 'free') { db.busy[shop] = 0; save(); return { ok: true, note: 'Мангал знову приймає' } }
   if (act === 'day') {
-    db.busy[shop] = Date.now() + tillCloseMs();
+    /* Після закриття до кінця дня лишається нуль хвилин: блокування
+       протухало тієї ж миті, а оператору бот бадьоро відповідав «Закрито
+       до кінця дня» — і наступний же екран показував «мангал приймає». */
+    const left = tillCloseMs();
+    if (!left) return { err: 'Точка вже зачинена — мангал сьогодні нічого не візьме й так' };
+    db.busy[shop] = Date.now() + left;
     save();
     return { ok: true, note: 'Закрито до кінця дня' };
   }

@@ -60,6 +60,15 @@ ok('оператору кажуть, до котрої', /Закрито до \d
 r = s.applyGrill(0, 'free');
 ok('«вільний» знімає блокування', r.ok && !db.busy[0]);
 
+/* «До кінця дня» після закриття лишало нуль хвилин: блокування протухало
+   тієї ж миті, а оператору казали «Закрито до кінця дня». */
+r = s.applyGrill(0, 'day');
+const left = build(db).applyGrill && (() => { const n = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Kyiv' })); return Math.max(0, (n.getDay() === 0 ? 19 : 20) * 60 - (n.getHours() * 60 + n.getMinutes())) })();
+ok(left ? '«до кінця дня» закриває мангал до закриття точки'
+        : '«до кінця дня» після закриття чесно каже, що вже пізно',
+  left ? (r.ok && db.busy[0] > Date.now()) : (!!r.err && !db.busy[0]));
+db.busy[0] = 0;
+
 r = s.applyGrill(0, 'нісенітниця');
 ok('невідома дія не міняє нічого', !!r.err && !db.busy[0]);
 ok('і 0 хвилин теж не приймаємо', !!s.applyGrill(0, '0').err);
