@@ -1636,6 +1636,7 @@ function pickCat(id){
      інакше виходило «У «» нічого не знайшли» з порожньою назвою. */
   if(id==='top'||id==='fav'){
     qEl.value=''; searchCat=''; cat=id; sub='';
+    beforeSearch=null;          // людина сама пішла в добірку — вертати нікуди
     renderCats(); renderCatalog();
     return;
   }
@@ -1666,8 +1667,19 @@ document.querySelector('.mode-bar').onclick=e=>{
   getMode=b.dataset.gm;
   document.querySelectorAll('[data-gm]').forEach(x=>x.setAttribute('aria-pressed',x===b));
 };
+/* Де людина була до пошуку. Пошук — режим тимчасовий: усередині нього
+   можна тицьнути категорію, щоб звузити результати, але коли рядок
+   стерли, маємо повернути те саме місце, а не лишити людину там, куди
+   вона зайшла мимохідь. Раніше «Мариноване мʼясо → Свинина»
+   перетворювалось на «Ковбаски → Все» (власник, 23.09). */
+let beforeSearch=null;
 document.getElementById('q').oninput=()=>{
-  if(!document.getElementById('q').value.trim()) searchCat='';   // стерли пошук — наступний знову всюди
+  const q=document.getElementById('q').value.trim();
+  if(q){ if(!beforeSearch) beforeSearch={cat,sub} }
+  else{
+    searchCat='';                       // стерли пошук — наступний знову всюди
+    if(beforeSearch){ cat=beforeSearch.cat; sub=beforeSearch.sub; beforeSearch=null }
+  }
   renderCats();renderCatalog();
 };
 document.getElementById('catalog').onclick=e=>{
