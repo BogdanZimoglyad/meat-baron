@@ -1007,7 +1007,11 @@ const LEAD_PICKUP=60, LEAD_DELIVERY=100; // хвилин: самовивіз 1 �
 /* Під кінець дня мангал уже розпалений і вугілля готове — останні
    замовлення на самовивіз встигають за 40 хвилин (власник, 19.09). */
 const LEAD_PICKUP_LATE=40;
-const SLOT_STEP=60;                     // крок слота — 1 година
+/* Крок вибору часу — пів години, і час показуємо точкою, а не
+   інтервалом. Годинний інтервал «17:00–18:00» на доставці завеликий
+   (власник, 23.09), а 10–15 хвилин обіцяти не можна: везе партнерське
+   таксі, і в таку обіцянку ми не влучимо. */
+const SLOT_STEP=30;
 const DAYS_AHEAD=7;
 
 /* короткі описи товарів: ключ — "Група/Назва" або "Назва".
@@ -2518,7 +2522,7 @@ async function loadGrill(force){
     if(d&&d.ok) grill={shop,cap:+d.cap||0,busyUntil:+d.busyUntil||0,load:d.load||{},extra:d.extra||{},at:Date.now()};
   }catch(e){}
 }
-const slotMs=(d,h)=>{const t=new Date(d); t.setHours(h,0,0,0); return t.getTime()};
+const slotMs=(d,h)=>{const t=new Date(d); t.setHours(Math.floor(h),Math.round((h%1)*60),0,0); return t.getTime()};
 /* Чи влізе замовлення в цю годину. Свою вагу теж рахуємо: якщо в кошику
    4 кг, а на годину лишилось три — це вже інша година. */
 function slotFree(ms){
@@ -2588,24 +2592,31 @@ function asapLabel(mode){
 }
 /* слоти на конкретний день */
 function slotsFor(d,mode){
-  const out=[], e=earliest(mode);
+  /* Саме точний час, а не початок години: слот тепер обіцяє «о 14:00»,
+     і показувати його, коли встигаємо лише на 14:20, не можна. */
+  const out=[], e=earliestExact(mode);
   if(closedForToday()&&dayKey(d)===dayKey(new Date())) return out;   // на сьогодні вже пізно
   const sameDay=dayKey(d)===dayKey(e);
   let h=Math.max(openFrom(), sameDay? e.getHours():openFrom());
   const close=closeHour(d);
   for(; h<close; h+=SLOT_STEP/60){
-    const from=new Date(d); from.setHours(h,0,0,0);
+    const from=new Date(d); from.setHours(Math.floor(h),Math.round((h%1)*60),0,0);
     if(from<e) continue;
-    const to=Math.min(h+1,close);
     const ms=from.getTime();
-    out.push({h,ms,free:slotFree(ms),label:String(h).padStart(2,'0')+':00–'+String(to).padStart(2,'0')+':00'});
+    /* Мангал рахується погодинно, тож вільність питаємо в тієї години,
+       у яку слот потрапляє. */
+    out.push({h,ms,free:slotFree(new Date(ms).setMinutes(0,0,0)),
+      label:String(Math.floor(h)).padStart(2,'0')+':'+(h%1?'30':'00')});
   }
   return out;
 }
 function whenLabel(mode){
   if(!pickWhen) return 'Якнайшвидше · '+asapLabel(mode);
   const d=new Date(pickWhen.day);
-  return dayLabel(d)+' · '+pickWhen.label;
+  /* На доставці кажемо «орієнтовно»: везе партнерське таксі, і хвилина
+     в хвилину не буває. На самовивозі час твердий — людина приходить
+     сама. */
+  return dayLabel(d)+' · '+(mode==='delivery'?'орієнтовно о ':'о ')+pickWhen.label;
 }
 /* якщо обраний слот став неможливим (змінили спосіб отримання) — скидаємо */
 function validateWhen(mode){

@@ -1370,8 +1370,12 @@ app.post('/api/order', async (req, res) => {
   /* Година, на яку записується мангал. Сайт рахує те саме, але
      перевіряємо тут: поки людина заповнювала форму, годину могли
      розібрати, та й запит до API можна надіслати повз сайт. */
+  /* Час видачі тримаємо точний — сайт дає його з кроком у пів години.
+     Раніше ми округлювали до години, і «17:30» ставало «17:00»: на
+     доставці це зайвих пів години очікування (власник, 23.09). Мангал
+     як рахувався погодинно, так і рахується — там своє округлення. */
   const slotAt = Number.isFinite(b.slotAt) && b.slotAt > Date.now() - HOUR
-    ? hourFloor(b.slotAt) : 0;
+    ? Math.round(b.slotAt / 60000) * 60000 : 0;
   if (fry) {
     const refuse = grillRefuse(shopIndex, slotAt, fg);
     if (refuse) return res.status(409).json({ error: refuse });
@@ -1809,6 +1813,19 @@ bot.on('callback_query', async cq => {
     return bot.answerCallbackQuery(cq.id, {
       text: `Замовлення на ${dayShort(o.slotAt)}. Готувати й видавати — того дня.`,
       show_alert: true });
+  }
+  /* Те саме в межах дня. О десятій ранку можна було натиснути всі кнопки
+     на замовлення, яке заберуть о пʼятій, — і мʼясо чекало б сім годин
+     (власник, 23.09). Відкриваємо кнопки за пів години до того, як треба
+     братися: доставку — за півтори години, самовивіз — за годину. */
+  if (st !== 'accepted' && o.slotAt) {
+    const lead = (o.mode === 'delivery' ? 90 : 60) * 60000;
+    const from = o.slotAt - lead;
+    if (Date.now() < from) {
+      return bot.answerCallbackQuery(cq.id, {
+        text: `Замовлення на ${hhmm(o.slotAt)}. Братися можна з ${hhmm(from)}.`,
+        show_alert: true });
+    }
   }
   if (!nextBtns(o).some(([next]) => next === st)) {
     await bot.editMessageReplyMarkup(keyboard(o), { chat_id: o.chatId, message_id: o.msgId }).catch(() => {});
