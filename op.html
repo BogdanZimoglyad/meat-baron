@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Замовлення · Мʼясний Барон</title>
+<link rel="icon" href="icon-192.png">
+<style>
+/* Панель точки. Відкривається на планшеті поруч із касовою програмою,
+   тож усе велике: кнопки під палець, шрифт читається з відстані. */
+:root{
+  --coal:#1b1c1f; --char:#141010; --line:#2b2724; --line-2:#3a3531;
+  --bone:#f0e9de; --smoke:#9b938a; --ember:#c4342a; --ember-hot:#e04a3c;
+  --ok:#7ba84f; --warn:#d8a13a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--char);color:var(--bone);
+  font:16px/1.45 system-ui,-apple-system,'Segoe UI',sans-serif;
+  padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+button{font:inherit;cursor:pointer;border:none}
+
+/* шапка */
+.top{position:sticky;top:0;z-index:10;background:rgba(20,16,16,.97);
+  border-bottom:1px solid var(--line);padding:10px 14px calc(10px);
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.top b{font-size:19px}
+.top .shop{color:var(--smoke);font-size:14px}
+.cnt{margin-left:auto;display:flex;gap:8px;align-items:center}
+.pill{background:var(--coal);border:1px solid var(--line);border-radius:999px;
+  padding:6px 12px;font-size:14px;white-space:nowrap}
+.pill.hot{background:rgba(196,52,42,.16);border-color:rgba(224,74,60,.5);color:var(--ember-hot)}
+.pill.off{background:rgba(216,161,58,.14);border-color:rgba(216,161,58,.5);color:var(--warn)}
+
+/* список */
+.wrap{max-width:1100px;margin:0 auto;padding:14px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(330px,1fr))}
+.card{background:var(--coal);border:1px solid var(--line);border-radius:14px;padding:14px;
+  display:flex;flex-direction:column;gap:10px}
+.card.new{border-color:rgba(224,74,60,.6);box-shadow:0 0 0 1px rgba(224,74,60,.25)}
+.card.ready{border-color:rgba(123,168,79,.5)}
+.card.late{border-color:rgba(216,161,58,.65)}
+.hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.hd .no{font-size:22px;font-weight:600}
+.hd .st{font-size:13px;padding:3px 10px;border-radius:999px;background:var(--line);color:var(--bone)}
+.card.new .hd .st{background:var(--ember);color:#fff}
+.card.ready .hd .st{background:rgba(123,168,79,.25);color:var(--ok)}
+.hd .time{margin-left:auto;font-size:17px;font-weight:600}
+.hd .time small{display:block;font-size:12px;font-weight:400;color:var(--smoke);text-align:right}
+.meta{font-size:14px;color:var(--smoke)}
+.meta b{color:var(--bone);font-weight:500}
+.lines{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:8px 0;
+  display:flex;flex-direction:column;gap:4px;font-size:15px}
+.ln{display:flex;justify-content:space-between;gap:10px}
+.ln span:first-child{min-width:0}
+.ln .fry{color:var(--ember-hot)}
+.note{background:rgba(216,161,58,.12);border-left:3px solid var(--warn);padding:7px 10px;
+  border-radius:0 8px 8px 0;font-size:14px}
+.sum{display:flex;justify-content:space-between;align-items:baseline;font-size:15px}
+.sum b{font-size:21px}
+.act{display:flex;gap:8px;flex-wrap:wrap}
+.act .go{flex:1;min-height:52px;border-radius:12px;background:var(--ember);color:#fff;
+  font-size:17px;font-weight:600;padding:0 14px}
+.act .go:active{transform:scale(.98)}
+.act .go[disabled]{background:var(--line);color:var(--smoke);font-weight:500;font-size:15px}
+.act .tel{min-height:52px;min-width:56px;border-radius:12px;background:var(--coal);
+  border:1px solid var(--line-2);color:var(--bone);display:grid;place-items:center;
+  text-decoration:none;padding:0 14px;font-size:15px}
+.empty{color:var(--smoke);text-align:center;padding:60px 20px;font-size:17px}
+.enter{max-width:460px;margin:60px auto;padding:22px;background:var(--coal);
+  border:1px solid var(--line);border-radius:14px;text-align:center}
+.enter h1{font-size:20px;margin:0 0 10px}
+.enter p{color:var(--smoke);margin:8px 0}
+.enter code{background:var(--char);padding:2px 7px;border-radius:6px;color:var(--bone)}
+.err{background:rgba(196,52,42,.15);border:1px solid rgba(224,74,60,.5);color:var(--bone);
+  border-radius:10px;padding:10px 12px;margin:0 0 12px;font-size:14px}
+</style>
+</head>
+<body>
+<div class="top">
+  <div>
+    <b>Замовлення</b>
+    <div class="shop" id="shop">—</div>
+  </div>
+  <div class="cnt">
+    <span class="pill" id="net">звʼязок…</span>
+    <span class="pill hot" id="cNew" hidden>нових: 0</span>
+    <span class="pill" id="cWork">у роботі: 0</span>
+  </div>
+</div>
+
+<div class="wrap" id="wrap">
+  <p class="empty">Завантажую…</p>
+</div>
+
+<script>
+/* ---------- доступ ----------
+   Код приходить у чат точки командою /panel і живе в адресі після
+   решітки: так він не потрапляє ні в логи сервера, ні в історію
+   переходів. Обміняли на ключ — і прибрали з адреси. */
+const API='https://api.meat-baron.kh.ua';
+const KEY='mb-op-token';
+let token=null, shopName='';
+try{ token=localStorage.getItem(KEY) }catch(e){}
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const money=n=>(Math.round(n*100)/100).toFixed(2).replace(/\.00$/,'')+' ₴';
+const hhmm=ms=>new Date(ms).toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});
+const wLabel=g=>g>=1000?(g/1000).toFixed(g%100?2:g%1000?1:0)+' кг':g+' г';
+
+async function claim(code){
+  const r=await fetch(API+'/api/op/claim',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok||!d.token) throw new Error(d.error||'Не вдалося увійти');
+  token=d.token; shopName=d.shopName||'';
+  try{ localStorage.setItem(KEY,token) }catch(e){}
+  history.replaceState(null,'',location.pathname);
+}
+
+function askEnter(msg){
+  $('wrap').innerHTML=`<div class="enter">
+    ${msg?`<p class="err">${esc(msg)}</p>`:''}
+    <h1>Панель точки</h1>
+    <p>Щоб відкрити цей планшет, напишіть у чаті точки <code>/panel</code> —
+    бот дасть посилання. Відкрийте його тут один раз, далі просто заходьте на цю сторінку.</p>
+  </div>`;
+  $('net').textContent='немає доступу';
+}
+
+/* ---------- малюємо ---------- */
+const NEXT={new:['accepted','✅ Прийняти в роботу'],accepted:['cooking','👨‍🍳 Готується'],
+  cooking:['ready','🔥 Готове'],ready:null,onway:['done','🤝 Доставлено']};
+const nextOf=o=> o.status==='ready'
+  ? (o.mode==='delivery'?['onway','🚗 Передали курʼєру']:['done','🤝 Видано'])
+  : NEXT[o.status]||null;
+
+let prevNew=0, lastOk=0;
+function draw(d){
+  shopName=d.shopName||shopName;
+  $('shop').textContent=shopName;
+  const now=d.now||Date.now();
+  const live=d.orders.filter(o=>o.status!=='done'&&o.status!=='canceled');
+  const fresh=live.filter(o=>o.status==='new').length;
+  $('cWork').textContent='у роботі: '+live.length;
+  $('cNew').hidden=!fresh;
+  $('cNew').textContent='нових: '+fresh;
+  document.title=(fresh?`(${fresh}) `:'')+'Замовлення · Мʼясний Барон';
+  if(fresh>prevNew) beep();          // новий заказ, поки оператор у касовій програмі
+  prevNew=fresh;
+
+  if(!d.orders.length){
+    $('wrap').innerHTML='<p class="empty">Замовлень зараз немає.</p>';
+    return;
+  }
+  $('wrap').innerHTML='<div class="grid">'+d.orders.map(o=>card(o,now)).join('')+'</div>';
+  $('wrap').querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>step(b.dataset.go,b.dataset.st,b));
+}
+
+function card(o,now){
+  const nx=nextOf(o);
+  const soon=o.startAt&&now<o.startAt;
+  const late=o.slotAt&&now>o.slotAt&&o.status!=='done'&&o.status!=='canceled';
+  const cls=o.status==='new'?'new':o.status==='ready'?'ready':late?'late':'';
+  const when=o.slotAt? hhmm(o.slotAt) : 'якнайшвидше';
+  return `<article class="card ${cls}">
+    <div class="hd">
+      <span class="no">№ ${o.no}</span>
+      <span class="st">${esc(o.label)}</span>
+      <span class="time">${esc(when)}<small>${o.mode==='delivery'?'доставка':'самовивіз'}</small></span>
+    </div>
+    <div class="meta">
+      <b>${esc(o.nm)}</b> · ${esc(o.tel)}
+      ${o.mode==='delivery'&&o.addr?`<br>${esc(o.addr)}`:''}
+      ${o.fry?`<br>🔥 на мангал ${wLabel(o.fg)}`:''}
+      ${o.pay==='card'?'<br>💳 картка на місці':''}
+    </div>
+    <div class="lines">${o.lines.map(l=>`<div class="ln">
+      <span>${esc(l.name)}${l.v?` «${esc(l.v)}»`:''} · ${l.unit==='вага'?wLabel(l.qty):l.qty+' шт'}${l.fry?' <span class="fry">🔥</span>':''}</span>
+      <span>${money(l.sum)}</span></div>`).join('')}</div>
+    ${o.note?`<div class="note">💬 ${esc(o.note)}</div>`:''}
+    <div class="sum"><span>${o.totalOrig&&o.totalOrig!==o.total?'уточнено':'до сплати'}</span><b>${money(o.total)}</b></div>
+    <div class="act">
+      ${nx?`<button class="go" data-go="${o.no}" data-st="${nx[0]}" ${soon?'disabled':''}>${soon?`можна з ${hhmm(o.startAt)}`:nx[1]}</button>`
+           :`<button class="go" disabled>${esc(o.label)}</button>`}
+      <a class="tel" href="tel:${esc(o.tel)}">📞</a>
+    </div>
+  </article>`;
+}
+
+/* Короткий сигнал: планшет стоїть поруч із касою, і панель часто в фоні */
+let ac=null;
+function beep(){
+  try{
+    ac=ac||new (window.AudioContext||window.webkitAudioContext)();
+    const o=ac.createOscillator(), g=ac.createGain();
+    o.connect(g); g.connect(ac.destination);
+    o.frequency.value=880; g.gain.value=.08;
+    o.start(); o.stop(ac.currentTime+.18);
+  }catch(e){}
+}
+
+async function step(no,st,btn){
+  btn.disabled=true;
+  const was=btn.textContent; btn.textContent='…';
+  try{
+    const r=await fetch(API+'/api/op/order/'+no+'/status',{method:'POST',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+      body:JSON.stringify({status:st})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){ alert(d.error||'Не вдалося'); }
+    await load();
+  }catch(e){ btn.disabled=false; btn.textContent=was; alert('Немає звʼязку') }
+}
+
+async function load(){
+  if(!token) return askEnter();
+  try{
+    const r=await fetch(API+'/api/op/orders',{headers:{Authorization:'Bearer '+token}});
+    if(r.status===401){ token=null; try{localStorage.removeItem(KEY)}catch(e){}; return askEnter('Доступ відкликано.') }
+    const d=await r.json();
+    if(!d.ok) throw new Error(d.error||'');
+    lastOk=Date.now();
+    $('net').textContent='оновлено '+hhmm(lastOk);
+    $('net').classList.remove('off');
+    draw(d);
+  }catch(e){
+    $('net').textContent=lastOk? 'звʼязку немає · останнє '+hhmm(lastOk) : 'звʼязку немає';
+    $('net').classList.add('off');
+  }
+}
+
+(async function(){
+  const code=location.hash.replace(/^#/,'').trim();
+  if(code&&!token){
+    try{ await claim(code) }catch(e){ return askEnter(e.message) }
+  }
+  if(!token) return askEnter();
+  await load();
+  setInterval(load,10000);
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) load() });
+})();
+</script>
+</body>
+</html>
