@@ -1474,7 +1474,18 @@ function loadPopular(){
     .then(r=>r.json())
     .then(d=>{
       const top=((d&&d.top)||[]).map(x=>ITEMS.find(i=>i.id===x.id)).filter(Boolean);
-      if(top.length<POPULAR_MIN) return;
+      if(top.length<POPULAR_MIN){
+        /* Топ спорожнів (обнулили базу, минув місяць) — прибираємо і
+           вкладку, і памʼять. Раніше вона лишалась назавжди й показувала
+           те, чого в топі вже немає (власник, 23.09). */
+        try{ localStorage.removeItem(POP_KEY) }catch(e){}
+        if(popular.length){
+          popular=[];
+          if(cat==='top') cat='raw';
+          renderCats(); renderCatalog();
+        }
+        return;
+      }
       try{ localStorage.setItem(POP_KEY,JSON.stringify({ids:top.map(i=>i.id),at:Date.now()})) }catch(e){}
       if(top.map(i=>i.id).join()===popular.map(i=>i.id).join()) return;   // те саме — не перемальовуємо
       popular=top;
@@ -1741,9 +1752,20 @@ function close(){clearInterval(poll);pollTick=null;clearInterval(loginPoll);veil
    нічого не робить: раніше це траплялося посеред оформлення. Кошик
    тепер переживає перезавантаження, тож чекаємо лише закриття шторки. */
 let reloadPending=false;
+/* Коли ми щойно виклали нову версію, вона приходить за секунду-дві після
+   відкриття — і сторінка перезавантажувалась просто під руками. Власник
+   бачив це як ривок на айфоні: «наче відкриває популярне й миттєво
+   перекидає на мариноване» (23.09). Тепер у перші пів хвилини після
+   відкриття не чіпаємо нічого: нова версія дочекається, поки людина
+   закриє шторку, піде з вкладки й повернеться — або просто зайде
+   наступного разу. */
+const openedAt=Date.now();
+const FRESH_MS=30000;
 function reloadWhenIdle(){
-  if(sheet.classList.contains('on')) reloadPending=true;
-  else location.reload();
+  reloadPending=true;
+  if(sheet.classList.contains('on')) return;          // щось робить — не заважаємо
+  if(Date.now()-openedAt<FRESH_MS) return;            // щойно зайшла — тим паче
+  location.reload();
 }
 veil.onclick=close;
 document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
@@ -3074,6 +3096,9 @@ function wake(){
   if(document.hidden) return;
   if(Date.now()-wokeAt<3000) return;     // focus і visibilitychange приходять разом
   wokeAt=Date.now();
+  /* Повернулась на вкладку — вдалий момент підхопити нову версію, якщо
+     вона чекала: людина щойно нічого не робила. */
+  if(reloadPending&&!sheet.classList.contains('on')&&Date.now()-openedAt>FRESH_MS) return location.reload();
   /* Поки вкладка спала, точка могла зняти позицію — перечитуємо, що є
      в наявності, інакше людина набирала б кошик із того, чого немає. */
   loadStock(true);
