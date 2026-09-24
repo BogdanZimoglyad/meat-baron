@@ -981,7 +981,7 @@ body:has(.inst) .bar{bottom:66px}
 
 <!-- Прайс і правила рахунку. Той самий файл читає сервер,
      тому підроблену суму замовлення видно одразу. -->
-<script src="catalog.js?v=fe442564"></script>
+<script src="catalog.js?v=b2000c4c"></script>
 <script>
 /* Категорії, зняті з продажу, відсіює CATS_OFF із catalog.js —
    вкладка зникає разом із товарами. */
@@ -1301,7 +1301,7 @@ function ixOf(it){
   if(!x){
     const c=CATS.find(c=>c.id===it.cat);
     /* різновиди теж шукаються: «ткемалі» знаходить соуси */
-    const main=fold(it.name+' '+it.grp+' '+((variantsOf(it)||{list:[]}).list.map(x=>x[0]).join(' ')));
+    const main=fold(nameOf(it)+' '+it.name+' '+it.grp+' '+((variantsOf(it)||{list:[]}).list.map(x=>x[0]).join(' ')));
     const all=main+' '+fold((c?c.t:'')+' '+descOf(it));
     x={main:main,mainW:tokens(main),allW:tokens(all)};
     SEARCH_IX.set(it.id,x);
@@ -1544,7 +1544,7 @@ const HEART='<svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" s
 const favBtn=i=>{
   const on=favs.has(i.id);
   return `<button class="fav${on?' on':''}" data-fav="${i.id}" role="switch" aria-checked="${on}"
-    aria-label="${on?'Прибрати з обраного':'Додати в обране'}: ${esc(i.name)}"
+    aria-label="${on?'Прибрати з обраного':'Додати в обране'}: ${esc(nameOf(i))}"
     style="${on?'':''}">${HEART.replace('<svg','<svg fill="'+(on?'currentColor':'none')+'"')}</button>`;
 };
 /* Одна картка товару — і для категорії, і для добірки */
@@ -1554,13 +1554,13 @@ function cardHtml(i){
   return `<article class="card${off?' off':''}">
     <button class="ph" ${photoOf(i)?`data-ph="${photoOf(i)}" data-id="${i.id}" aria-label="Показати ${i.name}"`:'disabled'}>${photoOf(i)?`<img src="${photoOf(i)}" alt="${i.name}" loading="lazy">`:ph(i)}${sale(i)?`<span class="badge fire">${esc(sale(i))}</span>`:''}</button>
     <div class="c-b">
-      <span class="nm">${i.name}</span>
+      <span class="nm">${nameOf(i)}</span>
       ${variantsOf(i)?'':`<span class="pr-top">${money(i.price)}</span>`}
       ${descOf(i)?`<span class="ds">${descOf(i)}</span>`:''}
       <span class="un">${unitNote(i)}${c.fry?' · мариноване':''}</span>
       <div class="c-f">
         ${off?'<span class="off-t">Сьогодні немає</span>'
-             :`<button class="add" data-i="${i.id}" aria-label="Додати ${i.name}">+ Додати</button>`}
+             :`<button class="add" data-i="${i.id}" aria-label="Додати ${nameOf(i)}">+ Додати</button>`}
         ${favBtn(i)}
       </div>
     </div>
@@ -1711,7 +1711,7 @@ function openPhoto(node){
       <button class="lb-x" aria-label="Закрити">✕</button>
     </div>
     <div class="lb-b">
-      <h3>${it.name}</h3>
+      <h3>${nameOf(it)}</h3>
       <p class="lb-pr">${variantsOf(it)? variantsNote(it) : money(it.price)+`<span class="lb-un">${it.unit==='шт'?(countUnitOf(it)?' / '+countUnitOf(it).w[0]+(unitInside(countUnitOf(it))?' · '+unitInside(countUnitOf(it)):''):' / шт'):' / 100 г'}</span>`}${sale(it)?` <span class="badge fire" style="position:static;font-size:11px;vertical-align:middle">${esc(sale(it))}</span>`:''}</p>
       ${it.unit==='пак'?`<p class="lb-pk">Упаковка ${packLabel(it)} — ${money(it.price*packOf(it)/100)}</p>`:''}
       ${it.cat==='raw'?`<p class="lb-pk">Ціна за 100 г сирого мʼяса. Посмажимо на мангалі за ${FRY_RATE} ₴/кг.</p>`:''}
@@ -1916,9 +1916,9 @@ const itemActs=it=>{
    там просто кладемо посилання в буфер і кажемо про це. */
 async function shareItem(it,t){
   const url=itemLink(it);
-  const text=`${it.name} — ${money(it.price)} ${it.unit==='шт'?'за штуку':'за 100 г'}, «Мʼясний Барон»`;
+  const text=`${nameOf(it)} — ${money(it.price)} ${it.unit==='шт'?'за штуку':'за 100 г'}, «Мʼясний Барон»`;
   if(navigator.share){
-    try{ await navigator.share({title:it.name,text,url}); return }
+    try{ await navigator.share({title:nameOf(it),text,url}); return }
     catch(e){ if(e&&e.name==='AbortError') return }    // передумав — не морочимо голову
   }
   const said=ok=>{ if(t){ t.textContent=ok?'Скопійовано ✓':'Не вдалося скопіювати';
@@ -1972,7 +1972,7 @@ function openItem(id, editIdx){
         .map(v=>v<1000?Math.round(v/50)*50:Math.round(v/100)*100);
   open(`<div class="grab-zone"><div class="grab"></div></div>
   <div class="hero-img${/\.jpe?g$/.test(photoOf(it)||'')?' has-bg':''}">${photoOf(it)?`<img src="${photoOf(it)}" alt="${it.name}">`:ph(it,1)}</div>
-  <div class="sh-h"><h3>${it.name}</h3><button class="x" onclick="close_()">✕</button></div>
+  <div class="sh-h"><h3>${nameOf(it)}</h3><button class="x" onclick="close_()">✕</button></div>
   <p class="hint" style="margin-top:-6px">${sheetLead(it)}${it.cat==='raw'?`Ціна за 100 г сирого мʼяса — ${money(it.price)}. Посмажимо на мангалі за ${FRY_RATE} ₴/кг.`:`Ціна за 100 г — ${money(it.price)}.`}${sale(it)?` <b style="color:var(--ember-hot)">${esc(sale(it))}</b>`:''}</p>
   ${descOf(it)?`<p class="hint sh-desc">${descOf(it)}</p>`:''}
   ${itemActs(it)}
@@ -2037,7 +2037,7 @@ function openVariants(it,onDone){
       <button class="qbtn" data-dv="1" aria-label="Більше">+</button></div>
     </div>`;
   open(`<div class="grab-zone"><div class="grab"></div></div>
-  <div class="sh-h"><h3>${esc(it.name)}</h3><button class="x" onclick="close_()">✕</button></div>
+  <div class="sh-h"><h3>${esc(nameOf(it))}</h3><button class="x" onclick="close_()">✕</button></div>
   ${descOf(it)?`<p class="hint" style="margin-top:-6px">${esc(descOf(it))}</p>`:''}
   ${itemActs(it)}
   <div class="var-list">${vs.list.map(row).join('')}</div>
@@ -2093,9 +2093,9 @@ function upsellGrid(){
   if(!pool.length||!hasMain()) return '';
   return `<p class="up-ttl">Що до мʼяса?</p>
   <div class="up-grid">${pool.map((i,n)=>`
-    <button class="up-c${!upsellAll&&n>=UPSELL_TOP?' hid':''}" data-u="${i.id}" aria-label="Додати ${i.name}">
+    <button class="up-c${!upsellAll&&n>=UPSELL_TOP?' hid':''}" data-u="${i.id}" aria-label="Додати ${nameOf(i)}">
       <span class="up-ph">${photoOf(i)?`<img src="${photoOf(i)}" alt="" loading="lazy">`:ph(i)}</span>
-      <span class="nm">${i.name}</span>
+      <span class="nm">${nameOf(i)}</span>
       <span class="pr">${upsellPrice(i)}</span>
       <span class="up-add">+</span>
     </button>`).join('')}</div>
@@ -2149,7 +2149,7 @@ function upsellGate(next){
     ${pool.filter(i=>i.grp===g).map(i=>`
     <button class="up" data-u="${i.id}">
       <div class="up-ph">${photoOf(i)?`<img src="${photoOf(i)}" alt="" loading="lazy">`:ph(i)}</div>
-      <div class="up-b"><span class="nm">${i.name}</span>
+      <div class="up-b"><span class="nm">${nameOf(i)}</span>
       <span class="pr">${upsellPrice(i)}</span></div>
       <span class="up-add">+</span>
     </button>`).join('')}`).join('')}</div>
