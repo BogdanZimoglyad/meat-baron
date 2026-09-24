@@ -888,6 +888,24 @@ function backupSweep() {
 }
 setInterval(backupSweep, 10 * 60 * 1000).unref();
 
+/* Перевірити, що ключі TurboSMS робочі, не чекаючи справжнього
+   замовлення: /sms 380661234567 — і за хвилину видно, дійшло чи ні. */
+bot.onText(/^\/sms(?:@\w+)?(?:\s+(\S+))?/, async (msg, m) => {
+  if (!msg.chat || msg.chat.type !== 'private' || !isOwner(msg)) return;
+  if (!SMS_ON) {
+    return bot.sendMessage(msg.chat.id,
+      'SMS вимкнені: немає TURBOSMS_TOKEN або TURBOSMS_SENDER у змінних проєкту.');
+  }
+  const to = String(m[1] || '').replace(/\D/g, '');
+  if (to.length !== 12) {
+    return bot.sendMessage(msg.chat.id, 'Напишіть номер у форматі 380XXXXXXXXX: /sms 380661234567');
+  }
+  const ok = await smsSend('+' + to, 'Перевірка звʼязку. Мясний Барон.', 'перевірка');
+  bot.sendMessage(msg.chat.id, ok
+    ? '✅ SMS відправлено. Якщо не дійде за пару хвилин — питання до TurboSMS.'
+    : '⚠️ Не вдалося. Дивіться логи Railway: там код помилки від TurboSMS.');
+});
+
 bot.onText(/^\/backup(?:@\w+)?/, msg => {
   if (!msg.chat || msg.chat.type !== 'private' || !isOwner(msg)) return;
   sendBackup(msg.chat.id, 'на запит').catch(e =>
@@ -2083,7 +2101,15 @@ function notifyCancel(o, why) {
   const tel = (CATALOG_SHOPS[o.shop] || [])[1] || '';
   const text = `✖️ Замовлення № ${o.no} скасовано.\nПричина: ${why}` +
     (tel ? `\nЯкщо це непорозуміння — зателефонуйте: ${tel}` : '');
-  if (!u.tgId) return console.log('[SMS →', telLog(o.tel) + ']', text.replace(/\n/g, ' '));
+  /* Скасування — те, про що людина мусить дізнатись обовʼязково: вона
+     чекає на мʼясо. Тому тим, хто не входив через Telegram, шлемо SMS,
+     а не просто пишемо в лог. Причину вкорочуємо: кирилиця дорога. */
+  if (!u.tgId) {
+    const short = String(why || '').slice(0, 40);
+    return smsSend(o.tel,
+      `Замовлення №${o.no} скасовано. ${short}` + (tel ? ` Тел: ${tel}` : ''),
+      '№' + o.no + ' скасовано');
+  }
   bot.sendMessage(u.tgId, text, {
     reply_markup: { inline_keyboard: [[{ text: 'Відкрити замовлення', url: SITE + '?order=' + o.no }]] }
   }).catch(e => console.warn('Скасування № ' + o.no + ' не дійшло до клієнта:', e.message));
@@ -2156,13 +2182,57 @@ function notify(o, st) {
 /* ---------- SMS ----------
    Для тих, хто не входив через Telegram. Підключення до TurboSMS
    робиться тут; поки лише лог — щоб було видно, коли має піти SMS.   */
+const TURBOSMS_TOKEN = process.env.TURBOSMS_TOKEN || '';
+const TURBOSMS_SENDER = process.env.TURBOSMS_SENDER || '';
+const SMS_ON = !!(TURBOSMS_TOKEN && TURBOSMS_SENDER);
+const SMS_URL = 'https://api.turbosms.ua/message/send.json';
+
+/* Одна SMS кирилицею — це 70 символів, далі йде друга й друга ціна.
+   Тому тексти короткі, і кожен рядок нижче міряний. */
+async function smsSend(tel, text, why) {
+  const to = String(tel || '').replace(/\D/g, '');
+  if (to.length !== 12) return console.warn('SMS: дивний номер', telLog(tel));
+  /* Поки немає ключів — просто пишемо в лог, як і раніше: так видно,
+     коли SMS мала б піти, і нічого не ламається. */
+  if (!SMS_ON) return console.log('[SMS →', telLog(tel) + ']', text);
+
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 10000);
+  try {
+    const r = await fetch(SMS_URL, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + TURBOSMS_TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipients: [to], sms: { sender: TURBOSMS_SENDER, text } }),
+      signal: ctl.signal
+    });
+    const d = await r.json().catch(() => ({}));
+    const one = (d.response_result || [])[0] || {};
+    if (one.response_code === 0) {
+      console.log('SMS →', telLog(tel), why || '', one.message_id || '');
+      return true;
+    }
+    /* 203 — скінчились гроші на рахунку TurboSMS; це не наша помилка,
+       але знати про неї треба одразу, інакше клієнти тихо лишаються
+       без повідомлень. */
+    console.warn('SMS не пішла:', telLog(tel), 'код', one.response_code ?? d.response_code,
+      d.response_status || r.status, one.response_status || '');
+    if (OWNER_ID && (one.response_code === 203 || d.response_code === 203)) {
+      bot.sendMessage(OWNER_ID, '⚠️ TurboSMS: скінчились кошти на рахунку — клієнти без Telegram не отримують повідомлень.')
+        .catch(() => {});
+    }
+    return false;
+  } catch (e) {
+    console.warn('SMS зламалась:', telLog(tel), e.name === 'AbortError' ? 'таймаут' : e.message);
+    return false;
+  } finally { clearTimeout(t) }
+}
+
 function sendSms(o, st) {
   if (st !== 'ready') return;              // SMS-ками про кожен крок не сиплемо
   const text = o.mode === 'pickup'
-    ? `Мясний Барон: замовлення №${o.no} готове. Чекаємо за адресою ${o.shopName}.`
-    : `Мясний Барон: замовлення №${o.no} готове, курєр виїжджає.`;
-  console.log('[SMS →', telLog(o.tel) + ']', text);
-  // TODO: fetch('https://api.turbosms.ua/message/send.json', {...})
+    ? `Замовлення №${o.no} готове. Чекаємо: ${o.shopName}`
+    : `Замовлення №${o.no} готове, курєр виїжджає.`;
+  smsSend(o.tel, text, '№' + o.no + ' готове');
 }
 
 /* Коли з чату здається, що бот «не бачить» нової команди, перше
