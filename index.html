@@ -1488,8 +1488,16 @@ function loadPopular(){
       }
       try{ localStorage.setItem(POP_KEY,JSON.stringify({ids:top.map(i=>i.id),at:Date.now()})) }catch(e){}
       if(top.map(i=>i.id).join()===popular.map(i=>i.id).join()) return;   // те саме — не перемальовуємо
+      /* Вкладки після завантаження не додаємо. Раніше відповідь сервера
+         вставляла «Популярне» першою — і вся стрічка категорій
+         посувалась убік уже після того, як людина побачила сторінку
+         (власник, 23.09: «наче відкриває популярне й перекидає на
+         мариноване»). Тепер свіжий топ лягає в памʼять і зʼявиться
+         при наступному відкритті, а стрічка стоїть на місці. */
+      if(!popular.length) return;
       popular=top;
-      renderCats(); if(cat==='top') renderCatalog();
+      if(cat==='top') renderCatalog();     // стоїмо на добірці — оновимо її вміст
+      renderCats();                         // сама стрічка не міняє складу
     })
     .catch(()=>{});          // немає звʼязку — просто без вкладки
 }
@@ -3667,6 +3675,41 @@ uiReady=true;
 showActiveBar();
 loadPopular();
 loadStock();
+
+/* ---------- ?debug=1 — журнал подій на екрані ----------
+   Коли на телефоні «щось смикається», з розповіді причину не вгадати:
+   ми двічі полагодили не те (власник, 23.09). Цей режим показує, що і
+   коли малюється, — досить відкрити сайт з ?debug=1 і надіслати знімок.
+   Без цього параметра код нічого не робить. */
+(function(){
+  if(!/[?&]debug=1/.test(location.search)) return;
+  const box=document.createElement('pre');
+  box.style.cssText='position:fixed;left:0;right:0;top:0;z-index:999;margin:0;padding:6px 8px;'+
+    'background:rgba(0,0,0,.88);color:#7CFC7C;font:11px/1.4 ui-monospace,monospace;'+
+    'max-height:50vh;overflow:auto;white-space:pre-wrap';
+  const t0=performance.now();
+  const log=m=>{ box.textContent+=String(Math.round(performance.now()-t0)).padStart(5)+' мс · '+m+'\n' };
+  const put=()=>document.body.appendChild(box);
+  document.readyState==='loading'? addEventListener('DOMContentLoaded',put) : put();
+
+  log('відкрито · вкладка='+cat+' · популярне з памʼяті='+popular.length+
+      ' · кошик='+cart.length+' · вхід='+(me?'є':'нема'));
+
+  const rc=renderCats, rg=renderCatalog, lp=loadPopular, ls=loadStock, rw=reloadWhenIdle;
+  renderCats=function(){ log('малюю вкладки · '+tabs().map(t=>t.id).join(',')+' · активна='+cat); return rc.apply(this,arguments) };
+  renderCatalog=function(){ log('малюю каталог · вкладка='+cat); return rg.apply(this,arguments) };
+  loadPopular=function(){ log('питаю популярне'); return lp.apply(this,arguments) };
+  loadStock=function(f){ log('питаю наявність'+(f?' (примусово)':'')); return ls.apply(this,arguments) };
+  reloadWhenIdle=function(){ log('‼️ прийшла нова версія → перезавантаження'); return rw.apply(this,arguments) };
+  addEventListener('pagehide',()=>log('сторінка ховається'));
+  addEventListener('visibilitychange',()=>log('видимість: '+(document.hidden?'схована':'видима')));
+  if(window.visualViewport){
+    const vv=window.visualViewport;
+    const note=()=>log('екран: layout='+document.documentElement.clientHeight+
+      ' видимий='+Math.round(vv.height)+' → панель='+getComputedStyle(document.documentElement).getPropertyValue('--vv-bottom').trim());
+    vv.addEventListener('resize',note); setTimeout(note,400);
+  }
+})();
 /* Посилання на товар: ?item=<номер> відкриває його картку. Замовлення
    важливіше — якщо в адресі є і воно, картку не чіпаємо. */
 (function(){

@@ -1570,12 +1570,19 @@ app.get('/api/stock', (req, res) => {
    курка гриль, яку беруть цілою тушкою. */
 const POPULAR_DAYS = 30;
 const POPULAR_MAX = 12;
+/* Поки замовлень одиниці, «Популярне» — це просто чийсь один кошик.
+   23.09 туди потрапили сім позицій із єдиного тестового замовлення,
+   кожна по разу. Доки не набереться хоч пʼять замовлень, вкладки краще
+   не показувати зовсім. */
+const POPULAR_MIN_ORDERS = 5;
 function popularIds() {
   const edge = Date.now() - POPULAR_DAYS * 24 * 3600 * 1000;
   const cnt = {};
+  let liveOrders = 0;
   for (const no in db.orders) {
     const o = db.orders[no];
     if ((o.createdAt || 0) < edge || o.status === CANCELED) continue;
+    liveOrders++;
     const seen = new Set();
     for (const l of (o.lines || [])) {
       /* Замовлення з давніх часів пам'ятають номери старого зразка
@@ -1586,6 +1593,7 @@ function popularIds() {
       cnt[l.id] = (cnt[l.id] || 0) + 1;
     }
   }
+  if (liveOrders < POPULAR_MIN_ORDERS) return [];   // замало замовлень, щоб казати «популярне»
   return Object.entries(cnt)
     .sort((a, b) => b[1] - a[1])
     .slice(0, POPULAR_MAX)
