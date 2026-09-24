@@ -372,6 +372,16 @@ a{color:inherit}
 .to-top svg{width:22px;height:22px}
 .to-top[hidden]{display:none}
 body.has-bar .to-top{bottom:calc(84px + env(safe-area-inset-bottom) + var(--vv-bottom,0px))}
+/* У браузері на телефоні кнопці «нагору» даємо твердий запас знизу.
+   Вимір панелі через браузер виявився ненадійним: на 16 Pro Max Safari
+   каже про неї із запізненням, і кнопка визирала краєчком, поки не
+   догорнеш до упору (власник, 23.09). Запас видно й коли панель
+   згорнулась — хай краще висить трохи вище, ніж ховається.
+   У застосунку з іконки (standalone) панелі немає, тож там без запасу. */
+@media(max-width:899px){
+  html.in-browser .to-top{bottom:calc(18px + env(safe-area-inset-bottom) + max(var(--vv-bottom,0px),64px))}
+  html.in-browser body.has-bar .to-top{bottom:calc(84px + env(safe-area-inset-bottom) + max(var(--vv-bottom,0px),64px))}
+}
 
 /* sheet */
 .veil{position:fixed;inset:0;background:rgba(8,6,6,.72);z-index:60;opacity:0;pointer-events:none;transition:.2s}
@@ -3650,6 +3660,13 @@ if('serviceWorker' in navigator){
    під нею (власник, 23.09). Сам браузер каже, скільки екрана лишилось
    насправді, — звідси й рахуємо. У застосунку з іконки панелі немає,
    і значення лишається нульовим. */
+/* Сайт відкритий у вкладці браузера чи запущений з іконки? У вкладці
+   знизу панель із кнопками, і тим, що прибите до низу, потрібен запас. */
+(function(){
+  const standalone=(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||navigator.standalone;
+  if(!standalone) document.documentElement.classList.add('in-browser');
+})();
+
 (function(){
   const vv=window.visualViewport; if(!vv) return;
   const set=()=>{
