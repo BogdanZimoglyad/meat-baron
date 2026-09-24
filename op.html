@@ -109,6 +109,9 @@ button{font:inherit;cursor:pointer;border:none}
   display:flex;flex-direction:column;gap:8px}
 .gtop{display:flex;align-items:baseline;gap:10px;font-size:15px}
 .gtop b{font-size:17px}
+.gtop em{font-style:normal;font-size:12px;color:var(--warn);
+  border:1px solid rgba(216,161,58,.45);border-radius:999px;padding:1px 8px}
+.gslot.now{opacity:.85}
 .gtop span{margin-left:auto;color:var(--smoke);font-size:14px}
 .gtop .full{color:var(--ember-hot)}
 .bar{height:8px;border-radius:999px;background:var(--char);overflow:hidden}
@@ -390,12 +393,15 @@ function drawGrill(){
     const cap=g.cap+(g.extra[ms]||0), used=g.load[ms]||0;
     const pct=cap?Math.min(100,Math.round(used/cap*100)):100;
     const full=used>=cap;
-    return `<div class="gslot">
-      <div class="gtop"><b>${esc(g.labels[i])}</b>
+    /* Поточна година — довідково: сайт на неї вже не продає, надбавка
+       нічого не змінить, тож і кнопки немає. */
+    const isNow=ms===g.nowSlot;
+    return `<div class="gslot${isNow?' now':''}">
+      <div class="gtop"><b>${esc(g.labels[i])}</b>${isNow?'<em>зараз</em>':''}
         <span class="${full?'full':''}">${wLabel(used)} з ${wLabel(cap)}${full?' · забито':''}${
           g.extra[ms]?` · +${wLabel(g.extra[ms])} від вас`:''}</span></div>
       <div class="bar"><i class="${full?'hot':''}" style="width:${pct}%"></i></div>
-      <button data-grill="add" data-slot="${ms}">+${wLabel(g.step)} на ${esc(g.labels[i])}</button>
+      ${isNow?'':`<button data-grill="add" data-slot="${ms}">+${wLabel(g.step)} на ${esc(g.labels[i])}</button>`}
     </div>`;
   }).join('')
   || '<p class="hint2">До закриття годин уже не лишилось — мангал на сьогодні все.</p>';

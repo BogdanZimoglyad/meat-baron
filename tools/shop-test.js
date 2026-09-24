@@ -110,12 +110,16 @@ db = freshDb(); s = build(db);
 let st = s.opShopState(0);
 ok('панель отримує години, підписи й ліміт',
   Array.isArray(st.grill.slots) && st.grill.labels.length === st.grill.slots.length && st.grill.cap === 10000);
-/* Скільки саме годин лишилось — залежить від часу запуску тесту (увечері
+/* Скільки саме годин лишилось — залежить від часу запуску тесту (уночі
    їх нема зовсім). Перевіряємо те, що має бути завжди: години йдуть
-   поспіль уперед, жодної з минулого, і не більше пʼяти. */
-ok('години йдуть поспіль і лише попереду',
-  st.grill.slots.length <= 5
-  && st.grill.slots.every((ms, i) => ms > Date.now() && (!i || ms - st.grill.slots[i - 1] === HOUR)));
+   поспіль, починаючи з поточної, і не більше шести. */
+const nowHour = Math.floor(Date.now() / HOUR) * HOUR;
+ok('години йдуть поспіль, без дірок',
+  st.grill.slots.length <= 6
+  && st.grill.slots.every((ms, i) => ms >= nowHour && (!i || ms - st.grill.slots[i - 1] === HOUR)));
+ok('поточну годину показуємо довідково',
+  st.grill.nowSlot === nowHour
+  && (!st.grill.slots.length || st.grill.slots[0] === nowHour));
 ok('час і година відкриття їдуть у відповіді', st.now > 0 && st.openHour === OPEN);
 
 // завантаження рахується по справжніх замовленнях і не рахує скасовані
