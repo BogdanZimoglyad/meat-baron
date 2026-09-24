@@ -66,6 +66,24 @@ button{font:inherit;cursor:pointer;border:none}
 .act .tel{min-height:52px;min-width:56px;border-radius:12px;background:var(--coal);
   border:1px solid var(--line-2);color:var(--bone);display:grid;place-items:center;
   text-decoration:none;padding:0 14px;font-size:15px}
+/* дрібні дії: сума, коментар, скасування */
+.more{display:flex;gap:6px;flex-wrap:wrap}
+.more button{flex:1;min-width:64px;min-height:40px;border-radius:10px;background:var(--char);
+  border:1px solid var(--line-2);color:var(--bone);font-size:14px}
+.more button:active{transform:scale(.97)}
+/* Скасування не розтягуємо на всю ширину: воно стоїть поруч із великою
+   кнопкою наступного кроку, і промах коштує замовлення. */
+.more .danger{flex:0 0 auto;padding:0 16px;color:var(--ember-hot);border-color:rgba(224,74,60,.4)}
+.form{background:var(--char);border:1px solid var(--line-2);border-radius:12px;padding:10px;
+  display:flex;flex-direction:column;gap:8px}
+.form label{font-size:13px;color:var(--smoke)}
+.form input{width:100%;min-height:46px;border-radius:10px;background:var(--coal);
+  border:1px solid var(--line-2);color:var(--bone);font-size:17px;padding:0 12px}
+.form .row{display:flex;gap:8px}
+.form .row button{flex:1;min-height:46px;border-radius:10px;font-size:15px}
+.form .ok{background:var(--ember);color:#fff;font-weight:600}
+.form .no{background:var(--coal);border:1px solid var(--line-2);color:var(--bone)}
+.form .hint{font-size:12.5px;color:var(--smoke)}
 .empty{color:var(--smoke);text-align:center;padding:60px 20px;font-size:17px}
 .enter{max-width:460px;margin:60px auto;padding:22px;background:var(--coal);
   border:1px solid var(--line);border-radius:14px;text-align:center}
@@ -136,7 +154,9 @@ const nextOf=o=> o.status==='ready'
   ? (o.mode==='delivery'?['onway','🚗 Передали курʼєру']:['done','🤝 Видано'])
   : NEXT[o.status]||null;
 
-let prevNew=0, lastOk=0;
+/* Поки відкрита форма — опитування сервера стоїть: перемальовка стерла б
+   набране оператором просто під пальцями. */
+let prevNew=0, lastOk=0, form=null;
 function draw(d){
   shopName=d.shopName||shopName;
   $('shop').textContent=shopName;
@@ -154,8 +174,25 @@ function draw(d){
     $('wrap').innerHTML='<p class="empty">Замовлень зараз немає.</p>';
     return;
   }
-  $('wrap').innerHTML='<div class="grid">'+d.orders.map(o=>card(o,now)).join('')+'</div>';
-  $('wrap').querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>step(b.dataset.go,b.dataset.st,b));
+  const w=$('wrap');
+  w.innerHTML='<div class="grid">'+d.orders.map(o=>card(o,now)).join('')+'</div>';
+  w.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>step(b.dataset.go,b.dataset.st,b));
+  w.querySelectorAll('[data-form]').forEach(b=>b.onclick=()=>{
+    form={no:+b.dataset.form,kind:b.dataset.kind}; draw(d); focusForm();
+  });
+  w.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{ form=null; draw(d) });
+  w.querySelectorAll('[data-send]').forEach(b=>b.onclick=()=>send(b));
+  w.querySelectorAll('.form input').forEach(i=>i.onkeydown=e=>{
+    if(e.key!=='Enter') return;
+    e.preventDefault();
+    const b=w.querySelector('[data-send]'); if(b&&!b.disabled) b.click();
+  });
+}
+
+/* autofocus не спрацьовує на щойно вставленій розмітці — фокусуємо руками */
+function focusForm(){
+  const el=$('fv');
+  if(el){ el.focus(); try{ el.select() }catch(e){} el.scrollIntoView({block:'nearest'}) }
 }
 
 function card(o,now){
@@ -186,7 +223,48 @@ function card(o,now){
            :`<button class="go" disabled>${esc(o.label)}</button>`}
       <a class="tel" href="tel:${esc(o.tel)}">📞</a>
     </div>
+    ${form&&form.no===o.no? formHtml(o,form.kind) : more(o)}
   </article>`;
+}
+
+/* Дрібні дії під карткою. Показуємо лише те, що сервер зараз дозволить:
+   суму міняють до «Готується», доставку — майже до видачі. */
+function more(o){
+  const can=o.can||{}, b=[];
+  if(can.money){
+    b.push(['fact','🧾 Сума'],['add','➕'],['sub','➖'],['note','💬']);
+  }
+  if(can.ship&&o.mode==='delivery') b.push(['ship','🚕 Доставка']);
+  if(can.cancel) b.push(['cancel','✖️ Скасувати',1]);
+  if(!b.length) return '';
+  return `<div class="more">${b.map(([k,t,danger])=>
+    `<button data-form="${o.no}" data-kind="${k}"${danger?' class="danger"':''}>${t}</button>`).join('')}</div>`;
+}
+
+const FORM={
+  fact:{t:'Фактична сума з каси',n:1,hint:'Разом зі смаженням. Клієнт побачить нову суму.'},
+  add:{t:'На скільки збільшити',n:1,hint:'Наприклад: додали соус.'},
+  sub:{t:'На скільки зменшити',n:1,hint:'Наприклад: вага вийшла менша.'},
+  ship:{t:'Вартість доставки',n:1,hint:'Нова замінить попередню.'},
+  note:{t:'Коментар для клієнта',n:0,hint:'Сума не зміниться.'},
+  cancel:{t:'Причина скасування',n:0,hint:'Її побачить клієнт.',danger:1}
+};
+function formHtml(o,kind){
+  const f=FORM[kind];
+  return `<div class="form">
+    <label>${f.t}</label>
+    ${/* не type="number": на планшеті десяткова клавіша дає кому, а
+          числове поле з комою просто порожніє — оператор набирає «612,40»
+          і бачить нуль. Беремо текст і розбираємо самі. */''}
+    ${f.n?`<input type="text" inputmode="decimal" id="fv" placeholder="0,00" autofocus>
+           <input type="text" id="fn" placeholder="Коментар, якщо треба">`
+         :`<input type="text" id="fv" placeholder="${kind==='cancel'?'немає в наявності':'Текст для клієнта'}" autofocus>`}
+    <div class="hint">${f.hint}</div>
+    <div class="row">
+      <button class="ok" data-send="${o.no}" data-kind="${kind}">${kind==='cancel'?'Скасувати замовлення':'Зберегти'}</button>
+      <button class="no" data-close="1">Назад</button>
+    </div>
+  </div>`;
 }
 
 /* Короткий сигнал: планшет стоїть поруч із касою, і панель часто в фоні */
@@ -214,8 +292,38 @@ async function step(no,st,btn){
   }catch(e){ btn.disabled=false; btn.textContent=was; alert('Немає звʼязку') }
 }
 
+/* Сума, доставка, коментар, скасування — усі правила на сервері
+   (applyAdjust), панель лише передає, що набрав оператор. */
+async function send(btn){
+  const kind=btn.dataset.kind, no=btn.dataset.send, f=FORM[kind];
+  let amount=0, note='';
+  if(f.n){
+    /* «612,40», «612.40», «612 40»(з пробілом), «612,40 ₴» — усе те саме */
+    amount=Number(String($('fv').value).replace(/[\s ₴]/g,'').replace(',','.'));
+    if(!isFinite(amount)||!(amount>0)) return alert('Вкажіть суму більше нуля — цифрами');
+    note=String($('fn').value||'').trim();
+  }else{
+    note=String($('fv').value||'').trim();
+    if(kind==='cancel'&&!note) return alert('Напишіть причину — її побачить клієнт');
+    if(kind==='note'&&!note) return alert('Порожній коментар не надішлемо');
+  }
+  if(kind==='cancel'&&!confirm('Скасувати замовлення № '+no+'? Клієнту піде сповіщення.')) return;
+  btn.disabled=true; const was=btn.textContent; btn.textContent='…';
+  try{
+    const r=await fetch(API+'/api/op/order/'+no+'/adjust',{method:'POST',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+      body:JSON.stringify({kind,amount,note})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){ btn.disabled=false; btn.textContent=was; return alert(d.error||'Не вдалося') }
+    form=null; await load();
+  }catch(e){ btn.disabled=false; btn.textContent=was; alert('Немає звʼязку') }
+}
+
 async function load(){
   if(!token) return askEnter();
+  /* Оператор щось набирає — не чіпаємо екран. Кажемо про це вголос:
+     інакше здасться, що панель зависла й нові замовлення не йдуть. */
+  if(form){ $('net').textContent='пауза — відкрита форма'; $('net').classList.add('off'); return }
   try{
     const r=await fetch(API+'/api/op/orders',{headers:{Authorization:'Bearer '+token}});
     if(r.status===401){ token=null; try{localStorage.removeItem(KEY)}catch(e){}; return askEnter('Доступ відкликано.') }
@@ -240,6 +348,10 @@ async function load(){
   await load();
   setInterval(load,10000);
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) load() });
+  /* Esc закриває форму й повертає оновлення — на планшеті є клавіатура */
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&form){ form=null; load() }
+  });
 })();
 </script>
 </body>

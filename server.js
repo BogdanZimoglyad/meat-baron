@@ -867,6 +867,9 @@ const opOrder = o => ({
   mismatch: o.mismatch || null,
   /* Коли можна братися — панель підсвітить, а не дасть натиснути дарма */
   startAt: o.slotAt ? o.slotAt - (o.mode === 'delivery' ? 90 : 60) * 60000 : 0,
+  /* Що саме зараз дозволено міняти: панель питає тут, а не вгадує —
+     правила живуть на сервері й міняються разом із ним. */
+  can: { money: canEdit(o, 'fact'), ship: canEdit(o, 'ship'), cancel: canEdit(o, 'cancel') },
   lines: (o.lines || []).map(l => ({ name: nameOf(l), qty: l.g, unit: l.unit, sum: l.sum, fry: !!l.fry, v: l.v || '' }))
 });
 
@@ -885,6 +888,28 @@ app.get('/api/op/orders', (req, res) => {
     .sort((x, y) => (x.slotAt || x.createdAt || 0) - (y.slotAt || y.createdAt || 0))
     .map(opOrder);
   res.json({ ok: true, shop: a.shop, shopName: SHOPS[a.shop], now: Date.now(), orders: list });
+});
+
+/* Уточнити суму, дописати коментар або скасувати — те саме, що кнопками
+   в боті, але формою просто в картці. Ім'я оператора з панелі не
+   візьмеш, тож підписуємо точкою: у чаті видно, що зміна прийшла звідти. */
+app.post('/api/op/order/:no/adjust', async (req, res) => {
+  const a = panelOf(req);
+  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  const o = db.orders[req.params.no];
+  if (!o) return res.status(404).json({ error: 'Замовлення не знайдено' });
+  if (o.shop !== a.shop) return res.status(403).json({ error: 'Це замовлення іншої точки' });
+
+  const b = req.body || {};
+  const kind = String(b.kind || '');
+  if (!['fact', 'add', 'sub', 'note', 'ship', 'cancel'].includes(kind)) {
+    return res.status(400).json({ error: 'Невідома зміна' });
+  }
+  const amount = kop(Number(b.amount) || 0);
+  const note = String(b.note || '').trim().slice(0, 200);
+  const r = await applyAdjust(o, kind, amount, note, 'панель · ' + SHOPS[a.shop]);
+  if (r.err) return res.status(409).json({ error: r.err, order: opOrder(o) });
+  res.json({ ok: true, order: opOrder(o) });
 });
 
 app.post('/api/op/order/:no/status', async (req, res) => {
@@ -1914,6 +1939,60 @@ app.get('/api/history/:tel', (req, res) => {
    готувати наперед або відкочувати статус назад. Тому всі перевірки
    тут, а бот із панеллю лише кличуть.
    Повертає {ok:true} або {err:'чому не можна'}. */
+/* Картка в чаті точки — спільна пам'ять про замовлення, тож її оновлюють
+   усі, хто щось змінив: і бот, і панель. */
+const editCard = o => bot.editMessageText(orderText(o), {
+  chat_id: o.chatId, message_id: o.msgId, parse_mode: 'HTML', reply_markup: keyboard(o)
+}).catch(e => console.error('edit:', e.message));
+
+/* Зміна суми, коментар і скасування — теж в одному місці, як і статуси.
+   Панель робить це формою в картці, бот — відповіддю на повідомлення,
+   але правила однакові: що можна міняти й до якого стану.
+   Повертає {ok:true, prevShip} або {err:'чому не можна'}. */
+async function applyAdjust(o, kind, amount, note, by) {
+  if (!canEdit(o, kind)) return { err: lockedText(kind) };
+
+  /* Скасування — не зміна суми: замовлення виходить із ланцюжка, кнопки
+     зникають, а зайнята година на мангалі звільняється сама (скасовані
+     grillLoad не рахує). */
+  if (kind === 'cancel') {
+    if (!note) return { err: 'Потрібна причина — її побачить клієнт' };
+    o.adjust = adjustmentsOf(o).slice();
+    o.adjust.push({ kind: 'cancel', note, by, at: Date.now(), from: o.status });
+    o.status = CANCELED;
+    dropRemind(o);
+    o.updatedAt = Date.now();
+    save();
+    await editCard(o);
+    notifyCancel(o, note);
+    return { ok: true };
+  }
+
+  /* Суму рахуємо від поточної, а не від тієї, що була в момент запиту:
+     між запитом і підтвердженням міг устигнути інший оператор. */
+  const before = o.total;
+  const next = nextTotal(before, kind, amount, o);
+  if (kind !== 'note' && (!(amount > 0) || next <= 0 || next > MAX_TOTAL)) {
+    return { err: `Сума вийшла б ${money(next)} — так не можна.` };
+  }
+
+  const prevShip = o.ship || 0;                    // попередня доставка — щоб показати «було»
+  o.adjust = adjustmentsOf(o).slice();              // стара одна зміна стає першою в списку
+  if (o.totalOrig == null) o.totalOrig = o.total;   // сума з сайту лишається назавжди
+  o.adjust.push({ kind, amount, note, by, at: Date.now(),
+                  ...(kind === 'fact' ? { from: before } : {}),   // факт — з чого перейшли
+                  ...(kind === 'ship' ? { from: prevShip } : {}) });
+  if (kind === 'ship') o.ship = amount;            // тримаємо окремо: наступна доставка замінить цю
+  o.total = next;
+  delete o.totalNote; delete o.totalBy; delete o.totalAt;
+  o.updatedAt = Date.now();
+  save();
+
+  await editCard(o);
+  notifyAdjust(o, o.adjust[o.adjust.length - 1]);
+  return { ok: true, prevShip };
+}
+
 async function applyStatus(o, st) {
   if (!STATUSES.includes(st)) return { err: 'Невідомий статус' };
   /* Готувати наперед не можна: на завтра оператор лише «Приймає в
@@ -2098,60 +2177,21 @@ bot.on('callback_query', async cq => {
     return bot.answerCallbackQuery(cq.id, { text: 'Скасовано' });
   }
 
-  /* Скасування — не зміна суми: замовлення виходить із ланцюжка, кнопки
-     зникають, а зайнята година на мангалі звільняється сама (скасовані
-     grillLoad не рахує). */
-  if (conf.kind === 'cancel') {
-    o.adjust = adjustmentsOf(o).slice();
-    o.adjust.push({ kind: 'cancel', note: conf.note, by: opName(cq.from), at: Date.now(), from: o.status });
-    o.status = CANCELED;
-    dropRemind(o);
-    o.updatedAt = Date.now();
-    save();
-    await bot.editMessageText(orderText(o), {
-      chat_id: o.chatId, message_id: o.msgId, parse_mode: 'HTML', reply_markup: keyboard(o)
-    }).catch(e => console.error('edit:', e.message));
-    await bot.editMessageText(`✖️ № ${o.no} скасовано: ${conf.note}`,
-      { chat_id: chatId, message_id: cq.message.message_id }).catch(() => {});
-    await bot.answerCallbackQuery(cq.id, { text: 'Скасовано' });
-    return notifyCancel(o, conf.note);
-  }
-
-  /* ac — застосовуємо. Суму рахуємо від поточної, а не від тієї, що була
-     в момент запиту: між запитом і підтвердженням міг устигнути інший
-     оператор. */
   const before = o.total;
-  const next = nextTotal(before, conf.kind, conf.amount, o);
-  if (conf.kind !== 'note' && conf.kind !== 'cancel' && (next <= 0 || next > MAX_TOTAL)) {
-    await bot.editMessageText(`Сума замовлення № ${o.no} вийшла б ${money(next)} — так не можна.`,
-      { chat_id: chatId, message_id: cq.message.message_id }).catch(() => {});
-    return bot.answerCallbackQuery(cq.id, { text: 'Некоректна сума' });
+  const r = await applyAdjust(o, conf.kind, conf.amount, conf.note, opName(cq.from));
+  if (r.err) {
+    await bot.editMessageText(`⛔ ${r.err}`, { chat_id: chatId, message_id: cq.message.message_id }).catch(() => {});
+    return bot.answerCallbackQuery(cq.id, { text: r.err });
   }
-
-  const prevShip = o.ship || 0;                    // попередня доставка — щоб показати «було»
-  o.adjust = adjustmentsOf(o).slice();              // стара одна зміна стає першою в списку
-  if (o.totalOrig == null) o.totalOrig = o.total;   // сума з сайту лишається назавжди
-  o.adjust.push({ kind: conf.kind, amount: conf.amount, note: conf.note, by: opName(cq.from), at: Date.now(),
-                  ...(conf.kind === 'fact' ? { from: before } : {}),   // факт — з чого перейшли
-                  ...(conf.kind === 'ship' ? { from: prevShip } : {}) });
-  if (conf.kind === 'ship') o.ship = conf.amount;  // тримаємо окремо: наступна доставка замінить цю
-  o.total = next;
-  delete o.totalNote; delete o.totalBy; delete o.totalAt;
-  o.updatedAt = Date.now();
-  save();
-
-  await bot.editMessageText(orderText(o), {
-    chat_id: o.chatId, message_id: o.msgId, parse_mode: 'HTML', reply_markup: keyboard(o)
-  }).catch(e => console.error('edit:', e.message));
+  const next = o.total;
   await bot.editMessageText(
-    conf.kind === 'ship' ? `✅ № ${o.no}: доставка ${money(conf.amount)}${prevShip ? ` (було ${money(prevShip)})` : ''}, разом ${money(next)}`
+    conf.kind === 'cancel' ? `✖️ № ${o.no} скасовано: ${conf.note}`
+    : conf.kind === 'ship' ? `✅ № ${o.no}: доставка ${money(conf.amount)}${r.prevShip ? ` (було ${money(r.prevShip)})` : ''}, разом ${money(next)}`
     : conf.kind === 'note' ? `✅ Коментар до № ${o.no} надіслано: ${conf.note}`
     : conf.kind === 'fact' ? `✅ № ${o.no}: фактична сума ${money(next)} (було ${money(before)}, ${diffText(before, next)})` + (conf.note ? `\n${conf.note}` : '')
     : `✅ № ${o.no}: ${money(before)} ${conf.kind === 'add' ? '+' : '−'} ${money(conf.amount)} = ${money(next)}` + (conf.note ? `\n${conf.note}` : ''),
     { chat_id: chatId, message_id: cq.message.message_id }).catch(() => {});
-  await bot.answerCallbackQuery(cq.id, { text: 'Готово' });
-
-  notifyAdjust(o, o.adjust[o.adjust.length - 1]);
+  await bot.answerCallbackQuery(cq.id, { text: conf.kind === 'cancel' ? 'Скасовано' : 'Готово' });
 });
 
 /* Відповідь оператора на запит */
