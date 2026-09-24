@@ -1611,12 +1611,18 @@ function renderCatalog(){
   /* Підкатегорія з іншої категорії (лишилась після пошуку) — показуємо «Все»,
      інакше каталог був би порожнім без жодного пояснення */
   if(!searching&&sub&&!allGroups.includes(sub)) sub='';
-  if(!searching&&allGroups.length>1){
-    subBox.innerHTML=`<button class="sub" data-g="" aria-selected="${!sub}">Все</button>`+
-      allGroups.map(g=>`<button class="sub" data-g="${g}" aria-selected="${sub===g}">${g}</button>`).join('');
+  /* У пошуку підкатегорії теж потрібні: знайшов «стейк» — і звужуєш до
+     свинини чи яловичини. Раніше чипси просто зникали, і це виглядало
+     так, ніби пошук скидає фільтри (власник, 23.09). Вибір усередині
+     пошуку тримаємо окремо, щоб не чіпати обране в каталозі. */
+  if(searching&&searchSub&&!allGroups.includes(searchSub)) searchSub='';
+  const pick=searching? searchSub : sub;
+  if(allGroups.length>1){
+    subBox.innerHTML=`<button class="sub" data-g="" aria-selected="${!pick}">Все</button>`+
+      allGroups.map(g=>`<button class="sub" data-g="${g}" aria-selected="${pick===g}">${g}</button>`).join('');
   } else subBox.innerHTML='';
 
-  const list=(!searching&&sub)?all.filter(i=>i.grp===sub):all;
+  const list=pick? all.filter(i=>i.grp===pick) : all;
   const groups=[...new Set(list.map(i=>i.grp))];
   /* Пояснення до всієї категорії — над товарами, лише коли не шукаємо */
   const catNote=!searching&&(CATS.find(c=>c.id===cat)||{}).note;
@@ -1661,7 +1667,10 @@ const keepSearchFocus=el=>{
 const pickCatKeep=id=>{ const q=document.getElementById('q'), had=searchHadFocus||document.activeElement===q; searchHadFocus=false; pickCat(id); if(had&&q.value) try{q.focus({preventScroll:true})}catch(e){} };
 document.getElementById('cats').onclick=e=>{const b=e.target.closest('.cat');if(b)pickCatKeep(b.dataset.c)};
 document.getElementById('sideCats').onclick=e=>{const b=e.target.closest('.side-cat');if(b)pickCatKeep(b.dataset.c)};
-document.getElementById('subs').onclick=e=>{const b=e.target.closest('.sub');if(!b)return;sub=b.dataset.g;renderCatalog()};
+document.getElementById('subs').onclick=e=>{const b=e.target.closest('.sub');if(!b)return;
+  /* У пошуку звужуємо результати, поза ним — сам каталог */
+  if(document.getElementById('q').value.trim()) searchSub=b.dataset.g; else sub=b.dataset.g;
+  renderCatalog()};
 document.querySelector('.mode-bar').onclick=e=>{
   const b=e.target.closest('[data-gm]'); if(!b) return;
   getMode=b.dataset.gm;
@@ -1673,11 +1682,12 @@ document.querySelector('.mode-bar').onclick=e=>{
    вона зайшла мимохідь. Раніше «Мариноване мʼясо → Свинина»
    перетворювалось на «Ковбаски → Все» (власник, 23.09). */
 let beforeSearch=null;
+let searchSub='';         // підкатегорія всередині пошуку — окремо від каталогу
 document.getElementById('q').oninput=()=>{
   const q=document.getElementById('q').value.trim();
   if(q){ if(!beforeSearch) beforeSearch={cat,sub} }
   else{
-    searchCat='';                       // стерли пошук — наступний знову всюди
+    searchCat=''; searchSub='';         // стерли пошук — наступний знову всюди
     if(beforeSearch){ cat=beforeSearch.cat; sub=beforeSearch.sub; beforeSearch=null }
   }
   renderCats();renderCatalog();
