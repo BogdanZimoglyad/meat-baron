@@ -782,6 +782,122 @@ bot.onText(/^\/day(?:@\w+)?/, msg => {
   bot.sendMessage(msg.chat.id, dayText(Number(i), kyivDate()), { parse_mode: 'HTML' });
 });
 
+/* ---------- панель точки ----------
+   У чаті добре видно одне замовлення, але коли їх сорок, вони тонуть
+   між нагадуваннями й розмовами: заказ на 18:00 їде вгору, і оператор
+   гортає стрічку (власник, 23.09; на вихідних точки ловлять по 300
+   пропущених дзвінків, і сайт має ту лінію розвантажити).
+
+   Панель — окрема сторінка для планшета точки: усі активні замовлення
+   на одному екрані, за часом видачі. Вхід простий: у чаті точки
+   `/panel`, бот дає посилання з разовим кодом; планшет міняє код на
+   ключ і далі просто відкриває вкладку. Ключ привʼязаний до точки, тож
+   із планшета Шевченка видно лише Шевченка. */
+const PANEL_CODE_TTL = 10 * 60 * 1000;
+const panelCodes = new Map();          // разовий код → { shop, at }
+setInterval(() => {
+  const now = Date.now();
+  for (const [c, v] of panelCodes) if (now - v.at > PANEL_CODE_TTL) panelCodes.delete(c);
+}, 60 * 1000).unref();
+
+bot.onText(/^\/panel(?:@\w+)?/, msg => {
+  const shop = shopOfChat(msg.chat.id);
+  if (shop === null) return bot.sendMessage(msg.chat.id, 'Цей чат не привʼязаний до точки. /whoami');
+  const code = crypto.randomBytes(5).toString('hex');
+  panelCodes.set(code, { shop, at: Date.now() });
+  bot.sendMessage(msg.chat.id,
+    `<b>Панель точки</b> · ${esc(SHOPS[shop])}\n\n` +
+    `Відкрийте це посилання на планшеті — і більше вводити нічого не треба:\n` +
+    `${SITE}op.html#${code}\n\n` +
+    `Посилання діє 10 хвилин і лише один раз. Загубився планшет — напишіть /panel ще раз, ` +
+    `старий доступ тоді краще відкликати командою /panel-off.`,
+    { parse_mode: 'HTML', disable_web_page_preview: true });
+});
+
+bot.onText(/^\/panel-off(?:@\w+)?/, msg => {
+  const shop = shopOfChat(msg.chat.id);
+  if (shop === null) return;
+  db.panel = db.panel || {};
+  let n = 0;
+  for (const t in db.panel) if (db.panel[t].shop === shop) { delete db.panel[t]; n++ }
+  save();
+  bot.sendMessage(msg.chat.id, n
+    ? `Відкликано доступів: ${n}. Щоб зайти знову — /panel.`
+    : 'Активних доступів до панелі немає.');
+});
+
+/* Код у ключ. Код одноразовий: підгледіли посилання через годину —
+   воно вже нічого не відкриє. */
+app.post('/api/op/claim', (req, res) => {
+  if (tooOften('auth', ipOf(req), RATE.auth)) {
+    return res.status(429).json({ error: 'Забагато спроб. Зачекайте кілька хвилин.' });
+  }
+  const code = String((req.body || {}).code || '');
+  const rec = panelCodes.get(code);
+  if (!rec || Date.now() - rec.at > PANEL_CODE_TTL) {
+    return res.status(403).json({ error: 'Посилання застаріло. Напишіть /panel у чаті точки ще раз.' });
+  }
+  panelCodes.delete(code);
+  const token = crypto.randomBytes(24).toString('hex');
+  db.panel = db.panel || {};
+  db.panel[token] = { shop: rec.shop, at: Date.now() };
+  save();
+  res.json({ ok: true, token, shop: rec.shop, shopName: SHOPS[rec.shop] });
+});
+
+/* Хто прийшов із планшета точки */
+function panelOf(req) {
+  const h = String(req.headers.authorization || '');
+  const token = h.startsWith('Bearer ') ? h.slice(7).trim() : '';
+  const rec = token && (db.panel || {})[token];
+  if (!rec) return null;
+  rec.seen = Date.now();
+  return { token, shop: rec.shop };
+}
+
+/* Усе, що оператору треба бачити: склад, суму, телефон, адресу. Це вже
+   не «публічний» вигляд замовлення — панель за ключем точки. */
+const opOrder = o => ({
+  no: o.no, status: o.status, label: LABEL[o.status],
+  mode: o.mode, slotAt: o.slotAt || 0, when: o.when || '',
+  createdAt: o.createdAt, readyAt: o.readyAt || 0, onwayAt: o.onwayAt || 0,
+  total: o.total, totalOrig: o.totalOrig, adjust: adjustmentsOf(o),
+  fry: !!o.fry, fg: o.fg || 0, pay: o.pay,
+  nm: o.nm, tel: o.tel, addr: o.addr || '', note: o.note || '',
+  mismatch: o.mismatch || null,
+  /* Коли можна братися — панель підсвітить, а не дасть натиснути дарма */
+  startAt: o.slotAt ? o.slotAt - (o.mode === 'delivery' ? 90 : 60) * 60000 : 0,
+  lines: (o.lines || []).map(l => ({ name: nameOf(l), qty: l.g, unit: l.unit, sum: l.sum, fry: !!l.fry, v: l.v || '' }))
+});
+
+app.get('/api/op/orders', (req, res) => {
+  if (tooOften('status', ipOf(req), RATE.status)) {
+    return res.status(429).json({ error: 'Забагато запитів. Зачекайте кілька хвилин.' });
+  }
+  const a = panelOf(req);
+  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  const DAY = 24 * 3600 * 1000;
+  const list = Object.values(db.orders)
+    .filter(o => o.shop === a.shop && (!FINAL.has(o.status) || Date.now() - (o.updatedAt || o.createdAt || 0) < 2 * 3600 * 1000))
+    .filter(o => Date.now() - (o.createdAt || 0) < 3 * DAY)
+    /* Найближче за часом видачі — зверху: саме цим замовленням треба
+       займатись першими. Без часу (якнайшвидше) — за номером. */
+    .sort((x, y) => (x.slotAt || x.createdAt || 0) - (y.slotAt || y.createdAt || 0))
+    .map(opOrder);
+  res.json({ ok: true, shop: a.shop, shopName: SHOPS[a.shop], now: Date.now(), orders: list });
+});
+
+app.post('/api/op/order/:no/status', async (req, res) => {
+  const a = panelOf(req);
+  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  const o = db.orders[req.params.no];
+  if (!o) return res.status(404).json({ error: 'Замовлення не знайдено' });
+  if (o.shop !== a.shop) return res.status(403).json({ error: 'Це замовлення іншої точки' });
+  const r = await applyStatus(o, String((req.body || {}).status || ''));
+  if (r.err) return res.status(409).json({ error: r.err, order: opOrder(o) });
+  res.json({ ok: true, order: opOrder(o) });
+});
+
 /* ---------- підсумки за тиждень і місяць ----------
    `/day` бачить лише сьогодні й лише свою точку. Власнику потрібне
    інше: як ідуть справи взагалі й куди рухається кожна точка — щоб
@@ -1792,44 +1908,35 @@ app.get('/api/history/:tel', (req, res) => {
 });
 
 /* ---------- зміна статусу оператором ---------- */
-bot.on('callback_query', async cq => {
-  const [tag, noStr, st] = (cq.data || '').split(':');
-  if (tag !== 's') return;
-
-  const o = db.orders[noStr];
-  if (!o) return bot.answerCallbackQuery(cq.id, { text: 'Замовлення не знайдено' });
-  if (!STATUSES.includes(st)) return bot.answerCallbackQuery(cq.id, { text: 'Невідомий статус' });
-  /* Лише в чаті тієї точки, куди прийшло замовлення */
-  if (cq.message && cq.message.chat.id !== o.chatId) {
-    return bot.answerCallbackQuery(cq.id, { text: 'Це замовлення іншої точки' });
-  }
-  /* Статус іде лише вперед, на один крок. Старе повідомлення чи швидкий
-     подвійний дотик натискали кнопку, якої вже не мало бути, — і
-     «Готове» відкочувалось назад у «Готується», у клієнта теж. */
+/* ---------- один шлях для зміни статусу ----------
+   Кнопку тисне і оператор у чаті, і оператор у панелі на планшеті. Якщо
+   тримати дві копії правил, вони розійдуться — і хтось один почне
+   готувати наперед або відкочувати статус назад. Тому всі перевірки
+   тут, а бот із панеллю лише кличуть.
+   Повертає {ok:true} або {err:'чому не можна'}. */
+async function applyStatus(o, st) {
+  if (!STATUSES.includes(st)) return { err: 'Невідомий статус' };
   /* Готувати наперед не можна: на завтра оператор лише «Приймає в
      роботу», решта кнопок оживає того дня (власник, 20.09 — заказ на
      завтра всю ніч висів у клієнта як «Готується»). */
   if (st !== 'accepted' && futureDay(o)) {
-    return bot.answerCallbackQuery(cq.id, {
-      text: `Замовлення на ${dayShort(o.slotAt)}. Готувати й видавати — того дня.`,
-      show_alert: true });
+    return { err: `Замовлення на ${dayShort(o.slotAt)}. Готувати й видавати — того дня.` };
   }
   /* Те саме в межах дня. О десятій ранку можна було натиснути всі кнопки
      на замовлення, яке заберуть о пʼятій, — і мʼясо чекало б сім годин
-     (власник, 23.09). Відкриваємо кнопки за пів години до того, як треба
-     братися: доставку — за півтори години, самовивіз — за годину. */
+     (власник, 23.09). Доставку відкриваємо за півтори години, самовивіз
+     за годину. */
   if (st !== 'accepted' && o.slotAt) {
-    const lead = (o.mode === 'delivery' ? 90 : 60) * 60000;
-    const from = o.slotAt - lead;
+    const from = o.slotAt - (o.mode === 'delivery' ? 90 : 60) * 60000;
     if (Date.now() < from) {
-      return bot.answerCallbackQuery(cq.id, {
-        text: `Замовлення на ${hhmm(o.slotAt)}. Братися можна з ${hhmm(from)}.`,
-        show_alert: true });
+      return { err: `Замовлення на ${hhmm(o.slotAt)}. Братися можна з ${hhmm(from)}.` };
     }
   }
+  /* Статус іде лише вперед, на один крок. Старе повідомлення чи швидкий
+     подвійний дотик натискали кнопку, якої вже не мало бути, — і
+     «Готове» відкочувалось назад у «Готується», у клієнта теж. */
   if (!nextBtns(o).some(([next]) => next === st)) {
-    await bot.editMessageReplyMarkup(keyboard(o), { chat_id: o.chatId, message_id: o.msgId }).catch(() => {});
-    return bot.answerCallbackQuery(cq.id, { text: `Уже «${LABEL[o.status]}» — кнопки оновлено` });
+    return { err: `Уже «${LABEL[o.status]}»`, stale: true };
   }
 
   o.status = st;
@@ -1839,6 +1946,8 @@ bot.on('callback_query', async cq => {
   o.updatedAt = Date.now();
   save();
 
+  /* Картка в чаті точки — спільна пам'ять зміни, тож оновлюємо її
+     незалежно від того, звідки натиснули. */
   await bot.editMessageText(orderText(o), {
     chat_id: o.chatId,
     message_id: o.msgId,
@@ -1846,9 +1955,31 @@ bot.on('callback_query', async cq => {
     reply_markup: keyboard(o)
   }).catch(e => console.error('edit:', e.message));
 
-  await bot.answerCallbackQuery(cq.id, { text: LABEL[st] });
-
   notify(o, st);
+  return { ok: true };
+}
+
+bot.on('callback_query', async cq => {
+  const [tag, noStr, st] = (cq.data || '').split(':');
+  if (tag !== 's') return;
+
+  const o = db.orders[noStr];
+  if (!o) return bot.answerCallbackQuery(cq.id, { text: 'Замовлення не знайдено' });
+  /* Лише в чаті тієї точки, куди прийшло замовлення */
+  if (cq.message && cq.message.chat.id !== o.chatId) {
+    return bot.answerCallbackQuery(cq.id, { text: 'Це замовлення іншої точки' });
+  }
+
+  const r = await applyStatus(o, st);
+  if (r.err) {
+    if (r.stale) {
+      await bot.editMessageReplyMarkup(keyboard(o), { chat_id: o.chatId, message_id: o.msgId }).catch(() => {});
+      return bot.answerCallbackQuery(cq.id, { text: r.err + ' — кнопки оновлено' });
+    }
+    return bot.answerCallbackQuery(cq.id, { text: r.err, show_alert: true });
+  }
+
+  await bot.answerCallbackQuery(cq.id, { text: LABEL[st] });
 });
 
 /* ---------- оператор уточнює суму ----------
