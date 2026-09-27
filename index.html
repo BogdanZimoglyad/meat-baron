@@ -2368,13 +2368,20 @@ function openCart(){
   <span class="lbl">Коментар до замовлення</span>
   <textarea class="fld cart-note" id="note" rows="2" placeholder="Побажання: гостріше, без цибулі, подзвоніть за 10 хв…">${orderNote}</textarea>
 
-  <div class="tot"><span style="color:var(--smoke);font-size:13px">Разом<small class="tot-sub" id="cartSub">${cartSub()}</small></span><b id="cartTot">${money(cartTotal())}</b></div>
   <p class="weight-note">${WEIGHT_NOTE}</p>
-  <button class="cta" id="toCheckout">Оформити замовлення</button>
   <button class="cta ghost" onclick="close_()">Додати ще</button>
   ${/* Кошик збирають довго, тож стирати його одним промахом не можна:
        перший дотик лише перепитує, другий чистить (власник, 23.09) */''}
-  <button class="lnk clear-cart" id="clearCart">Очистити кошик</button>`);
+  <button class="lnk clear-cart" id="clearCart">Очистити кошик</button>
+
+  ${/* Сума й «Оформити» тримаються внизу: до кошика з трьох позицій
+       треба було прокрутити майже цілий екран, щоб побачити кнопку
+       (заміряно 24.09 — 790 px). Другорядне — «Додати ще» й очищення —
+       лишилось у потоці, щоб не тиснули навмання. */''}
+  <div class="sh-foot">
+    <div class="tot"><span style="color:var(--smoke);font-size:13px">Разом<small class="tot-sub" id="cartSub">${cartSub()}</small></span><b id="cartTot">${money(cartTotal())}</b></div>
+    <button class="cta" id="toCheckout">Оформити замовлення</button>
+  </div>`);
   paintLines();
   const fa=sIn.querySelector('[data-fall]');
   if(fa) fa.onclick=()=>{toggleFryAll(); paintBar(); openCart()};
@@ -2395,7 +2402,29 @@ function openCart(){
     openCart();          // покаже порожній кошик із «До каталогу»
   };
   const nt=sIn.querySelector('#note');
-  if(nt) nt.oninput=()=>{orderNote=nt.value;saveCart()};
+  if(nt){
+    nt.oninput=()=>{orderNote=nt.value;saveCart()};
+    /* Липкий низ закриває нижню частину шторки, а на телефоні під ним ще
+       й клавіатура — поле коментаря опинялось саме за смугою (перевірено
+       з імітацією клавіатури на 300 px: поле 402–476, смуга з 369).
+       scrollIntoView тут не рятує: він центрує в усій шторці, а не в
+       тому, що лишилось видимим. Тож рахуємо самі — піднімаємо поле так,
+       щоб воно стало над смугою. */
+    const noteUp=()=>{
+      if(!nt.isConnected||document.activeElement!==nt) return;
+      const foot=sIn.querySelector('.sh-foot');
+      const lim=(foot?foot.getBoundingClientRect().top:sheet.getBoundingClientRect().bottom)-12;
+      const over=nt.getBoundingClientRect().bottom-lim;
+      if(over>0) sheet.scrollTop+=over;
+    };
+    /* Клавіатура відкривається не миттєво, і висоту видимої області
+       браузер повідомляє окремою подією — слухаємо обидва моменти. */
+    nt.onfocus=()=>{
+      setTimeout(noteUp,300);
+      if(window.visualViewport) window.visualViewport.addEventListener('resize',noteUp);
+    };
+    nt.onblur=()=>{ if(window.visualViewport) window.visualViewport.removeEventListener('resize',noteUp) };
+  }
   /* Коментар знімаємо до допродажу: екран «Що до мʼяса?» перемалює
      шторку, і поле з текстом зникне разом зі старою розміткою. */
   sIn.querySelector('#toCheckout').onclick=()=>{if(nt)orderNote=nt.value;upsellGate(openCheckout)};
