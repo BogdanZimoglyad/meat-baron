@@ -233,6 +233,17 @@ a{color:inherit}
 .it-a:hover{border-color:var(--line-2)}
 .it-a.on{color:var(--ember-hot);border-color:rgba(224,74,60,.45)}
 .it-a:active{transform:scale(.98)}
+/* Ті самі кнопки, але значками просто на знімку: висоти не займають і
+   стоять там, куди й так дивишся. Підпис ховаємо — стан обраного видно
+   по залитому серцю, як на картках каталогу. Кружечок напівпрозорий,
+   без розмиття: воно на айфоні дорого коштує, а знімок і так темний. */
+.hero-img .it-acts{position:absolute;top:10px;right:10px;margin:0;gap:8px;z-index:2}
+/* 44 px — найменший розмір, у який упевнено попадає палець */
+.hero-img .it-a{flex:0 0 auto;width:44px;height:44px;padding:0;border-radius:50%;
+  background:rgba(11,9,9,.58);border-color:rgba(240,233,222,.2);color:var(--bone)}
+.hero-img .it-a span{display:none}
+.hero-img .it-a svg{width:19px;height:19px}
+.hero-img .it-a.on{background:rgba(11,9,9,.7)}
 .add{height:31px;padding:0 14px;border-radius:8px;background:var(--ember);color:#fff;
   display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;transition:.15s}
 .add:active{transform:scale(.96)}
@@ -1954,10 +1965,13 @@ const itemLink=it=>location.origin+'/t/'+it.id+'.html';
 const itemActs=it=>{
   const on=favs.has(it.id);
   return `<div class="it-acts">
-    <button class="it-a it-fav${on?' on':''}" role="switch" aria-checked="${on}">
+    ${/* aria-label обовʼязковий: на знімку підписи сховані, і без нього
+         кнопка лишилась би без назви для читалки з екрана. */''}
+    <button class="it-a it-fav${on?' on':''}" role="switch" aria-checked="${on}"
+            aria-label="${on?'В обраному':'В обране'}">
       ${HEART.replace('<svg','<svg fill="'+(on?'currentColor':'none')+'"')}
       <span class="it-fav-t">${on?'В обраному':'В обране'}</span></button>
-    <button class="it-a it-share">
+    <button class="it-a it-share" aria-label="Поділитися">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 16V4"/><path d="M8 7.5 12 3.5l4 4"/><path d="M5 13v6.5h14V13"/></svg>
       <span class="it-share-t">Поділитися</span></button>
@@ -1994,6 +2008,7 @@ function bindItemActs(it,root){
     toggleFav(it.id);
     const on=favs.has(it.id);
     f.classList.toggle('on',on); f.setAttribute('aria-checked',on);
+    f.setAttribute('aria-label',on?'В обраному':'В обране');
     const s=f.querySelector('svg'); if(s) s.setAttribute('fill',on?'currentColor':'none');
     const t=box.querySelector('.it-fav-t'); if(t) t.textContent=on?'В обраному':'В обране';
   };
@@ -2022,7 +2037,10 @@ function openItem(id, editIdx){
     : [0,1,2,3].map(k=>it.minG+k*step)
         .map(v=>v<1000?Math.round(v/50)*50:Math.round(v/100)*100);
   open(`<div class="grab-zone"><div class="grab"></div></div>
-  <div class="hero-img${/\.jpe?g$/.test(photoOf(it)||'')?' has-bg':''}">${photoOf(it)?`<img src="${photoOf(it)}" alt="${it.name}">`:ph(it,1)}</div>
+  ${/* «В обране» й «Поділитися» — значками просто на знімку. Окремим
+       рядком вони з'їдали ~50 px, а кожен рядок над головною кнопкою
+       відсуває її за край екрана (власник, 27.09). */''}
+  <div class="hero-img${/\.jpe?g$/.test(photoOf(it)||'')?' has-bg':''}">${photoOf(it)?`<img src="${photoOf(it)}" alt="${it.name}">`:ph(it,1)}${itemActs(it)}</div>
   <div class="sh-h"><h3>${nameOf(it)}</h3><button class="x" onclick="close_()">✕</button></div>
   <p class="hint" style="margin-top:-6px">${sheetLead(it)}${it.cat==='raw'?`Ціна за 100 г сирого мʼяса — ${money(it.price)}. Посмажимо на мангалі за ${FRY_RATE} ₴/кг.`:`Ціна за 100 г — ${money(it.price)}.`}${sale(it)?` <b style="color:var(--ember-hot)">${esc(sale(it))}</b>`:''}</p>
   ${descOf(it)?`<p class="hint sh-desc">${descOf(it)}</p>`:''}
@@ -2040,10 +2058,6 @@ function openItem(id, editIdx){
       ? `<button class="cta" id="addBtn" disabled>Сьогодні немає</button>
          <p class="hint" style="text-align:center;margin:6px 0 0">Закінчилось на точці «${esc(SHOPS[shop][0])}». Завтра зранку знову буде.</p>`
       : `<button class="cta" id="addBtn">${editing?'Зберегти':'Додати в кошик'}</button>`}
-    ${/* «В обране» й «Поділитися» — після головної дії: спершу людина
-         вирішує, брати чи ні, а вже потім зберігає чи ділиться. Заразом
-         це 38 px, на які кнопка піднялась ближче до екрана. */''}
-    ${itemActs(it)}
     <p class="hint">${por?`Продається штуками, ціна — за вагу: одна приблизно ${por} г. Точну суму порахуємо, коли зважимо.`:`Мінімальна вага — ${it.minG} г, можна ввести свою.`} ${canFry(it)?'Смаження на мангалі позначається в кошику.':''}</p>
   </div>`);
   bindItemActs(it,sIn);
