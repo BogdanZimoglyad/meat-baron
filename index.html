@@ -3852,6 +3852,45 @@ loadStock();
       ' видимий='+Math.round(vv.height)+' → панель='+getComputedStyle(document.documentElement).getPropertyValue('--vv-bottom').trim());
     vv.addEventListener('resize',note); setTimeout(note,400);
   }
+
+  /* Липкий низ шторки: на 16 Pro Max кнопку накриває нижньою рамкою, на
+     17 Pro те саме місце виглядає нормально (власник, 27.09). Двічі
+     полагодили не те, тож тепер просто показуємо всі числа, від яких
+     залежить її місце, — і дивимось, яке з них не таке. */
+  const probe=()=>{
+    const f=document.querySelector('.sh-foot');
+    if(!f) return log('липкої смуги на екрані немає');
+    const btn=f.querySelector('.cta'), sr=sheet.getBoundingClientRect(), fr=f.getBoundingClientRect();
+    const br=btn?btn.getBoundingClientRect():null;
+    const probeEl=document.createElement('div');
+    probeEl.style.cssText='position:fixed;bottom:0;height:env(safe-area-inset-bottom);width:1px;visibility:hidden';
+    document.body.appendChild(probeEl);
+    const safe=Math.round(probeEl.getBoundingClientRect().height);
+    probeEl.remove();
+    log('шторка: '+Math.round(sr.top)+'…'+Math.round(sr.bottom)+
+        ' (висота '+Math.round(sr.height)+', прокрутка '+Math.round(sheet.scrollHeight-sheet.clientHeight)+')');
+    log('смуга: '+Math.round(fr.top)+'…'+Math.round(fr.bottom)+
+        ' · падінг знизу '+getComputedStyle(f).paddingBottom+
+        ' · відступ знизу '+getComputedStyle(f).marginBottom);
+    if(br) log('КНОПКА: '+Math.round(br.top)+'…'+Math.round(br.bottom)+
+        ' · від низу шторки '+Math.round(sr.bottom-br.bottom)+
+        ' · від низу екрана '+Math.round(document.documentElement.clientHeight-br.bottom));
+    log('екран: layout='+document.documentElement.clientHeight+
+        ' видимий='+Math.round(window.visualViewport?window.visualViewport.height:0)+
+        ' · safe-area-bottom='+safe+
+        ' · --vv-bottom='+(getComputedStyle(document.documentElement).getPropertyValue('--vv-bottom').trim()||'0')+
+        ' · падінг шторки '+getComputedStyle(sIn).paddingBottom);
+  };
+  const oi=openItem;
+  openItem=function(){ const r=oi.apply(this,arguments); setTimeout(probe,600); return r };
+  /* Кнопка на екрані — щоб зняти числа в будь-який момент */
+  const b=document.createElement('button');
+  b.textContent='заміряти низ';
+  b.style.cssText='position:fixed;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));z-index:1000;'+
+    'background:#7CFC7C;color:#000;border:0;border-radius:8px;padding:8px 12px;font:12px system-ui';
+  b.onclick=probe;
+  (document.readyState==='loading'? addEventListener('DOMContentLoaded',()=>document.body.appendChild(b))
+                                  : document.body.appendChild(b));
 })();
 /* Посилання на товар: ?item=<номер> відкриває його картку. Замовлення
    важливіше — якщо в адресі є і воно, картку не чіпаємо. */
