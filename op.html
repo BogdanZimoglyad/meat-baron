@@ -33,8 +33,29 @@ button{font:inherit;cursor:pointer;border:none}
 .pill.off{background:rgba(216,161,58,.14);border-color:rgba(216,161,58,.5);color:var(--warn)}
 
 /* список */
-.wrap{max-width:1100px;margin:0 auto;padding:14px}
+/* На касовому моніторі точки половина екрана лишалась порожньою: панель
+   робилась під планшет (власник, 27.09). Тепер займаємо всю ширину, але
+   не розтягуємось нескінченно — понад 1800 px очі бігали б через екран. */
+.wrap{max-width:1800px;margin:0 auto;padding:14px}
 .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(330px,1fr))}
+
+/* підсумок дня — вузька смужка під шапкою */
+.day{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:baseline;
+  background:var(--coal);border:1px solid var(--line);border-radius:12px;
+  padding:10px 14px;margin-bottom:14px;font-size:14px;color:var(--smoke)}
+.day b{color:var(--bone);font-size:17px;font-weight:600}
+.day .mut{font-size:13px}
+
+/* купки: нові, в роботі, завершені */
+.sect{margin-bottom:18px}
+.sect h2{display:flex;align-items:center;gap:8px;margin:0 0 9px;
+  font-size:13px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--smoke)}
+.sect h2 i{font-style:normal;background:var(--coal);border:1px solid var(--line);
+  border-radius:999px;padding:1px 9px;font-size:12px;letter-spacing:0}
+.sect.hot h2{color:var(--ember-hot)}
+.sect.hot h2 i{border-color:rgba(224,74,60,.45)}
+.sect.done h2{cursor:pointer;user-select:none}
+.sect.done .card{opacity:.72}
 .card{background:var(--coal);border:1px solid var(--line);border-radius:14px;padding:14px;
   display:flex;flex-direction:column;gap:10px}
 .card.new{border-color:rgba(224,74,60,.6);box-shadow:0 0 0 1px rgba(224,74,60,.25)}
@@ -214,6 +235,37 @@ let seenNew=new Set(), lastOk=0, form=null;
    в шапці живуть завжди — оператор має бачити нове замовлення, навіть
    поки прибирає позицію зі стоп-листа. */
 let view='orders', SHOP=null, stockQ='', DATA=null;
+/* Зроблені за день ховаємо: вони цікаві раз на зміну, а місце на екрані
+   займають постійно. Розгортаються натисканням на заголовок. */
+let showDone=false;
+
+const groupOf=o=> o.status==='new' ? 0
+                : (o.status==='done'||o.status==='canceled') ? 2 : 1;
+
+/* Підсумок дня: скільки вже прийняли, на яку суму, скільки мʼяса на
+   мангал. Рахує сервер — той самий підсумок, що йде в чат після
+   закриття, тож цифри в панелі й у боті не розходяться. */
+function dayStrip(d){
+  if(!d||!d.all) return '<div class="day"><span>Сьогодні замовлень із сайту ще не було</span></div>';
+  return `<div class="day">
+    <span><b>${d.all-d.canceled}</b> замовлень</span>
+    <span><b>${money(d.sum)}</b></span>
+    <span>на мангал <b>${wLabel(d.fg)}</b></span>
+    <span class="mut">самовивіз ${d.pickup} · доставка ${d.delivery}</span>
+    ${d.canceled?`<span class="mut">скасовано ${d.canceled}</span>`:''}
+  </div>`;
+}
+
+const sect=(title,cls,list,now)=> list.length
+  ? `<section class="sect ${cls}"><h2>${title}<i>${list.length}</i></h2>
+     <div class="grid">${list.map(o=>card(o,now)).join('')}</div></section>`
+  : '';
+
+const doneSect=(list,now)=> list.length
+  ? `<section class="sect done"><h2 data-done="1" role="button" tabindex="0">
+       ${showDone?'▾':'▸'} Завершені<i>${list.length}</i></h2>
+     ${showDone?`<div class="grid">${list.map(o=>card(o,now)).join('')}</div>`:''}</section>`
+  : '';
 
 function draw(d){
   DATA=d;
@@ -234,12 +286,19 @@ function draw(d){
   seenNew=new Set(freshNos);
 
   if(view!=='orders') return;        // лічильники оновили, а екран зараз інший
-  if(!d.orders.length){
-    $('wrap').innerHTML='<p class="empty">Замовлень зараз немає.</p>';
-    return;
-  }
   const w=$('wrap');
-  w.innerHTML='<div class="grid">'+d.orders.map(o=>card(o,now)).join('')+'</div>';
+  /* Три купки замість однієї стрічки: нові, ті, що в роботі, і зроблені.
+     В одній стрічці все лежало вперемішку, і в суботу при 90 замовленнях
+     живі губились би серед виданих (власник, 27.09). */
+  const g=[[],[],[]];
+  d.orders.forEach(o=>g[groupOf(o)].push(o));
+  w.innerHTML=dayStrip(d.day)
+    +(d.orders.length?'':'<p class="empty">Замовлень зараз немає.</p>')
+    +sect('Нові — прийняти в роботу','hot',g[0],now)
+    +sect('У роботі','',g[1],now)
+    +doneSect(g[2],now);
+  const dh=w.querySelector('[data-done]');
+  if(dh) dh.onclick=()=>{ showDone=!showDone; draw(d) };
   w.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>step(b.dataset.go,b.dataset.st,b));
   w.querySelectorAll('[data-form]').forEach(b=>b.onclick=()=>{
     form={no:+b.dataset.form,kind:b.dataset.kind}; draw(d); focusForm();

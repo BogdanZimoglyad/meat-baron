@@ -912,7 +912,11 @@ app.get('/api/op/orders', (req, res) => {
        займатись першими. Без часу (якнайшвидше) — за номером. */
     .sort((x, y) => (x.slotAt || x.createdAt || 0) - (y.slotAt || y.createdAt || 0))
     .map(opOrder);
-  res.json({ ok: true, shop: a.shop, shopName: SHOPS[a.shop], now: Date.now(), orders: list });
+  /* Підсумок дня — той самий, що бот шле в чат після закриття. Оператор
+     на точці не мав жодної цифри за день: скільки вже прийняли, на яку
+     суму, скільки мʼяса на мангал (власник, 27.09). */
+  res.json({ ok: true, shop: a.shop, shopName: SHOPS[a.shop], now: Date.now(),
+    day: dayStats(a.shop, kyivDate()), orders: list });
 });
 
 /* Уточнити суму, дописати коментар або скасувати — те саме, що кнопками

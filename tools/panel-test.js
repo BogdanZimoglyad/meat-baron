@@ -12,7 +12,9 @@ const code = [
   cut(/function card\(o,now\)\{[\s\S]*?\n\}/),
   cut(/function more\(o\)\{[\s\S]*?\n\}/),
   cut(/const FORM=\{[\s\S]*?\n\};/),
-  cut(/function formHtml\(o,kind\)\{[\s\S]*?\n\}/)
+  cut(/function formHtml\(o,kind\)\{[\s\S]*?\n\}/),
+  cut(/const groupOf=o=>[\s\S]*?: 1;/),
+  cut(/function dayStrip\(d\)\{[\s\S]*?\n\}/)
 ].join('\n');
 
 const env = {
@@ -26,6 +28,12 @@ const draw = (o, now, openForm) => {
   const fn = new Function('esc', 'money', 'hhmm', 'wLabel', 'form', 'o', 'now',
     `${code}; return card(o,now)`);
   return fn(env.esc, env.money, env.hhmm, env.wLabel, openForm || null, o, now);
+};
+/* Купка, в яку потрапить замовлення, і смужка підсумку дня */
+const pick = what => {
+  const fn = new Function('esc', 'money', 'hhmm', 'wLabel', 'form',
+    `${code}; return ${what}`);
+  return fn(env.esc, env.money, env.hhmm, env.wLabel, null);
 };
 
 const MIN = 60000, NOW = Date.now();
@@ -87,6 +95,23 @@ t.push(['на сьогоднішньому дати немає', !has(h, '<em>')
 // 7. головна кнопка досі на місці й блокується до свого часу
 h = draw(ord({ status: 'accepted', label: 'Прийнято', startAt: NOW + 30 * MIN }), NOW);
 t.push(['зарано готувати — кнопка замкнена з підписом часу', has(h, 'disabled') && has(h, 'можна з')]);
+
+// 8. купки: нове окремо, робота окремо, зроблене окремо
+const groupOf = pick('groupOf');
+t.push(['нове — у першу купку', groupOf({ status: 'new' }) === 0]);
+t.push(['усе, що в роботі, — у другу',
+  ['accepted', 'cooking', 'ready', 'onway'].every(s => groupOf({ status: s }) === 1)]);
+t.push(['видане й скасоване — у третю',
+  groupOf({ status: 'done' }) === 2 && groupOf({ status: 'canceled' }) === 2]);
+
+// 9. підсумок дня
+const dayStrip = pick('dayStrip');
+let s = dayStrip({ all: 7, canceled: 2, open: 3, pickup: 4, delivery: 1, ship: 0, sum: 8659.42, fg: 16400 });
+t.push(['скасовані не рахуються в кількості', has(s, '<b>5</b> замовлень')]);
+t.push(['сума й мангал на місці', has(s, '8659.42 ₴') && has(s, '16.4 кг')]);
+t.push(['скасовані показані окремо', has(s, 'скасовано 2')]);
+t.push(['порожній день — так і кажемо', has(dayStrip({ all: 0 }), 'ще не було')]);
+t.push(['сервер нічого не прислав — не падаємо', has(dayStrip(null), 'ще не було')]);
 
 let bad = 0;
 for (const [name, ok] of t) { console.log((ok ? '  ok  ' : 'ПАДАЄ') + ' · ' + name); if (!ok) bad++ }
