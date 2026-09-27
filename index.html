@@ -420,6 +420,13 @@ body.has-bar .to-top{bottom:calc(84px + env(safe-area-inset-bottom) + var(--vv-b
 /* Фото з власним фоном (jpg): підкладка чорна, як сам фон, і без полів —
    інакше чорний квадрат знімка сидить у коричневій рамці. Вирізаним png
    поля потрібні, щоб страва не впиралась у край. */
+/* На телефоні знімок нижчий. 4:3 на вузькому екрані — це 257 px із 809,
+   майже третина картки, і кнопка через них не влазила (власник, 27.09).
+   Товар не ріжеться: object-fit:contain вписує його в нижчу рамку, з
+   боків лишається той самий фон, тож на око нічого не змінилось. */
+@media(max-width:899px){
+  .hero-img,.hero-img img{aspect-ratio:16/9}
+}
 .hero-img.has-bg{background:#000}
 .hero-img.has-bg img{padding:0}
 .hero-img svg{width:44px;height:44px;opacity:.28}
@@ -2019,20 +2026,25 @@ function openItem(id, editIdx){
   <div class="sh-h"><h3>${nameOf(it)}</h3><button class="x" onclick="close_()">✕</button></div>
   <p class="hint" style="margin-top:-6px">${sheetLead(it)}${it.cat==='raw'?`Ціна за 100 г сирого мʼяса — ${money(it.price)}. Посмажимо на мангалі за ${FRY_RATE} ₴/кг.`:`Ціна за 100 г — ${money(it.price)}.`}${sale(it)?` <b style="color:var(--ember-hot)">${esc(sale(it))}</b>`:''}</p>
   ${descOf(it)?`<p class="hint sh-desc">${descOf(it)}</p>`:''}
-  ${itemActs(it)}
   <span class="lbl">${por?'Оберіть кількість':'Оберіть вагу'}</span>
   <div class="wgrid">${quick.map(v=>`<button class="w" data-g="${v}" aria-pressed="${v===g}">${wLabel(v)}${por?`<i>${v/por} шт</i>`:''}</button>`).join('')}</div>
   <div class="rowline">
     <input type="range" id="rg" min="${lo*k}" max="${hiQ*k}" step="${por||50}" value="${g}" aria-label="${por?'Кількість':'Вага'}">
     <span class="wbox"><input id="wv" type="number" inputmode="numeric" min="${lo}" max="${hiQ}" step="${por?1:10}" value="${g/k}" aria-label="${por?'Кількість, шт':'Вага у грамах'}"><i>${por?'шт':'г'}</i></span>
   </div>
-  <p class="hint">${por?`Продається штуками, ціна — за вагу: одна приблизно ${por} г. Точну суму порахуємо, коли зважимо.`:`Мінімальна вага — ${it.minG} г, можна ввести свою.`} ${canFry(it)?'Смаження на мангалі позначається в кошику.':''}</p>
+  ${/* Дрібний текст — під кнопкою, а не над нею: кожен рядок над кнопкою
+       відсуває її за край екрана, а прочитати примітку можна й після. */''}
   <div class="sh-foot">
     <div class="tot"><span style="color:var(--smoke);font-size:13px">Разом</span><b id="tv">${money(it.price*g/100)}</b></div>
     ${isOff(it.id)&&!editing
       ? `<button class="cta" id="addBtn" disabled>Сьогодні немає</button>
          <p class="hint" style="text-align:center;margin:6px 0 0">Закінчилось на точці «${esc(SHOPS[shop][0])}». Завтра зранку знову буде.</p>`
       : `<button class="cta" id="addBtn">${editing?'Зберегти':'Додати в кошик'}</button>`}
+    ${/* «В обране» й «Поділитися» — після головної дії: спершу людина
+         вирішує, брати чи ні, а вже потім зберігає чи ділиться. Заразом
+         це 38 px, на які кнопка піднялась ближче до екрана. */''}
+    ${itemActs(it)}
+    <p class="hint">${por?`Продається штуками, ціна — за вагу: одна приблизно ${por} г. Точну суму порахуємо, коли зважимо.`:`Мінімальна вага — ${it.minG} г, можна ввести свою.`} ${canFry(it)?'Смаження на мангалі позначається в кошику.':''}</p>
   </div>`);
   bindItemActs(it,sIn);
   const rg=sIn.querySelector('#rg'),wv=sIn.querySelector('#wv'),tv=sIn.querySelector('#tv');
