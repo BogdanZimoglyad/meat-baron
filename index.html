@@ -3121,6 +3121,53 @@ function openCheckout(){
   draw();
 }
 
+/* ---------- сповіщення в браузер ----------
+   Для тих, хто замовляв без Telegram. На айфоні працюють лише з екрана
+   «Домой» (з iOS 16.4): у самому Safari підписка просто не створиться,
+   тож там кнопку не показуємо — показуємо підказку «Додайте на екран».
+   На Android працює й у звичайному браузері. */
+const pushOK=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+const onScreen=()=>navigator.standalone===true
+  ||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches);
+const iOSish=/iPhone|iPad|iPod/.test(navigator.userAgent);
+const canPush=()=>pushOK()&&(!iOSish||onScreen())&&Notification.permission!=='denied';
+
+/* Ключ сервера приходить у вигляді base64url, а підписці потрібні байти */
+const keyBytes=s=>{
+  const b=atob((s+'='.repeat((4-s.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/'));
+  const u=new Uint8Array(b.length);
+  for(let i=0;i<b.length;i++) u[i]=b.charCodeAt(i);
+  return u;
+};
+
+/* Підписку прив'язуємо до замовлення й доводимо ключем ckey — його
+   сервер віддав лише тому пристрою, що оформив замовлення. Без цього
+   досить було б знати чужий номер, щоб читати чужі сповіщення. */
+async function subscribePush(o){
+  try{
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub){
+      const r=await fetch(API+'/api/push/key');
+      const j=await r.json().catch(()=>({}));
+      if(!j.key) return false;
+      sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:keyBytes(j.key)});
+    }
+    const res=await fetch(API+'/api/push/subscribe',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({no:o.no,key:o.ckey||'',sub:sub.toJSON()})});
+    return res.ok;
+  }catch(e){ return false }
+}
+
+/* Питати дозвіл можна лише у відповідь на дотик — таке правило браузерів */
+async function enablePush(o){
+  try{
+    if(await Notification.requestPermission()!=='granted') return false;
+    return await subscribePush(o);
+  }catch(e){ return false }
+}
+
 /* ---------- status ---------- */
 function openStatus(startStatus){
   const o=order;
@@ -3145,7 +3192,9 @@ function openStatus(startStatus){
          чекає альфа-імені), і обіцяти їх — брехати людині, яка сидітиме
          й чекатиме. Кажемо правду, а поруч пропонуємо Telegram.
          Коли SMS запрацюють — повернути сюди «надішлемо SMS». */
-      ['Готове',me?'напишемо в Telegram':'стежте за статусом на цій сторінці','🔥'],[o.mode==='pickup'?'Видано':'Передано курʼєру','','🤝']];
+      ['Готове', me ? 'напишемо в Telegram'
+        : (canPush()&&Notification.permission==='granted' ? 'сповістимо на телефон'
+                                                         : 'стежте за статусом на цій сторінці'),'🔥'],[o.mode==='pickup'?'Видано':'Передано курʼєру','','🤝']];
     sIn.innerHTML=`<div class="grab-zone"><div class="grab"></div></div>
     <div class="done-ic${off?' off':''}"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round">
       <path d="${off?'M6 6l12 12M18 6L6 18':'M4 12.5l5.5 5.5L20 7'}"/></svg></div>
@@ -3168,10 +3217,17 @@ function openStatus(startStatus){
       </div>`).join('')}</div>`}
 
     ${/* Хто замовляв без входу, статусів не отримує: SMS поки не
-         підключені, і людина сидить і не знає, коли забирати. Тут
-         пропонуємо Telegram — один дотик, номер уже є. Скасованому
-         замовленню це вже ні до чого. */''}
-    ${!me&&!off?`<div class="ready-note tg">
+         підключені, і людина сидить і не знає, коли забирати.
+         Найкоротший шлях — сповіщення просто в телефон: один дотик, без
+         Telegram і без номера. Де вони неможливі (айфон, не доданий на
+         екран) — пропонуємо Telegram, як і раніше. */''}
+    ${!me&&!off&&canPush()&&Notification.permission!=='granted'?`<div class="ready-note tg">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      <span><b>Сповістимо, коли буде готове</b>
+      <span>Повідомлення прийде на цей телефон — Telegram не потрібен.</span>
+      <button class="lnk" id="stPush" type="button">Увімкнути сповіщення</button></span>
+    </div>`
+    : !me&&!off?`<div class="ready-note tg">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 3.5L2.5 10.8l6 2.2 2.2 6 3.1-4.7 5.1 3.9z"/></svg>
       <span><b>Підключіть Telegram — і статус прийде одразу</b>
       <span>Напишемо, коли точка візьме замовлення в роботу і коли воно буде готове.</span>
@@ -3214,6 +3270,15 @@ function openStatus(startStatus){
        натиснули двічі, а відмову показуємо текстом під нею. */
     const stTg=sIn.querySelector('#stTg');
     if(stTg) stTg.onclick=openLogin;
+    const stPush=sIn.querySelector('#stPush');
+    if(stPush) stPush.onclick=async()=>{
+      stPush.disabled=true; stPush.textContent='Питаємо дозвіл…';
+      const ok=await enablePush(o);
+      stPush.textContent=ok?'✅ Сповіщення увімкнено':'Не вдалося — перевірте дозволи в браузері';
+    };
+    /* Дозвіл уже є (давали на минулому замовленні) — тихо підписуємо цей
+       пристрій на це замовлення, нічого не питаючи. */
+    if(!me&&!off&&canPush()&&Notification.permission==='granted') subscribePush(o);
     const gi=sIn.querySelector('#gotIt');
     if(gi) gi.onclick=async()=>{
       gi.disabled=true; gi.textContent='Відмічаємо…';

@@ -67,7 +67,7 @@ app.use(express.static(__dirname, { dotfiles: 'ignore' }));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const DB = path.join(DATA_DIR, 'data.json');
 try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
-let db = { orders: {}, shops: {}, counter: 1000, users: {}, tokens: {}, busy: {}, extra: {}, daySent: {}, stop: {} };
+let db = { orders: {}, shops: {}, counter: 1000, users: {}, tokens: {}, busy: {}, extra: {}, daySent: {}, stop: {}, push: {} };
 try {
   db = JSON.parse(fs.readFileSync(DB, 'utf8'));
 } catch (e) {
@@ -2365,7 +2365,10 @@ function notifyCancel(o, why) {
   const tel = (CATALOG_SHOPS[o.shop] || [])[1] || '';
   const text = `✖️ Замовлення № ${o.no} скасовано.\nПричина: ${why}` +
     (tel ? `\nЯкщо це непорозуміння — зателефонуйте: ${tel}` : '');
-  if (!u.tgId) return console.log('[SMS →', telLog(o.tel) + ']', text.replace(/\n/g, ' '));
+  if (!u.tgId) {
+    pushTo(o.telKey, '✖️ Замовлення скасовано', `№ ${o.no} — ${why}`, SITE + '?order=' + o.no);
+    return console.log('[SMS →', telLog(o.tel) + ']', text.replace(/\n/g, ' '));
+  }
   bot.sendMessage(u.tgId, text, {
     reply_markup: { inline_keyboard: [[{ text: 'Відкрити замовлення', url: SITE + '?order=' + o.no }]] }
   }).catch(e => console.warn('Скасування № ' + o.no + ' не дійшло до клієнта:', e.message));
@@ -2409,6 +2412,21 @@ const NOTE = {
     (o.mode === 'pickup' ? `Чекаємо на вас: ${o.shopName}` : 'Курʼєр уже виїжджає.')
 };
 
+/* Для push заголовок і текст окремо: у сповіщенні браузера перший рядок
+   великий, і значок із номером там виглядає краще за суцільний абзац. */
+const NOTE_TITLE = {
+  accepted: '✅ Замовлення прийнято',
+  onway: '🚗 Замовлення в дорозі',
+  ready: '🔥 Замовлення готове'
+};
+const pushText = (o, st) => {
+  if (st === 'ready') {
+    return `№ ${o.no} — ` + (o.mode === 'pickup' ? `чекаємо на вас: ${o.shopName}` : 'курʼєр уже виїжджає');
+  }
+  if (st === 'onway') return `№ ${o.no} — курʼєр зателефонує, коли буде на місці`;
+  return `№ ${o.no}` + (o.when ? ` — орієнтовно ${o.when}` : '');
+};
+
 function notify(o, st) {
   const make = NOTE[st];
   if (!make) return;
@@ -2419,7 +2437,12 @@ function notify(o, st) {
   save();
 
   const u = db.users[o.telKey] || {};
-  if (!u.tgId) return sendSms(o, st);
+  /* Без Telegram — push у браузер, а SMS лишається запасним шляхом для
+     тих, хто сайт на екран не додавав. */
+  if (!u.tgId) {
+    pushTo(o.telKey, NOTE_TITLE[st] || 'Мʼясний Барон', pushText(o, st), SITE + '?order=' + o.no);
+    return sendSms(o, st);
+  }
 
   /* Доставлене підтверджує сам клієнт: оператор бачить лише передачу
      курʼєру (власник, 19.09). Кнопка — просто в сповіщенні. */
@@ -2433,6 +2456,86 @@ function notify(o, st) {
     console.warn('Сповіщення № ' + o.no + ' не дійшло:', e.message);
     sendSms(o, st);
   });
+}
+
+/* ---------- push у браузер ----------
+   Для тих, хто не входив через Telegram: у них зараз немає жодних
+   сповіщень — SMS ще не підключені, а бота вони не відкривали. Працює
+   на Android у браузері, а на айфоні — коли сайт додано на екран
+   (з iOS 16.4), тобто саме для тих, кому ми показуємо підказку.
+
+   Ключі сервер робить сам і тримає в базі на /data. Так секрет не
+   проходить ні через чат, ні через змінні Railway — його взагалі ніхто
+   не бачить. Том постійний, тож ключі переживають перезапуски; якщо
+   колись зникнуть, браузери просто перепідпишуться. */
+const webpush = require('web-push');
+const PUSH_CONTACT = process.env.PUSH_CONTACT || 'mailto:hello@meat-baron.kh.ua';
+function pushKeys() {
+  if (!db.vapid || !db.vapid.publicKey) {
+    db.vapid = webpush.generateVAPIDKeys();
+    writeNow();
+    console.log('Створено ключі для push-сповіщень');
+  }
+  webpush.setVapidDetails(PUSH_CONTACT, db.vapid.publicKey, db.vapid.privateKey);
+  return db.vapid;
+}
+
+app.get('/api/push/key', (req, res) => res.json({ ok: true, key: pushKeys().publicKey }));
+
+/* Підписатися можна лише на свої замовлення: доводимо це ключем ckey,
+   який сервер віддав тільки тому пристрою, що оформив замовлення.
+   Інакше досить було б знати чужий номер, щоб читати чужі сповіщення. */
+app.post('/api/push/subscribe', (req, res) => {
+  if (tooOften('auth', ipOf(req), RATE.auth)) {
+    return res.status(429).json({ error: 'Забагато запитів. Зачекайте кілька хвилин.' });
+  }
+  const b = req.body || {};
+  const o = db.orders[b.no];
+  if (!o || !o.ckey || b.key !== o.ckey) return res.status(403).json({ error: 'Це замовлення не ваше' });
+  const sub = b.sub;
+  if (!sub || !sub.endpoint || !sub.keys) return res.status(400).json({ error: 'Підписка неповна' });
+
+  addPushSub(o.telKey, sub);
+  res.json({ ok: true });
+});
+
+/* Один номер — кілька пристроїв (телефон, планшет удома), але не
+   безмежно: лишаємо пʼять найсвіжіших. Та сама адреса не дублюється —
+   людина відкриває сторінку замовлення щоразу, і без цього список ріс
+   би на кожне відкриття. */
+const PUSH_MAX_DEVICES = 5;
+function addPushSub(telKey, sub) {
+  db.push = db.push || {};
+  const list = (db.push[telKey] || []).filter(s => s.endpoint !== sub.endpoint);
+  list.push({ endpoint: sub.endpoint, keys: sub.keys, at: Date.now() });
+  db.push[telKey] = list.slice(-PUSH_MAX_DEVICES);
+  save();
+  return db.push[telKey];
+}
+
+/* Шлемо на всі пристрої цього номера. Протухлі підписки (браузер
+   видалив, людина знесла сайт з екрана) сервер прибирає сам — інакше
+   вони копичились би вічно й уповільнювали кожну відправку. */
+async function pushTo(telKey, title, body, url) {
+  const list = (db.push || {})[telKey] || [];
+  if (!list.length) return false;
+  pushKeys();
+  const payload = JSON.stringify({ title, body, url });
+  let sent = 0, dead = [];
+  for (const s of list) {
+    try {
+      await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, payload);
+      sent++;
+    } catch (e) {
+      if (e.statusCode === 404 || e.statusCode === 410) dead.push(s.endpoint);
+      else console.warn('push:', e.statusCode || e.message);
+    }
+  }
+  if (dead.length) {
+    db.push[telKey] = list.filter(s => !dead.includes(s.endpoint));
+    save();
+  }
+  return sent > 0;
 }
 
 /* ---------- SMS ----------
