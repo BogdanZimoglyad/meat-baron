@@ -54,6 +54,10 @@ button{font:inherit;cursor:pointer;border:none}
   border-radius:999px;padding:1px 9px;font-size:12px;letter-spacing:0}
 .sect.hot h2{color:var(--ember-hot)}
 .sect.hot h2 i{border-color:rgba(224,74,60,.45)}
+.sect .sub{display:flex;align-items:center;gap:8px;margin:14px 0 9px;
+  font-size:13px;font-weight:500;color:var(--warn)}
+.sect .sub i{font-style:normal;background:var(--coal);border:1px solid rgba(216,161,58,.4);
+  border-radius:999px;padding:1px 9px;font-size:12px}
 .sect.done h2{cursor:pointer;user-select:none}
 .sect.done .card{opacity:.72}
 .card{background:var(--coal);border:1px solid var(--line);border-radius:14px;padding:14px;
@@ -256,15 +260,25 @@ function dayStrip(d){
   </div>`;
 }
 
-const sect=(title,cls,list,now)=> list.length
-  ? `<section class="sect ${cls}"><h2>${title}<i>${list.length}</i></h2>
-     <div class="grid">${list.map(o=>card(o,now)).join('')}</div></section>`
-  : '';
+/* Усередині кожної купки доставка йде окремо: по ній інша робота —
+   подзвонити курʼєру, проставити вартість, — і серед самовивозу вона
+   губилась (власник, 27.09). Порядок роботи при цьому не ламається:
+   нове лишається в новому, готове в готовому. */
+const grid=(l,now)=>`<div class="grid">${l.map(o=>card(o,now)).join('')}</div>`;
+const sect=(title,cls,list,now)=>{
+  if(!list.length) return '';
+  const own=list.filter(o=>o.mode!=='delivery');
+  const dlv=list.filter(o=>o.mode==='delivery');
+  return `<section class="sect ${cls}"><h2>${title}<i>${list.length}</i></h2>
+    ${own.length?grid(own,now):''}
+    ${dlv.length?`<h3 class="sub">🚕 Доставка<i>${dlv.length}</i></h3>${grid(dlv,now)}`:''}
+  </section>`;
+};
 
 const doneSect=(list,now)=> list.length
   ? `<section class="sect done"><h2 data-done="1" role="button" tabindex="0">
        ${showDone?'▾':'▸'} Завершені<i>${list.length}</i></h2>
-     ${showDone?`<div class="grid">${list.map(o=>card(o,now)).join('')}</div>`:''}</section>`
+     ${showDone?grid(list,now):''}</section>`
   : '';
 
 function draw(d){
