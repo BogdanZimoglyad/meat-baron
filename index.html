@@ -2492,7 +2492,18 @@ function paintLines(){
       const cg=sIn.querySelector('#cartFryG'); if(cg) cg.textContent='до смаження '+wLabel(fryGrams());
       paintBar();
     };
-    rg.onchange=()=>{ paintBar(); openCart() };
+    /* Перемальовуємо кошик лише тоді, коли блок смаження зʼявився або
+       зник (вага перейшла мінімальну межу). Раніше тут стояв openCart()
+       беззастережно — і кожне відпускання повзунка гасило й запалювало
+       всі знімки: і рядка, і допродажу. У Safari change для повзунка
+       приходить ще й під час перетягування, тож моргало весь час, поки
+       тягнеш (власник, 27.09). Решту — суми, вагу, вартість смаження —
+       оновлює oninput вище, без перемальовування. */
+    rg.onchange=()=>{
+      paintBar();
+      const shown=!!sIn.querySelector('.cart-fry');
+      if(shown!==(fryGrams()>=MIN_G)) openCart();
+    };
   });
   el.onclick=e=>{
     const ed=e.target.closest('[data-e]');
