@@ -443,14 +443,24 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
    Max кнопку підрізало знизу (власник, 27.09). Липкий елемент не має
    вилазити за свій контейнер — інакше його ріже overflow.
 
-   І запас під кнопкою тримаємо не менший за 16 px, навіть якщо браузер
-   скаже, що знизу нічого немає: на 17 Pro усе було добре, а на 16 Pro Max
-   кнопку накрило нижньою рамкою — значить, вірити самому лише
-   env(safe-area-inset-bottom) не можна. */
+   Запас під кнопкою тримаємо не менший за 16 px, навіть якщо браузер
+   скаже, що знизу нічого немає.
+
+   І головне — (100lvh - 100svh). Шторка міряється в dvh, а це «висота
+   екрана прямо зараз»: на 16 Pro Max панель Safari ховається під час
+   прокрутки, dvh стає 850, шторка розтягується — а коли панель
+   повертається, видимою лишається 742, і низ із кнопкою опиняється під
+   панеллю. Журнал ?debug=1 показав це прямо: «шторка 68…850», при
+   layout=742, «КНОПКА … від низу екрана −62» (власник, 27.09, два
+   телефони поруч: на 17 Pro layout=756 і видимий=756 збігаються, і там
+   усе було добре).
+   Різниця 100lvh - 100svh — це і є висота тієї панелі: там, де вона не
+   ховається, різниця нульова й нічого не змінюється. */
 .sheet-in:has(.sh-foot){padding-bottom:0}
 .sh-foot{position:sticky;bottom:0;z-index:2;background:var(--char);
   margin:14px -16px 0;
-  padding:0 16px calc(12px + max(env(safe-area-inset-bottom),16px) + var(--vv-bottom,0px));
+  padding:0 16px calc(12px + max(env(safe-area-inset-bottom),16px)
+                      + var(--vv-bottom,0px) + (100lvh - 100svh));
   border-top:1px solid var(--line-2)}
 .sh-foot .tot{margin-top:10px;padding-top:0;border-top:none}
 .sh-foot .cta{margin-top:10px}
@@ -3875,6 +3885,13 @@ loadStock();
     if(br) log('КНОПКА: '+Math.round(br.top)+'…'+Math.round(br.bottom)+
         ' · від низу шторки '+Math.round(sr.bottom-br.bottom)+
         ' · від низу екрана '+Math.round(document.documentElement.clientHeight-br.bottom));
+    /* Різниця між «екраном із панеллю» і «без неї» — саме вона ламала
+       низ на 16 Pro Max. Міряємо тим самим способом, що й safe-area. */
+    const un=u=>{ const d=document.createElement('div');
+      d.style.cssText='position:fixed;bottom:0;height:100'+u+';width:1px;visibility:hidden';
+      document.body.appendChild(d); const h=Math.round(d.getBoundingClientRect().height); d.remove(); return h };
+    log('висота екрана: lvh='+un('lvh')+' svh='+un('svh')+' dvh='+un('dvh')+
+        ' → різниця панелі '+(un('lvh')-un('svh')));
     log('екран: layout='+document.documentElement.clientHeight+
         ' видимий='+Math.round(window.visualViewport?window.visualViewport.height:0)+
         ' · safe-area-bottom='+safe+
