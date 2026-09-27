@@ -908,6 +908,13 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .inst-t span{font-size:12px;color:var(--smoke)}
 .inst-y{background:var(--ember);color:#fff;border-radius:9px;padding:9px 15px;font-size:13.5px;font-weight:600;flex:0 0 auto}
 .inst-n{color:var(--smoke);font-size:16px;padding:4px 2px;flex:0 0 auto}
+/* Підказка для айфонів трохи вища за Android-баннер: там кнопка «Додати»
+   робить усе сама, а тут доводиться пояснювати два кроки руками. */
+.inst-b.ios{align-items:flex-start}
+.inst-b.ios .inst-t span{display:block;margin-top:3px}
+.inst-b.ios .inst-step{color:var(--bone)}
+.inst-b.ios .inst-y{align-self:center}
+.inst-ic{width:15px;height:15px;vertical-align:-3px;margin:0 1px}
 body:has(.inst) .bar{bottom:66px}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
@@ -3933,6 +3940,63 @@ loadStock();
      на чужому пристрої людина бачила лише статус і суму. */
   const srv=await serverActive();
   openOrder(q, (srv||[]).find(o=>String(o.no)===String(q))||null);
+})();
+
+/* ---------- «Додайте на екран» для айфонів ----------
+   Android свій баннер показує сам (beforeinstallprompt нижче), iOS такого
+   не вміє — там додають руками через «Поділитися». А різниця відчутна: з
+   іконки сайт відкривається без смуг Safari, і той провал унизу, через
+   який кнопка ховалась під панеллю, теж зникає (власник перевірив 27.09).
+
+   Показуємо з другого заходу: першого разу людина просто дивиться, і
+   лізти до неї зарано. Один раз за все життя — закрив, і більше ніколи. */
+(function(){
+  const ua=navigator.userAgent;
+  const isIOS=/iPhone|iPad|iPod/.test(ua);
+  /* Chrome, Firefox і Edge на айфоні додають на екран інакше — їм ці
+     кроки не підійдуть, тож мовчимо. */
+  const isSafari=!/CriOS|FxiOS|EdgiOS|OPiOS|GSA/.test(ua);
+  const installed=navigator.standalone===true
+    || (matchMedia&&matchMedia('(display-mode: standalone)').matches);
+  if(!isIOS||!isSafari||installed) return;
+
+  let visits=0, off=false;
+  try{
+    off=!!localStorage.getItem('mb-a2hs-off');
+    visits=(Number(localStorage.getItem('mb-visits'))||0)+1;
+    localStorage.setItem('mb-visits',String(visits));
+  }catch(e){ return }              // без памʼяті рахувати заходи нічим
+  if(off||visits<2) return;
+
+  const SHARE=`<svg class="inst-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 16V4"/><path d="M8 7.5 12 3.5l4 4"/><path d="M5 13v6.5h14V13"/></svg>`;
+  const show=()=>{
+    const b=document.createElement('div');
+    b.className='inst';
+    b.innerHTML=`<div class="inst-b ios">
+      <div class="inst-t"><b>Додайте на екран</b>
+        <span>Відкривається одразу, без адресного рядка.</span>
+        <span class="inst-step">Унизу Safari — значок ${SHARE}, далі «На екран «Початок»».</span>
+      </div>
+      <button class="inst-y">Зрозуміло</button>
+      <button class="inst-n" aria-label="Закрити">✕</button></div>`;
+    document.body.appendChild(b);
+    const bye=()=>{ b.remove(); try{localStorage.setItem('mb-a2hs-off','1')}catch(e){} };
+    b.querySelector('.inst-y').onclick=bye;
+    b.querySelector('.inst-n').onclick=bye;
+  };
+  /* Даємо людині осмотритись, і не лізти поперек справи: поки відкрита
+     шторка (картка, кошик, оформлення) — чекаємо, поки закриє. */
+  setTimeout(()=>{
+    let t=0;
+    const tryShow=()=>{
+      if(document.querySelector('.sheet.on')) return;   // шторка відкрита — ще зачекаємо
+      clearInterval(t); show();
+    };
+    t=setInterval(tryShow,1200);
+    tryShow();
+  },4000);
 })();
 
 let installEvt=null;
