@@ -908,6 +908,13 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .inst-t span{font-size:12px;color:var(--smoke)}
 .inst-y{background:var(--ember);color:#fff;border-radius:9px;padding:9px 15px;font-size:13.5px;font-weight:600;flex:0 0 auto}
 .inst-n{color:var(--smoke);font-size:16px;padding:4px 2px;flex:0 0 auto}
+/* Підказка для айфонів висить ЗГОРИ, а не знизу. Знизу її різало: на
+   16 Pro Max прибиті до низу елементи лягають нижче за видиму частину, і
+   з баннера лишались заголовок і кнопка, а рядок із самою інструкцією
+   зникав (власник, 27.09, журнал: «намальовано на 682…850», видно менше).
+   Верхній край на iOS не гуляє — там чесний safe-area-inset-top.
+   Android-баннер лишається внизу: у нього одна кнопка й там усе гаразд. */
+.inst.up{top:0;bottom:auto;z-index:55;padding:calc(8px + env(safe-area-inset-top)) 16px 10px}
 /* Підказка для айфонів трохи вища за Android-баннер: там кнопка «Додати»
    робить усе сама, а тут доводиться пояснювати два кроки руками. */
 .inst-b.ios{align-items:flex-start}
@@ -915,7 +922,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .inst-b.ios .inst-step{color:var(--bone)}
 .inst-b.ios .inst-y{align-self:center}
 .inst-ic{width:15px;height:15px;vertical-align:-3px;margin:0 1px}
-body:has(.inst) .bar{bottom:66px}
+body:has(.inst:not(.up)) .bar{bottom:66px}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -4004,7 +4011,7 @@ loadStock();
     <path d="M12 16V4"/><path d="M8 7.5 12 3.5l4 4"/><path d="M5 13v6.5h14V13"/></svg>`;
   const show=()=>{
     const b=document.createElement('div');
-    b.className='inst';
+    b.className='inst up';
     b.innerHTML=`<div class="inst-b ios">
       <div class="inst-t"><b>Додайте на екран</b>
         <span>Відкривається одразу, без адресного рядка.</span>
