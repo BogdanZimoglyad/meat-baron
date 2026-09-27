@@ -3858,6 +3858,17 @@ loadStock();
   /* Блоки нижче по файлу теж мають куди писати — наприклад підказка
      «Додайте на екран», яку не видно й не зрозуміло чому. */
   window.__mbLog=log;
+  /* І окремий закріплений рядок згори: журнал довгий, його гортають, а
+     відповідь на питання «чому не зʼявилось» має бути видно одразу. */
+  const pin=document.createElement('div');
+  pin.style.cssText='position:fixed;left:0;right:0;top:0;z-index:1000;padding:5px 8px;'+
+    'background:#0f3d0f;color:#dfffdf;font:11px/1.4 ui-monospace,monospace;white-space:pre-wrap';
+  pin.hidden=true;
+  /* Відступ фіксований, а не з виміру: getBoundingClientRect тут
+     повертав 841 px, і журнал їхав геть за екран. */
+  window.__mbPin=m=>{ pin.hidden=false; pin.textContent=m;
+    if(!pin.isConnected) document.body.appendChild(pin);
+    box.style.top='46px'; };
   const put=()=>document.body.appendChild(box);
   document.readyState==='loading'? addEventListener('DOMContentLoaded',put) : put();
 
@@ -3874,8 +3885,18 @@ loadStock();
   addEventListener('visibilitychange',()=>log('видимість: '+(document.hidden?'схована':'видима')));
   if(window.visualViewport){
     const vv=window.visualViewport;
-    const note=()=>log('екран: layout='+document.documentElement.clientHeight+
-      ' видимий='+Math.round(vv.height)+' → панель='+getComputedStyle(document.documentElement).getPropertyValue('--vv-bottom').trim());
+    /* Safari шле resize на кожен піксель, поки ховає панель — за один
+       рух це сотні рядків, і вони витісняють усе інше з журналу.
+       Пишемо, лише коли висота справді змінилась і не частіше ніж раз
+       на півсекунди; проміжні значення все одно нічого не кажуть. */
+    let last=-1, when=0;
+    const note=()=>{
+      const h=Math.round(vv.height), now=performance.now();
+      if(Math.abs(h-last)<8 || now-when<500) return;
+      last=h; when=now;
+      log('екран: layout='+document.documentElement.clientHeight+
+        ' видимий='+h+' → панель='+getComputedStyle(document.documentElement).getPropertyValue('--vv-bottom').trim());
+    };
     vv.addEventListener('resize',note); setTimeout(note,400);
   }
 
@@ -3954,7 +3975,10 @@ loadStock();
    Показуємо з другого заходу: першого разу людина просто дивиться, і
    лізти до неї зарано. Один раз за все життя — закрив, і більше ніколи. */
 (function(){
-  const say=m=>{ if(window.__mbLog) window.__mbLog('на екран: '+m) };
+  const say=m=>{
+    if(window.__mbLog) window.__mbLog('на екран: '+m);
+    if(window.__mbPin) window.__mbPin('ПІДКАЗКА «ДОДАЙТЕ НА ЕКРАН»: '+m);
+  };
   const ua=navigator.userAgent;
   const isIOS=/iPhone|iPad|iPod/.test(ua);
   /* Chrome, Firefox і Edge на айфоні додають на екран інакше — їм ці
