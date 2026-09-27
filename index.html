@@ -434,16 +434,23 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 /* display:block і box-sizing — бо .cta буває і <a> (вхід через Telegram, маршрут):
    рядкове посилання ігнорувало width:100% і налазило на текст під ним */
 .cta{display:block;box-sizing:border-box;width:100%;text-align:center;text-decoration:none;background:var(--ember);color:#fff;border-radius:11px;padding:15px;font-size:15px;font-weight:600;margin-top:14px;transition:.14s}
-/* Сума й «Додати в кошик» тримаються внизу картки товару. До цього вони
-   стояли після опису, ваги й повзунка — на телефоні кнопку було видно
-   лише після прокрутки, і людина не розуміла, що робити далі
-   (власник, 24.09). Липкий низ у межах самої картки: прокрутка тексту
-   лишається, а кнопка нікуди не дівається.
-   Відʼємний нижній відступ зʼїдає падінг .sheet-in, щоб під кнопкою не
-   лишалось порожньої смуги, коли картку догортали до кінця. */
+/* Головна кнопка тримається внизу шторки. До цього вона стояла після
+   опису, ваги й повзунка — на телефоні її було видно лише після
+   прокрутки, і людина не розуміла, що робити далі (власник, 24.09).
+
+   Порожнечу під смугою прибираємо, обнуляючи падінг самої шторки, а не
+   відʼємним відступом на смузі: з відʼємним відступом на айфоні 16 Pro
+   Max кнопку підрізало знизу (власник, 27.09). Липкий елемент не має
+   вилазити за свій контейнер — інакше його ріже overflow.
+
+   І запас під кнопкою тримаємо не менший за 16 px, навіть якщо браузер
+   скаже, що знизу нічого немає: на 17 Pro усе було добре, а на 16 Pro Max
+   кнопку накрило нижньою рамкою — значить, вірити самому лише
+   env(safe-area-inset-bottom) не можна. */
+.sheet-in:has(.sh-foot){padding-bottom:0}
 .sh-foot{position:sticky;bottom:0;z-index:2;background:var(--char);
-  margin:14px -16px calc(-20px - env(safe-area-inset-bottom) - var(--vv-bottom,0px));
-  padding:0 16px calc(12px + env(safe-area-inset-bottom) + var(--vv-bottom,0px));
+  margin:14px -16px 0;
+  padding:0 16px calc(12px + max(env(safe-area-inset-bottom),16px) + var(--vv-bottom,0px));
   border-top:1px solid var(--line-2)}
 .sh-foot .tot{margin-top:10px;padding-top:0;border-top:none}
 .sh-foot .cta{margin-top:10px}
