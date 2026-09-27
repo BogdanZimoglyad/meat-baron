@@ -3855,6 +3855,9 @@ loadStock();
     'max-height:50vh;overflow:auto;white-space:pre-wrap';
   const t0=performance.now();
   const log=m=>{ box.textContent+=String(Math.round(performance.now()-t0)).padStart(5)+' мс · '+m+'\n' };
+  /* Блоки нижче по файлу теж мають куди писати — наприклад підказка
+     «Додайте на екран», яку не видно й не зрозуміло чому. */
+  window.__mbLog=log;
   const put=()=>document.body.appendChild(box);
   document.readyState==='loading'? addEventListener('DOMContentLoaded',put) : put();
 
@@ -3951,6 +3954,7 @@ loadStock();
    Показуємо з другого заходу: першого разу людина просто дивиться, і
    лізти до неї зарано. Один раз за все життя — закрив, і більше ніколи. */
 (function(){
+  const say=m=>{ if(window.__mbLog) window.__mbLog('на екран: '+m) };
   const ua=navigator.userAgent;
   const isIOS=/iPhone|iPad|iPod/.test(ua);
   /* Chrome, Firefox і Edge на айфоні додають на екран інакше — їм ці
@@ -3958,15 +3962,18 @@ loadStock();
   const isSafari=!/CriOS|FxiOS|EdgiOS|OPiOS|GSA/.test(ua);
   const installed=navigator.standalone===true
     || (matchMedia&&matchMedia('(display-mode: standalone)').matches);
-  if(!isIOS||!isSafari||installed) return;
+  if(!isIOS||!isSafari||installed){
+    return say(`не показуємо · айфон=${isIOS} safari=${isSafari} вже на екрані=${installed}`);
+  }
 
   let visits=0, off=false;
   try{
     off=!!localStorage.getItem('mb-a2hs-off');
     visits=(Number(localStorage.getItem('mb-visits'))||0)+1;
     localStorage.setItem('mb-visits',String(visits));
-  }catch(e){ return }              // без памʼяті рахувати заходи нічим
-  if(off||visits<2) return;
+  }catch(e){ return say('памʼять сайту недоступна — рахувати заходи нічим') }
+  say(`захід №${visits}, закривали раніше=${off}`);
+  if(off||visits<2) return say(visits<2?'перший захід — чекаємо наступного':'закривали раніше — мовчимо');
 
   const SHARE=`<svg class="inst-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -3985,13 +3992,26 @@ loadStock();
     const bye=()=>{ b.remove(); try{localStorage.setItem('mb-a2hs-off','1')}catch(e){} };
     b.querySelector('.inst-y').onclick=bye;
     b.querySelector('.inst-n').onclick=bye;
+    /* Намалювати мало — треба ще, щоб це було видно. Прибиті до низу
+       елементи на 16 Pro Max лягають нижче за видиму частину екрана. */
+    if(window.__mbLog) setTimeout(()=>{
+      const r=b.getBoundingClientRect();
+      const vv=window.visualViewport;
+      say(`намальовано на ${Math.round(r.top)}…${Math.round(r.bottom)}`+
+          ` · видно до ${Math.round(vv?vv.offsetTop+vv.height:document.documentElement.clientHeight)}`+
+          ` · layout=${document.documentElement.clientHeight}`);
+    },200);
   };
   /* Даємо людині осмотритись, і не лізти поперек справи: поки відкрита
      шторка (картка, кошик, оформлення) — чекаємо, поки закриє. */
   setTimeout(()=>{
     let t=0;
+    let waited=0;
     const tryShow=()=>{
-      if(document.querySelector('.sheet.on')) return;   // шторка відкрита — ще зачекаємо
+      if(document.querySelector('.sheet.on')){          // шторка відкрита — ще зачекаємо
+        if(!waited++) say('відкрита шторка — чекаємо, поки закриє');
+        return;
+      }
       clearInterval(t); show();
     };
     t=setInterval(tryShow,1200);

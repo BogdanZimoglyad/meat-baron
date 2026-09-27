@@ -25,6 +25,7 @@ function run({ ua, standalone = false, store = {}, sheetOpen = false, noStorage 
   const body = { appendChild: () => { shown++ } };
   const el = () => ({ className: '', innerHTML: '', remove() {}, querySelector: () => ({ set onclick(v) {} }) });
   const env = {
+    window: { visualViewport: null },      // журнал ?debug=1 у тесті не потрібен
     navigator: { userAgent: ua, standalone: standalone || undefined },
     matchMedia: q => ({ matches: standalone && /standalone/.test(q) }),
     localStorage: noStorage
