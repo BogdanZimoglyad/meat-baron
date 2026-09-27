@@ -4015,7 +4015,10 @@ loadStock();
     b.innerHTML=`<div class="inst-b ios">
       <div class="inst-t"><b>Додайте на екран</b>
         <span>Відкривається одразу, без адресного рядка.</span>
-        <span class="inst-step">Унизу Safari — значок ${SHARE}, далі «На екран «Початок»».</span>
+        ${/* Кроки саме такі, як їх бачить власник на своєму айфоні: у
+             списку «Поділитися» пункт заховано під «Показати більше»
+             (перевірено 27.09). */''}
+        <span class="inst-step">Унизу Safari — значок ${SHARE} → «Показати більше» → «На екран».</span>
       </div>
       <button class="inst-y">Зрозуміло</button>
       <button class="inst-n" aria-label="Закрити">✕</button></div>`;
