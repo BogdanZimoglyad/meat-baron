@@ -199,6 +199,8 @@ let token=null, shopName='';
 try{ token=localStorage.getItem(KEY) }catch(e){}
 
 const $=id=>document.getElementById(id);
+const val=id=>{ const e=$(id); return e?e.value:null };
+const put=(id,v)=>{ const e=$(id); if(e&&v!=null) e.value=v };
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const money=n=>(Math.round(n*100)/100).toFixed(2).replace(/\.00$/,'')+' ₴';
 const hhmm=ms=>new Date(ms).toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});
@@ -304,6 +306,12 @@ function draw(d){
   /* Три купки замість однієї стрічки: нові, ті, що в роботі, і зроблені.
      В одній стрічці все лежало вперемішку, і в суботу при 90 замовленнях
      живі губились би серед виданих (власник, 27.09). */
+  /* Перемальовка стирає поля форми: опитування ми на цей час спиняємо,
+     але сама панель перемальовується й від своїх кнопок — наприклад коли
+     розгортають «Завершені». Оператор набирав суму, зазирнув у зроблені —
+     і набране зникло. Тож знімаємо значення до перемальовки й повертаємо
+     після неї. */
+  const typed=form?{v:val('fv'),n:val('fn')}:null;
   const g=[[],[],[]];
   d.orders.forEach(o=>g[groupOf(o)].push(o));
   w.innerHTML=dayStrip(d.day)
@@ -311,6 +319,7 @@ function draw(d){
     +sect('Нові — прийняти в роботу','hot',g[0],now)
     +sect('У роботі','',g[1],now)
     +doneSect(g[2],now);
+  if(typed){ put('fv',typed.v); put('fn',typed.n) }
   const dh=w.querySelector('[data-done]');
   if(dh) dh.onclick=()=>{ showDone=!showDone; draw(d) };
   w.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>step(b.dataset.go,b.dataset.st,b));
@@ -419,7 +428,7 @@ function formHtml(o,kind){
    підписаний так само, як у боті: курячий і з баранини. */
 const fold=s=>String(s||'').toLowerCase().replace(/[ʼ'’`]/g,'');
 const priceList=()=>(typeof ITEMS==='undefined'?[]:ITEMS);
-const title=it=>(typeof nameOf==='function'?nameOf(it):it.name);
+const itemName=it=>(typeof nameOf==='function'?nameOf(it):it.name);
 
 function drawStock(){
   /* Поле пошуку створюємо один раз: якби воно перемальовувалось разом
@@ -448,7 +457,7 @@ function paintStock(){
      позиція стояла б на екрані двічі й оператор не знав би, яку тиснути. */
   const found=hits.filter(i=>!off.has(i.id)).slice(0,30);
   const row=(it,isOff)=>`<div class="srow">
-      <span>${esc(it.grp)} · ${esc(title(it))}</span>
+      <span>${esc(it.grp)} · ${esc(itemName(it))}</span>
       <button data-stock="${esc(it.id)}" data-off="${isOff?0:1}" class="${isOff?'back':'danger'}">
         ${isOff?'✅ Є':'🚫 Немає'}</button>
     </div>`;
