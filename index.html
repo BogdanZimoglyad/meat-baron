@@ -446,20 +446,23 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
    Запас під кнопкою тримаємо не менший за 16 px, навіть якщо браузер
    скаже, що знизу нічого немає.
 
-   І головне — --foot-gap. Шторка міряється в dvh, тобто «висота екрана
-   прямо зараз»: на 16 Pro Max панель Safari ховається під час прокрутки,
-   шторка розтягується, а коли панель повертається, низ із кнопкою
-   опиняється під нею. Журнал ?debug=1 показав це прямо: «шторка 68…850»
-   при layout=742, «КНОПКА … від низу екрана −62» (власник, 27.09; на
-   17 Pro layout і видимий збігались, і там усе було добре).
-   --foot-gap рахує цей провал у моменті — див. зонд у скрипті. Статичну
-   різницю (100lvh - 100svh) пробували й відкотили: вона однакова
-   завжди, і зі схованою панеллю кнопка задиралась угору. */
-.sheet-in:has(.sh-foot){padding-bottom:0}
-.sh-foot{position:sticky;bottom:0;z-index:2;background:var(--char);
-  margin:14px -16px 0;
-  padding:0 16px calc(12px + max(env(safe-area-inset-bottom),16px) + var(--foot-gap,0px));
-  border-top:1px solid var(--line-2)}
+   ЛИПКОЮ ЦЯ СМУГА БУЛА Й БІЛЬШЕ НЕ Є. На 16 Pro Max кнопку в ній не
+   вдавалося натиснути: шторка міряється в dvh, панель Safari ховається
+   під час прокрутки, шторка розтягується — а коли панель повертається,
+   низ із кнопкою опиняється нижче видимої області. Журнал ?debug=1
+   показав це прямо: «шторка 68…850» при layout=742, «КНОПКА … від низу
+   екрана −62». На 17 Pro layout і видимий збігались, і там усе працювало.
+
+   Полагодити пробували чотири рази: відʼємний відступ, запас за
+   safe-area, статична різниця (100lvh - 100svh) і зонд, що міряв провал
+   у моменті. Перші дві не допомогли, третя задирала кнопку вгору на пів
+   екрана, четверта на 16 Pro Max не спрацювала теж. Далі ламати живий
+   сайт на головному телефоні власника немає сенсу (27.09).
+
+   Тепер це звичайна смуга в потоці — та сама, що й була до 24.09.
+   Проблему «кнопку видно лише після прокрутки» вирішуємо інакше, без
+   position:sticky всередині шторки. */
+.sh-foot{margin:14px -16px 0;padding:14px 16px 0;border-top:1px solid var(--line-2)}
 .sh-foot .tot{margin-top:10px;padding-top:0;border-top:none}
 .sh-foot .cta{margin-top:10px}
 .sh-foot .err{margin:10px 0 0}
@@ -1805,40 +1808,6 @@ const lockScroll=syncScrollLock, unlockScroll=syncScrollLock;
    одразу внизу. Тепер новий екран (інший заголовок або шторка була
    закрита) починається згори, а перемальовування того самого екрана
    (повзунок, −/+, мангал) прокрутку не чіпає. */
-/* ---------- поля під липкою смугою ----------
-   Головна кнопка шторки тримається внизу (.sh-foot), і разом із
-   клавіатурою вона з'їдає низ екрана — поле, в яке пишуть, могло
-   опинитись саме там. scrollIntoView не годиться: він центрує в усій
-   шторці, а не в тому, що лишилось видимим. Тож рахуємо від самої
-   смуги й підіймаємо поле рівно настільки, щоб воно стало над нею. */
-function liftAboveFoot(el){
-  if(!el||!el.isConnected||document.activeElement!==el) return;
-  const foot=sIn.querySelector('.sh-foot');
-  const lim=(foot?foot.getBoundingClientRect().top:sheet.getBoundingClientRect().bottom)-12;
-  /* Підказка вулиць висить під полем окремим шаром і в розмір поля не
-     входить — без неї вибрати вулицю зі списку було б неможливо. */
-  const wrap=el.closest('.addr-wrap');
-  const sug=wrap&&wrap.querySelector('.addr-sug:not([hidden])');
-  const over=(sug||el).getBoundingClientRect().bottom-lim;
-  if(over>0) sheet.scrollTop+=over;
-}
-/* Вішаємо на всі поля шторки. Клавіатура відкривається не миттєво, а
-   нову висоту видимої області браузер повідомляє окремою подією —
-   слухаємо обидва моменти, плюс набір (підказка вулиць виростає). */
-function bindLift(root){
-  root.querySelectorAll('input:not([type=range]):not([type=checkbox]),textarea').forEach(el=>{
-    const lift=()=>liftAboveFoot(el);
-    el.addEventListener('focus',()=>{
-      setTimeout(lift,300);
-      if(window.visualViewport){
-        window.visualViewport.addEventListener('resize',lift);
-        el.addEventListener('blur',()=>window.visualViewport.removeEventListener('resize',lift),{once:true});
-      }
-    });
-    el.addEventListener('input',lift);
-  });
-}
-
 const sheetTitle=()=>((sIn.querySelector('h3')||{}).textContent||'').trim();
 function open(html){
   const was=sheetTitle(), wasOpen=sheet.classList.contains('on');
@@ -2453,7 +2422,6 @@ function openCart(){
   };
   const nt=sIn.querySelector('#note');
   if(nt) nt.oninput=()=>{orderNote=nt.value;saveCart()};
-  bindLift(sIn);        // поле коментаря не має ховатись під липкою смугою
   /* Коментар знімаємо до допродажу: екран «Що до мʼяса?» перемалює
      шторку, і поле з текстом зникне разом зі старою розміткою. */
   sIn.querySelector('#toCheckout').onclick=()=>{if(nt)orderNote=nt.value;upsellGate(openCheckout)};
@@ -2978,7 +2946,6 @@ function openCheckout(){
     keep('#addrEnt',    v=>addrP.ent=v);
     keep('#addrFloor',  v=>addrP.floor=v);
     bindStreet();
-    bindLift(sIn);      // жодне поле не має ховатись під липкою смугою
     /* Збережені адреси: клік підставляє всі поля одразу */
     sIn.querySelectorAll('[data-sv]').forEach(b=>b.onclick=()=>{
       const a=((me&&me.addrs)||[])[+b.dataset.sv]; if(!a) return;
@@ -3821,37 +3788,6 @@ if('serviceWorker' in navigator){
   set();
 })();
 
-/* --foot-gap — наскільки низ прибитого до низу елемента ЗАРАЗ нижчий за
-   видиму частину екрана.
-   На 16 Pro Max прибиті до низу елементи лягають на 850, а видно 742 —
-   різниця 108, і кнопка шторки опинялась під панеллю Safari.
-   clientHeight тут не допомагає: він і є 742, різниця виходить
-   відʼємною. Статична (100lvh - 100svh) теж не годиться — вона однакова
-   завжди, і коли панель схована, кнопка задиралась угору на пів екрана
-   (власник, 27.09). Тож міряємо справжнім зондом і перераховуємо
-   щоразу, коли панель ховається чи повертається. */
-(function(){
-  const vv=window.visualViewport; if(!vv) return;
-  const probe=document.createElement('div');
-  probe.style.cssText='position:fixed;left:0;bottom:0;width:1px;height:1px;'+
-    'visibility:hidden;pointer-events:none';
-  let tick=0;
-  const set=()=>{
-    tick=0;
-    if(!probe.isConnected) document.body.appendChild(probe);
-    const gap=Math.round(probe.getBoundingClientRect().bottom-(vv.offsetTop+vv.height));
-    /* Велика різниця — це вже клавіатура, а не панель: її не додаємо,
-       інакше смуга з'їла б пів екрана саме тоді, коли людина пише. */
-    document.documentElement.style.setProperty('--foot-gap',(gap>0&&gap<200?gap:0)+'px');
-  };
-  const later=()=>{ if(!tick) tick=requestAnimationFrame(set) };
-  vv.addEventListener('resize',later);
-  vv.addEventListener('scroll',later);
-  addEventListener('scroll',later,{passive:true});
-  addEventListener('orientationchange',()=>setTimeout(set,300));
-  set();
-})();
-
 /* стартуємо після того, як усе оголошено */
 uiReady=true;
 showActiveBar();
@@ -3920,7 +3856,6 @@ loadStock();
       d.style.cssText='position:fixed;bottom:0;height:100'+u+';width:1px;visibility:hidden';
       document.body.appendChild(d); const h=Math.round(d.getBoundingClientRect().height); d.remove(); return h };
     log('висота екрана: lvh='+un('lvh')+' svh='+un('svh')+' dvh='+un('dvh')+
-        ' · --foot-gap='+(getComputedStyle(document.documentElement).getPropertyValue('--foot-gap').trim()||'0')+
         ' · vv.offsetTop='+Math.round(window.visualViewport?window.visualViewport.offsetTop:0));
     log('екран: layout='+document.documentElement.clientHeight+
         ' видимий='+Math.round(window.visualViewport?window.visualViewport.height:0)+
