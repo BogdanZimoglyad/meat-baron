@@ -447,6 +447,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
   border-top:1px solid var(--line-2)}
 .sh-foot .tot{margin-top:10px;padding-top:0;border-top:none}
 .sh-foot .cta{margin-top:10px}
+.sh-foot .err{margin:10px 0 0}
 .cta:active{transform:scale(.99)}
 .cta.ghost{background:none;border:1px solid var(--line-2);color:var(--bone);font-weight:500}
 /* «Отримав замовлення» — зелена, бо це добра дія, а не тривога */
@@ -1789,6 +1790,40 @@ const lockScroll=syncScrollLock, unlockScroll=syncScrollLock;
    одразу внизу. Тепер новий екран (інший заголовок або шторка була
    закрита) починається згори, а перемальовування того самого екрана
    (повзунок, −/+, мангал) прокрутку не чіпає. */
+/* ---------- поля під липкою смугою ----------
+   Головна кнопка шторки тримається внизу (.sh-foot), і разом із
+   клавіатурою вона з'їдає низ екрана — поле, в яке пишуть, могло
+   опинитись саме там. scrollIntoView не годиться: він центрує в усій
+   шторці, а не в тому, що лишилось видимим. Тож рахуємо від самої
+   смуги й підіймаємо поле рівно настільки, щоб воно стало над нею. */
+function liftAboveFoot(el){
+  if(!el||!el.isConnected||document.activeElement!==el) return;
+  const foot=sIn.querySelector('.sh-foot');
+  const lim=(foot?foot.getBoundingClientRect().top:sheet.getBoundingClientRect().bottom)-12;
+  /* Підказка вулиць висить під полем окремим шаром і в розмір поля не
+     входить — без неї вибрати вулицю зі списку було б неможливо. */
+  const wrap=el.closest('.addr-wrap');
+  const sug=wrap&&wrap.querySelector('.addr-sug:not([hidden])');
+  const over=(sug||el).getBoundingClientRect().bottom-lim;
+  if(over>0) sheet.scrollTop+=over;
+}
+/* Вішаємо на всі поля шторки. Клавіатура відкривається не миттєво, а
+   нову висоту видимої області браузер повідомляє окремою подією —
+   слухаємо обидва моменти, плюс набір (підказка вулиць виростає). */
+function bindLift(root){
+  root.querySelectorAll('input:not([type=range]):not([type=checkbox]),textarea').forEach(el=>{
+    const lift=()=>liftAboveFoot(el);
+    el.addEventListener('focus',()=>{
+      setTimeout(lift,300);
+      if(window.visualViewport){
+        window.visualViewport.addEventListener('resize',lift);
+        el.addEventListener('blur',()=>window.visualViewport.removeEventListener('resize',lift),{once:true});
+      }
+    });
+    el.addEventListener('input',lift);
+  });
+}
+
 const sheetTitle=()=>((sIn.querySelector('h3')||{}).textContent||'').trim();
 function open(html){
   const was=sheetTitle(), wasOpen=sheet.classList.contains('on');
@@ -2402,29 +2437,8 @@ function openCart(){
     openCart();          // покаже порожній кошик із «До каталогу»
   };
   const nt=sIn.querySelector('#note');
-  if(nt){
-    nt.oninput=()=>{orderNote=nt.value;saveCart()};
-    /* Липкий низ закриває нижню частину шторки, а на телефоні під ним ще
-       й клавіатура — поле коментаря опинялось саме за смугою (перевірено
-       з імітацією клавіатури на 300 px: поле 402–476, смуга з 369).
-       scrollIntoView тут не рятує: він центрує в усій шторці, а не в
-       тому, що лишилось видимим. Тож рахуємо самі — піднімаємо поле так,
-       щоб воно стало над смугою. */
-    const noteUp=()=>{
-      if(!nt.isConnected||document.activeElement!==nt) return;
-      const foot=sIn.querySelector('.sh-foot');
-      const lim=(foot?foot.getBoundingClientRect().top:sheet.getBoundingClientRect().bottom)-12;
-      const over=nt.getBoundingClientRect().bottom-lim;
-      if(over>0) sheet.scrollTop+=over;
-    };
-    /* Клавіатура відкривається не миттєво, і висоту видимої області
-       браузер повідомляє окремою подією — слухаємо обидва моменти. */
-    nt.onfocus=()=>{
-      setTimeout(noteUp,300);
-      if(window.visualViewport) window.visualViewport.addEventListener('resize',noteUp);
-    };
-    nt.onblur=()=>{ if(window.visualViewport) window.visualViewport.removeEventListener('resize',noteUp) };
-  }
+  if(nt) nt.oninput=()=>{orderNote=nt.value;saveCart()};
+  bindLift(sIn);        // поле коментаря не має ховатись під липкою смугою
   /* Коментар знімаємо до допродажу: екран «Що до мʼяса?» перемалює
      шторку, і поле з текстом зникне разом зі старою розміткою. */
   sIn.querySelector('#toCheckout').onclick=()=>{if(nt)orderNote=nt.value;upsellGate(openCheckout)};
@@ -2922,8 +2936,14 @@ function openCheckout(){
         <span style="font-size:13px">Разом</span><b style="font-family:Oswald;font-size:23px">${money(total)}</b></div>
       <p class="weight-note">${WEIGHT_NOTE}</p>
     </div>
-    <p class="err" id="err">Вкажіть імʼя та номер телефону.</p>
-    <button class="cta" id="send">Підтвердити замовлення</button>`);
+    ${/* Кнопка стояла після всієї форми — до неї треба було прокрутити
+         614 px. Тепер вона внизу шторки разом із помилкою: людина
+         бачить і що робити далі, і чому не пускає. Суму не дублюємо —
+         вона в підсумку просто над смугою. */''}
+    <div class="sh-foot">
+      <p class="err" id="err">Вкажіть імʼя та номер телефону.</p>
+      <button class="cta" id="send">Підтвердити замовлення</button>
+    </div>`);
 
     const ps=sIn.querySelector('#pickShop');
     /* Інша точка — інший мангал: перепитуємо завантаження */
@@ -2943,6 +2963,7 @@ function openCheckout(){
     keep('#addrEnt',    v=>addrP.ent=v);
     keep('#addrFloor',  v=>addrP.floor=v);
     bindStreet();
+    bindLift(sIn);      // жодне поле не має ховатись під липкою смугою
     /* Збережені адреси: клік підставляє всі поля одразу */
     sIn.querySelectorAll('[data-sv]').forEach(b=>b.onclick=()=>{
       const a=((me&&me.addrs)||[])[+b.dataset.sv]; if(!a) return;
