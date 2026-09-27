@@ -320,7 +320,16 @@ function focusForm(){
 
 function card(o,now){
   const nx=nextOf(o);
-  const soon=o.startAt&&now<o.startAt;
+  /* «Прийняти в роботу» дозволено завжди — і на завтра, і задовго до
+     часу: сервер пропускає саме цей крок повз обидві заборони. Панель
+     гасила кнопку на будь-якому кроці, і замовлення на завтра неможливо
+     було взяти, хоча в боті та сама кнопка працювала (власник, 27.09).
+     Заборона стосується лише готування й видачі. */
+  const later=nx&&nx[0]!=='accepted';
+  const soon=later&&(!!o.day||(o.startAt&&now<o.startAt));
+  /* На інший день час без дати збиває з пантелику: «можна з 09:00»
+     виглядає як «сьогодні о девʼятій». */
+  const soonText=o.day?`готувати ${esc(o.day)}`:`можна з ${hhmm(o.startAt)}`;
   const late=o.slotAt&&now>o.slotAt&&o.status!=='done'&&o.status!=='canceled';
   const cls=o.status==='new'?'new':o.status==='ready'?'ready':late?'late':'';
   const when=o.slotAt? hhmm(o.slotAt) : 'якнайшвидше';
@@ -342,7 +351,7 @@ function card(o,now){
     ${o.note?`<div class="note">💬 ${esc(o.note)}</div>`:''}
     <div class="sum"><span>${o.totalOrig&&o.totalOrig!==o.total?'уточнено':'до сплати'}</span><b>${money(o.total)}</b></div>
     <div class="act">
-      ${nx?`<button class="go" data-go="${o.no}" data-st="${nx[0]}" ${soon?'disabled':''}>${soon?`можна з ${hhmm(o.startAt)}`:nx[1]}</button>`
+      ${nx?`<button class="go" data-go="${o.no}" data-st="${nx[0]}" ${soon?'disabled':''}>${soon?soonText:nx[1]}</button>`
            :`<button class="go" disabled>${esc(o.label)}</button>`}
       <a class="tel" href="tel:${esc(o.tel)}">📞</a>
     </div>

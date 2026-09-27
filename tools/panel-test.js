@@ -96,6 +96,15 @@ t.push(['на сьогоднішньому дати немає', !has(h, '<em>')
 h = draw(ord({ status: 'accepted', label: 'Прийнято', startAt: NOW + 30 * MIN }), NOW);
 t.push(['зарано готувати — кнопка замкнена з підписом часу', has(h, 'disabled') && has(h, 'можна з')]);
 
+/* «Прийняти в роботу» сервер пропускає повз обидві заборони — і панель
+   мусить так само, інакше замовлення на завтра неможливо взяти. */
+h = draw(ord({ status: 'new', label: 'Нове', startAt: NOW + 12 * 60 * MIN, day: 'завтра' }), NOW);
+t.push(['на завтра прийняти в роботу можна', has(h, 'Прийняти в роботу') && !has(h, 'disabled')]);
+h = draw(ord({ status: 'new', label: 'Нове', startAt: NOW + 5 * 60 * MIN }), NOW);
+t.push(['задовго до часу прийняти теж можна', has(h, 'Прийняти в роботу') && !has(h, 'disabled')]);
+h = draw(ord({ status: 'accepted', label: 'Прийнято', startAt: NOW + 12 * 60 * MIN, day: 'завтра' }), NOW);
+t.push(['а готувати на завтра — ні, і сказано коли', has(h, 'disabled') && has(h, 'готувати завтра')]);
+
 // 8. купки: нове окремо, робота окремо, зроблене окремо
 const groupOf = pick('groupOf');
 t.push(['нове — у першу купку', groupOf({ status: 'new' }) === 0]);
