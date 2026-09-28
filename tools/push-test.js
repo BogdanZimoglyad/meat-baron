@@ -12,6 +12,7 @@ const code = [
   cut(/const PUSH_MAX_DEVICES = 5;[\s\S]*?\n\}/),
   cut(/const NOTE_TITLE = \{[\s\S]*?\n\};/),
   cut(/const pushText = \(o, st\) => \{[\s\S]*?\n\};/),
+  cut(/const pushAdjust = \(o, a\) =>[\s\S]*?\n[^\n]*До сплати \$\{money\(o\.total\)\}` \};/),
   cut(/async function pushTo\(telKey, title, body, url\) \{[\s\S]*?\n\}/)
 ].join('\n');
 
@@ -21,6 +22,7 @@ const build = (db, { deadEndpoint } = {}) => {
   const log = [];
   const env = {
     db,
+    money: n => (Math.round(n * 100) / 100).toFixed(2).replace(/\.00$/, '') + ' ₴',
     save: () => {},
     console: { warn: () => {}, log: () => {} },
     webpush: {
@@ -34,7 +36,7 @@ const build = (db, { deadEndpoint } = {}) => {
     pushKeys: () => ({ publicKey: 'pub' })
   };
   const fn = new Function(...Object.keys(env),
-    `${code}; return { addPushSub, pushTo, pushText, NOTE_TITLE }`);
+    `${code}; return { addPushSub, pushTo, pushText, pushAdjust, NOTE_TITLE }`);
   return { ...fn(...Object.values(env)), log };
 };
 
@@ -92,6 +94,22 @@ ok('чужий номер має свій список', db.push['+380509999999'
   ok('доставці пишемо про курʼєра, а не адресу точки',
     s.pushText({ ...o, mode: 'delivery' }, 'ready').includes('курʼєр'));
   ok('у прийнятому — орієнтовний час', s.pushText(o, 'accepted').includes('17:30'));
+
+  /* Зміни суми теж мусять доходити до тих, у кого немає Telegram:
+     інакше людина приходить за замовленням на 613 ₴, а з неї просять
+     798 ₴, бо оператор додав позицію (знайдено 28.09). */
+  const ord = { no: 77, total: 798.4 };
+  ok('додану позицію називаємо в сповіщенні',
+    s.pushAdjust(ord, { kind: 'add', amount: 185, note: 'додали Сулугуні · 500 г' }).b.includes('Сулугуні'));
+  ok('і кажемо нову суму',
+    s.pushAdjust(ord, { kind: 'add', amount: 185, note: 'додали Сулугуні' }).b.includes('798.4'));
+  ok('зважування — окремим заголовком і зі старою сумою',
+    s.pushAdjust(ord, { kind: 'fact', amount: 798.4, from: 613.28 }).t.includes('зважили')
+    && s.pushAdjust(ord, { kind: 'fact', amount: 798.4, from: 613.28 }).b.includes('613.28'));
+  ok('коментар оператора йде як є',
+    s.pushAdjust(ord, { kind: 'note', note: 'передзвоніть' }).b.includes('передзвоніть'));
+  ok('вартість доставки названа',
+    s.pushAdjust(ord, { kind: 'ship', amount: 150 }).b.includes('150'));
 
   let bad = 0;
   for (const [name, good] of t) { console.log((good ? '  ok  ' : 'ПАДАЄ') + ' · ' + name); if (!good) bad++ }
