@@ -375,12 +375,24 @@ function draw(d){
   /* Пошук позиції: перемальовуємо список на кожну літеру, але поле
      створене тим самим draw — значення повертаємо самі, як і у формах. */
   const sq=form&&form.kind==='plus'&&!form.pick?$('fv'):null;
-  if(sq) sq.oninput=()=>{ form.search=sq.value; draw(d); focusForm() };
+  if(sq) sq.oninput=()=>{ form.search=sq.value; draw(d); focusEnd() };
   w.querySelectorAll('.form input').forEach(i=>i.onkeydown=e=>{
     if(e.key!=='Enter') return;
     e.preventDefault();
     const b=w.querySelector('[data-send]'); if(b&&!b.disabled) b.click();
   });
+}
+
+/* Те саме, але без виділення: у пошуку позиції список перемальовується
+   на кожну літеру, поле створюється заново, і select() виділяв усе
+   набране — наступна літера стирала попередню, і більш як одну ввести
+   було неможливо (власник, 28.09). Тут курсор просто в кінець. */
+function focusEnd(){
+  const el=$('fv');
+  if(!el) return;
+  el.focus();
+  const n=el.value.length;
+  try{ el.setSelectionRange(n,n) }catch(e){}
 }
 
 /* autofocus не спрацьовує на щойно вставленій розмітці — фокусуємо руками */
