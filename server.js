@@ -1003,6 +1003,23 @@ app.post('/api/op/grill', (req, res) => {
   res.json({ ok: true, note: r.note, ...opShopState(a.shop) });
 });
 
+/* Додати чи прибрати позицію: клієнт передзвонив і передумав. Ціну
+   рахує сервер — від браузера приходять лише номер позиції, кількість і
+   чи смажити. */
+app.post('/api/op/order/:no/line', async (req, res) => {
+  const a = panelOf(req);
+  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  const o = db.orders[req.params.no];
+  if (!o) return res.status(404).json({ error: 'Замовлення не знайдено' });
+  if (o.shop !== a.shop) return res.status(403).json({ error: 'Це замовлення іншої точки' });
+
+  const b = req.body || {};
+  const act = b.act === 'del' ? 'del' : 'add';
+  const r = await applyLine(o, act, b, 'панель · ' + SHOPS[a.shop]);
+  if (r.err) return res.status(409).json({ error: r.err, order: opOrder(o) });
+  res.json({ ok: true, order: opOrder(o) });
+});
+
 app.post('/api/op/order/:no/status', async (req, res) => {
   const a = panelOf(req);
   if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
@@ -1279,15 +1296,21 @@ function daySweep() {
 setInterval(daySweep, 5 * 60 * 1000).unref();
 
 /* ---------- текст замовлення ---------- */
+/* Скільки саме позиції: «600 г», «2 × 1 кг», «3 шт (≈900 г)». Фритюр —
+   порціями з вагою: кухні треба знати, скільки грамів відпускати, а
+   «2 шт» цього не каже. Одне правило на картку в чаті й на журнал змін,
+   інакше оператор побачив би в них різні числа. */
+function qtyText(l) {
+  const u = countUnitOf(l);
+  return l.unit === 'шт' ? (u ? `${l.g} ${u.s}${u.g ? ` (${l.g * u.g} г)` : ''}` : l.g + ' шт')
+       : l.unit === 'пак' ? l.g + ' × ' + packLabel(l)
+       : portionOf(l) ? `${Math.round(l.g / portionOf(l))} шт (≈${wLabel(l.g)})`
+       : wLabel(l.g);
+}
+
 function orderText(o) {
   const lines = o.lines.map(l => {
-    /* Фритюр — порціями з вагою: кухні треба знати, скільки грамів
-       відпускати, а «2 шт» цього не каже. */
-    const u = countUnitOf(l);
-    const qty = l.unit === 'шт' ? (u ? `${l.g} ${u.s}${u.g ? ` (${l.g * u.g} г)` : ''}` : l.g + ' шт')
-              : l.unit === 'пак' ? l.g + ' × ' + packLabel(l)
-              : portionOf(l) ? `${Math.round(l.g / portionOf(l))} шт (≈${wLabel(l.g)})`   // картопля з салом: штуками, але на вагу
-              : wLabel(l.g);
+    const qty = qtyText(l);
     /* Вогник біля позиції — щоб оператор бачив, що саме на мангал.
        Смаження тепер обирають на кожній позиції окремо, і одного
        підсумку внизу вже не досить. */
@@ -2100,6 +2123,87 @@ async function applyAdjust(o, kind, amount, note, by) {
   await editCard(o);
   notifyAdjust(o, o.adjust[o.adjust.length - 1]);
   return { ok: true, prevShip };
+}
+
+/* ---------- склад замовлення міняє оператор ----------
+   Клієнт передзвонює й просить додати сулугуні чи прибрати ребра — це
+   буває щодня. Раніше оператор міг лише підкрутити суму кнопками ➕/➖,
+   і в замовленні лишався старий склад: на кухню йшло одне, у чеку інше
+   (власник, 28.09).
+
+   Суму рахуємо заново з самих рядків — тим самим правилом, що й
+   приймання з сайту. Інакше панель рахувала б по-своєму й розійшлася б
+   із сайтом на копійки, а потім і на позиції. */
+function retotal(o) {
+  const goods = kop((o.lines || []).reduce((s, l) => s + l.sum, 0));
+  const fg = (o.lines || []).reduce((s, l) => s + (l.fry ? fryableG(l) : 0), 0);
+  o.fg = fg;
+  o.fry = fg >= MIN_G;                       // смаження лише коли є що смажити
+  const fryCost = o.fry ? kop(fg / 1000 * FRY_RATE) : 0;
+  return kop(goods + fryCost + (o.ship || 0));
+}
+
+/* Ціну рахує сервер, а не панель: усе, що приходить від браузера, — це
+   номер позиції, кількість і чи смажити. */
+async function applyLine(o, act, raw, by) {
+  if (!canEdit(o, 'fact')) return { err: lockedText('fact') };
+  o.lines = o.lines || [];
+  const before = o.total;
+  let what;
+
+  if (act === 'del') {
+    const i = Number(raw.i);
+    if (!(i >= 0 && i < o.lines.length)) return { err: 'Такої позиції в замовленні немає' };
+    /* Прибрати все до останнього рядка — це не редагування, а
+       скасування: хай іде через кнопку скасування з причиною. */
+    if (o.lines.length < 2) return { err: 'Це остання позиція. Якщо замовлення не потрібне — скасуйте його.' };
+    const [gone] = o.lines.splice(i, 1);
+    what = 'прибрали ' + lineTitle(gone) + ' · ' + qtyText(gone);
+  } else {
+    if (o.lines.length >= 40) return { err: 'У замовленні вже забагато позицій' };
+    const it = byId.get(String(raw.id || ''));
+    if (!it) return { err: 'Немає такої позиції в прайсі' };
+    const q = Math.floor(Number(raw.g) || 0);
+    const minQ = it.unit === 'вага' ? it.minG : 1;
+    const maxQ = it.unit === 'вага' ? 20000 : 99;
+    if (!(q >= minQ) || q > maxQ) {
+      return { err: `Кількість — від ${it.unit === 'вага' ? minQ + ' г' : minQ + ' шт'} до ${it.unit === 'вага' ? maxQ / 1000 + ' кг' : maxQ + ' шт'}` };
+    }
+    let v = '';
+    const vs = variantsOf(it);
+    if (vs) {
+      v = String(raw.v || '');
+      if (!vs.list.some(x => x[0] === v)) return { err: 'Оберіть різновид' };
+    }
+    const line = {
+      name: it.name, grp: it.grp, cat: it.cat, unit: it.unit, id: it.id, g: q,
+      sum: lineSum({ unit: it.unit, price: priceOf(it, v), g: q, grp: it.grp, name: it.name }),
+      fry: canFry(it) && !!raw.fry,
+      ...(v ? { v } : {})
+    };
+    o.lines.push(line);
+    what = 'додали ' + lineTitle(line) + ' · ' + qtyText(line) + (line.fry ? ' · на мангал' : '');
+  }
+
+  o.total = retotal(o);
+  if (o.total <= 0 || o.total > MAX_TOTAL) {          // не буває, але хай буде
+    return { err: `Сума вийшла б ${money(o.total)} — так не можна.` };
+  }
+  if (o.totalOrig == null) o.totalOrig = before;
+
+  /* Пишемо звичайним «плюсом» чи «мінусом» на різницю — так зміну
+     однаково зрозуміють і картка в чаті, і сторінка клієнта, і
+     сповіщення. Різниця, а не ціна рядка: додали мʼясо на мангал —
+     виросла ще й вартість смаження. */
+  const d = kop(o.total - before);
+  o.adjust = adjustmentsOf(o).slice();
+  o.adjust.push({ kind: d < 0 ? 'sub' : 'add', amount: Math.abs(d), note: what, by, at: Date.now() });
+  o.updatedAt = Date.now();
+  save();
+
+  await editCard(o);
+  notifyAdjust(o, o.adjust[o.adjust.length - 1]);
+  return { ok: true };
 }
 
 async function applyStatus(o, st) {

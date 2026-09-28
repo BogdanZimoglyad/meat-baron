@@ -116,6 +116,15 @@ button{font:inherit;cursor:pointer;border:none}
 .form .ok{background:var(--ember);color:#fff;font-weight:600}
 .form .no{background:var(--coal);border:1px solid var(--line-2);color:var(--bone)}
 .form .hint{font-size:12.5px;color:var(--smoke)}
+/* вибір кількості й різновиду — кнопками під палець, а не набором цифр */
+.vars{display:flex;flex-wrap:wrap;gap:6px}
+.vars button{min-height:40px;padding:0 12px;border-radius:10px;background:var(--coal);
+  border:1px solid var(--line-2);color:var(--bone);font-size:14px}
+.vars button.on{background:var(--ember);border-color:var(--ember);color:#fff;font-weight:600}
+.form .chk{min-height:44px;border-radius:10px;background:var(--coal);
+  border:1px solid var(--line-2);color:var(--bone);font-size:15px;text-align:left;padding:0 14px}
+.form .chk.on{color:var(--ember-hot);border-color:rgba(224,74,60,.5)}
+.form .srow{margin:0}
 /* перемикач екранів: замовлення / стоп-лист / мангал */
 .tabs{display:flex;gap:6px;width:100%;order:3}
 .tabs button{flex:1;min-height:42px;border-radius:10px;background:var(--coal);
@@ -247,7 +256,7 @@ let seenNew=new Set(), lastOk=0, form=null;
 let view='orders', SHOP=null, stockQ='', DATA=null;
 /* Зроблені за день ховаємо: вони цікаві раз на зміну, а місце на екрані
    займають постійно. Розгортаються натисканням на заголовок. */
-let showDone=false;
+let showDone=false, formSig='';
 
 /* Замовлення на інший день лежить прийнятим до самого дня видачі — так і
    задумано, готувати наперед не можна. Але в «У роботі» воно заважало:
@@ -323,7 +332,13 @@ function draw(d){
      розгортають «Завершені». Оператор набирав суму, зазирнув у зроблені —
      і набране зникло. Тож знімаємо значення до перемальовки й повертаємо
      після неї. */
-  const typed=form?{v:val('fv'),n:val('fn')}:null;
+  /* Але лише в межах того самого кроку. Форма додавання позиції має
+     два кроки — пошук і кількість, — і без цієї перевірки набране в
+     пошуку («сулуг») підставлялось у поле ваги, а позиція не додавалась
+     узагалі. */
+  const sig=form?form.kind+'|'+(form.pick||''):'';
+  const typed=(form&&sig===formSig)?{v:val('fv'),n:val('fn')}:null;
+  formSig=sig;
   const g=[[],[],[],[]];
   d.orders.forEach(o=>g[groupOf(o)].push(o));
   w.innerHTML=dayStrip(d.day)
@@ -341,6 +356,26 @@ function draw(d){
   });
   w.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{ form=null; draw(d) });
   w.querySelectorAll('[data-send]').forEach(b=>b.onclick=()=>send(b));
+  /* ---- склад замовлення ---- */
+  w.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{
+    const it=priceList().find(i=>i.id===b.dataset.pick);
+    form.pick=b.dataset.pick;
+    form.q=it&&it.unit!=='вага'?1:(it?it.minG:0);
+    form.fry=false; form.v='';
+    draw(d);
+  });
+  w.querySelectorAll('[data-var]').forEach(b=>b.onclick=()=>{ form.v=b.dataset.var; draw(d) });
+  /* Обрали кнопкою — чистимо поле «своєї» кількості, інакше воно
+     перебиватиме вибір при відправці. */
+  w.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{ form.q=+b.dataset.q; put('fv',''); draw(d) });
+  w.querySelectorAll('[data-fry]').forEach(b=>b.onclick=()=>{ form.fry=!form.fry; draw(d) });
+  w.querySelectorAll('[data-back]').forEach(b=>b.onclick=()=>{ form.pick=''; form.search=''; draw(d) });
+  w.querySelectorAll('[data-addline]').forEach(b=>b.onclick=()=>addLine(b));
+  w.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>delLine(b));
+  /* Пошук позиції: перемальовуємо список на кожну літеру, але поле
+     створене тим самим draw — значення повертаємо самі, як і у формах. */
+  const sq=form&&form.kind==='plus'&&!form.pick?$('fv'):null;
+  if(sq) sq.oninput=()=>{ form.search=sq.value; draw(d); focusForm() };
   w.querySelectorAll('.form input').forEach(i=>i.onkeydown=e=>{
     if(e.key!=='Enter') return;
     e.preventDefault();
@@ -399,8 +434,12 @@ function card(o,now){
    суму міняють до «Готується», доставку — майже до видачі. */
 function more(o){
   const can=o.can||{}, b=[];
+  /* ➕ і ➖ тепер про склад замовлення, а не про гроші: клієнт
+     передзвонює й просить додати сулугуні чи прибрати ребра — це буває
+     щодня, а підкрутити суму наосліп сенсу мало (власник, 28.09).
+     Правка суми лишилась однією кнопкою — «🧾 Сума» з каси. */
   if(can.money){
-    b.push(['fact','🧾 Сума'],['add','➕'],['sub','➖'],['note','💬']);
+    b.push(['fact','🧾 Сума'],['plus','➕ Позиція'],['minus','➖ Позиція'],['note','💬']);
   }
   if(can.ship&&o.mode==='delivery') b.push(['ship','🚕 Доставка']);
   if(can.cancel) b.push(['cancel','✖️ Скасувати',1]);
@@ -417,7 +456,75 @@ const FORM={
   note:{t:'Коментар для клієнта',n:0,hint:'Сума не зміниться.'},
   cancel:{t:'Причина скасування',n:0,hint:'Її побачить клієнт.',danger:1}
 };
+/* ---------- склад замовлення ----------
+   Прайс той самий, що й у стоп-листі, — з catalog.js. Ціну тут не
+   рахуємо й не надсилаємо: сервер порахує сам із номера позиції,
+   кількості й позначки «на мангал». */
+function lineForms(o,kind){
+  if(kind==='minus') return delForm(o);
+  return form.pick? pickForm(o) : searchForm();
+}
+
+function delForm(o){
+  const rows=(o.lines||[]).map((l,i)=>`<div class="srow">
+      <span>${esc(l.name)}${l.v?` «${esc(l.v)}»`:''} · ${l.unit==='вага'?wLabel(l.qty):l.qty+' шт'}${l.fry?' 🔥':''}</span>
+      <button data-del="${i}" class="danger">✕ Прибрати</button>
+    </div>`).join('');
+  return `<div class="form">
+    <label>Що прибрати із замовлення</label>
+    ${rows}
+    ${(o.lines||[]).length<2?'<div class="hint">Це остання позиція. Якщо замовлення не потрібне — скасуйте його.</div>':''}
+    <div class="row"><button class="no" data-close="1">Назад</button></div>
+  </div>`;
+}
+
+function searchForm(){
+  const q=fold(form.search||'').trim();
+  const hits=q.length>=2
+    ? priceList().filter(i=>fold(i.grp+' '+i.name).includes(q)).slice(0,12)
+    : [];
+  return `<div class="form">
+    <label>Що додати</label>
+    <input type="text" id="fv" autocomplete="off" placeholder="Назва: ошийок, сулугуні, лаваш…" autofocus>
+    ${q.length<2?'<div class="hint">Наберіть хоча б дві літери.</div>'
+      : hits.length?hits.map(i=>`<div class="srow">
+            <span>${esc(i.grp)} · ${esc(itemName(i))}</span>
+            <button data-pick="${esc(i.id)}">Обрати</button></div>`).join('')
+      : '<div class="hint">Нічого схожого не знайшли.</div>'}
+    <div class="row"><button class="no" data-close="1">Назад</button></div>
+  </div>`;
+}
+
+function pickForm(){
+  const it=priceList().find(i=>i.id===form.pick);
+  if(!it) return searchForm();
+  const vs=typeof variantsOf==='function'&&variantsOf(it);
+  const piece=it.unit!=='вага';
+  /* Швидкі кнопки — ті самі кроки, що й на сайті: оператор не набирає
+     цифри вручну, коли клієнт каже «півкіло». */
+  const quick=piece?[1,2,3,4]:[it.minG,500,1000,1500,2000].filter((v,i,a)=>v>=it.minG&&a.indexOf(v)===i);
+  return `<div class="form">
+    <label>${esc(it.grp)} · ${esc(itemName(it))}</label>
+    ${vs?`<div class="vars">${vs.list.map(([v])=>
+      `<button data-var="${esc(v)}" class="${form.v===v?'on':''}">${esc(v)}</button>`).join('')}</div>`:''}
+    <div class="vars">${quick.map(v=>
+      `<button data-q="${v}" class="${Number(form.q)===v?'on':''}">${piece?v+' шт':wLabel(v)}</button>`).join('')}</div>
+    ${/* Поле лишається порожнім навмисне: воно тільки для «свого» числа.
+         Коли в ньому стояла обрана кнопкою кількість, набране перебивало
+         наступний вибір — тиснеш «500 г», а йде 350. */''}
+    <input type="text" inputmode="numeric" id="fv" placeholder="${piece?'або скільки штук':'або скільки грамів'}">
+    ${typeof canFry==='function'&&canFry(it)
+      ? `<button class="chk${form.fry?' on':''}" data-fry="1">${form.fry?'✓':''} На мангал</button>` : ''}
+    <div class="hint">${piece?'Мінімум 1 шт.':`Мінімум ${wLabel(it.minG)}.`}${vs&&!form.v?' Оберіть різновид.':''}</div>
+    <div class="row">
+      <button class="ok" data-addline="1">Додати в замовлення</button>
+      <button class="no" data-back="1">Інша позиція</button>
+    </div>
+  </div>`;
+}
+
 function formHtml(o,kind){
+  if(kind==='plus'||kind==='minus') return lineForms(o,kind);
   const f=FORM[kind];
   return `<div class="form">
     <label>${f.t}</label>
@@ -642,6 +749,32 @@ async function send(btn){
     if(!r.ok){ btn.disabled=false; btn.textContent=was; return alert(d.error||'Не вдалося') }
     form=null; await load();
   }catch(e){ btn.disabled=false; btn.textContent=was; alert('Немає звʼязку') }
+}
+
+/* Ціну не рахуємо й не надсилаємо — сервер порахує сам. Від нас лише
+   номер позиції, кількість, різновид і чи на мангал. */
+async function addLine(btn){
+  const it=priceList().find(i=>i.id===form.pick);
+  if(!it) return;
+  const typed=val('fv');
+  const q=Math.floor(Number(String(typed==null||typed===''?form.q:typed).replace(/\D/g,''))||0);
+  const piece=it.unit!=='вага';
+  if(!(q>=(piece?1:it.minG))) return alert(piece?'Вкажіть кількість, мінімум 1 шт':`Вкажіть вагу, мінімум ${wLabel(it.minG)}`);
+  const vs=typeof variantsOf==='function'&&variantsOf(it);
+  if(vs&&!form.v) return alert('Оберіть різновид');
+  btn.disabled=true; const was=btn.textContent; btn.textContent='…';
+  const r=await post('/api/op/order/'+form.no+'/line',
+    {act:'add',id:it.id,g:q,v:form.v||'',fry:!!form.fry});
+  if(!r){ btn.disabled=false; btn.textContent=was; return }
+  form=null; await load();
+}
+
+async function delLine(btn){
+  if(!confirm('Прибрати цю позицію із замовлення?')) return;
+  btn.disabled=true; const was=btn.textContent; btn.textContent='…';
+  const r=await post('/api/op/order/'+form.no+'/line',{act:'del',i:+btn.dataset.del});
+  if(!r){ btn.disabled=false; btn.textContent=was; return }
+  form=null; await load();
 }
 
 async function load(){
