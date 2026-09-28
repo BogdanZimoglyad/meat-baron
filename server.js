@@ -1420,8 +1420,11 @@ function keyboard(o) {
   if (EDITABLE.has(o.status)) btns.push(
     [{ text: '🧾 Фактична сума', callback_data: `a:${o.no}:fact` }],
     [
-      { text: '➕ Додати', callback_data: `a:${o.no}:add` },
-      { text: '➖ Відняти', callback_data: `a:${o.no}:sub` },
+      /* «До суми», а не «Додати»: у панелі ➕ тепер додає позицію, і
+         оператор, який звик до неї, натискав у боті «Додати», щоб
+         додати сулугуні, — а бот питав про гривні (власник, 28.09). */
+      { text: '➕ До суми', callback_data: `a:${o.no}:add` },
+      { text: '➖ Із суми', callback_data: `a:${o.no}:sub` },
       { text: '💬 Коментар', callback_data: `a:${o.no}:note` }
     ]);
   return { inline_keyboard: btns };
@@ -2290,8 +2293,8 @@ bot.on('callback_query', async cq => {
    щось додати телефоном. Суму оператор міняє лише кнопками:
      🧾 Фактична сума — число з каси, де замовлення пробили й зважили;
                        коментар за потреби («замість ошийка поклали мʼякоть»)
-     ➕ Додати  — «39 додали соус Ткемалі»: до суми додається 39
-     ➖ Відняти — «20 вага менша»: від суми віднімається 20
+     ➕ До суми — «39 додали соус Ткемалі»: до суми додається 39
+     ➖ Із суми — «20 вага менша»: від суми віднімається 20
      💬 Коментар — лише текст для клієнта, сума не міняється
    Просто написати нову суму не можна — так «441» замість «+39» колись
    зменшило суму, хоча в коментарі стояло «додали».
@@ -2367,7 +2370,7 @@ bot.on('callback_query', async cq => {
     if (old && chatId === old.chatId) {
       await bot.editMessageReplyMarkup(keyboard(old), { chat_id: old.chatId, message_id: old.msgId }).catch(() => {});
     }
-    return bot.answerCallbackQuery(cq.id, { text: 'Кнопку оновлено: тепер ➕ Додати, ➖ Відняти або 💬 Коментар' });
+    return bot.answerCallbackQuery(cq.id, { text: 'Кнопку оновлено: тепер ➕ До суми, ➖ Із суми або 💬 Коментар' });
   }
   if (!['a', 'ac', 'ax'].includes(tag)) return;
 
