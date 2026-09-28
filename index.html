@@ -350,7 +350,12 @@ a{color:inherit}
   .info-row b{font-size:15px}
   .info .info-map{font-size:13px}
   .ig-sm{font-size:14.5px;padding:11px 12px}
-  main .about h2{font-size:26px}
+  main /* Посилання на умови й реквізити. Банк під час перевірки для
+   еквайрингу шукає його саме в підвалі — має бути видно й з телефона. */
+.legal{margin-top:18px;font-size:14px}
+.legal a{color:var(--smoke);text-decoration:underline;text-underline-offset:3px}
+.legal a:hover{color:var(--bone)}
+.about h2{font-size:26px}
   main .about p{font-size:15.5px}
 }
 
@@ -1027,6 +1032,7 @@ body:has(.inst:not(.up)) .bar{bottom:66px}
     </a>
     <p class="pts-h" id="ptsH"></p>
     <div class="pts" id="pts"></div>
+    <p class="legal"><a href="umovy.html">Умови, оплата, доставка та реквізити</a></p>
   </section>
 </main>
 
