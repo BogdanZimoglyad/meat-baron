@@ -485,6 +485,10 @@ function delForm(o){
   return `<div class="form">
     <label>Що прибрати із замовлення</label>
     ${rows}
+    ${/* Причина не обовʼязкова, але клієнту вона пояснює, чому сума
+         впала: «закінчилось» і «ви передумали» — різні речі. */''}
+    <input type="text" id="fn" placeholder="Причина, якщо треба: закінчилось, клієнт передумав">
+    <div class="hint">Причину побачить клієнт разом зі зміною суми.</div>
     ${(o.lines||[]).length<2?'<div class="hint">Це остання позиція. Якщо замовлення не потрібне — скасуйте його.</div>':''}
     <div class="row"><button class="no" data-close="1">Назад</button></div>
   </div>`;
@@ -784,7 +788,8 @@ async function addLine(btn){
 async function delLine(btn){
   if(!confirm('Прибрати цю позицію із замовлення?')) return;
   btn.disabled=true; const was=btn.textContent; btn.textContent='…';
-  const r=await post('/api/op/order/'+form.no+'/line',{act:'del',i:+btn.dataset.del});
+  const r=await post('/api/op/order/'+form.no+'/line',
+    {act:'del',i:+btn.dataset.del,note:val('fn')||''});
   if(!r){ btn.disabled=false; btn.textContent=was; return }
   form=null; await load();
 }

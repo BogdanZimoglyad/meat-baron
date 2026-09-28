@@ -106,6 +106,18 @@ const round = n => Math.round(n * 100) / 100;
   ok('у журналі сказано, що прибрали й що саме',
     notified[0].kind === 'sub' && notified[0].note.includes('прибрали') && notified[0].note.includes('Сулугуні'));
 
+  /* Причина не обовʼязкова, але коли вона є — клієнт має її побачити */
+  o = order({ lines: [line('Ошийок', 1000), line('Сулугуні', 500)] });
+  notified = [];
+  await api.applyLine(o, 'del', { i: 1, note: 'закінчилось' }, 'панель');
+  ok('причина прибирання доходить до клієнта',
+    notified[0].note.includes('прибрали') && notified[0].note.includes('закінчилось'));
+
+  o = order({ lines: [line('Ошийок', 1000), line('Сулугуні', 500)] });
+  notified = [];
+  await api.applyLine(o, 'del', { i: 1 }, 'панель');
+  ok('без причини — просто назва позиції', !notified[0].note.includes('—'));
+
   o = order();
   r = await api.applyLine(o, 'del', { i: 0 }, 'п');
   ok('останню позицію прибрати не даємо — це скасування', !!r.err && o.lines.length === 1);

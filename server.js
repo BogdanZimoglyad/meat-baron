@@ -2201,9 +2201,14 @@ async function applyLine(o, act, raw, by) {
      однаково зрозуміють і картка в чаті, і сторінка клієнта, і
      сповіщення. Різниця, а не ціна рядка: додали мʼясо на мангал —
      виросла ще й вартість смаження. */
+  /* Причину, якщо оператор її написав, дописуємо до назви позиції:
+     «прибрали Сулугуні · 500 г — клієнт передумав». Клієнт бачить не
+     сам факт, а чому так вийшло (власник, 28.09). */
+  const why = String(raw.note || '').trim().slice(0, 120);
   const d = kop(o.total - before);
   o.adjust = adjustmentsOf(o).slice();
-  o.adjust.push({ kind: d < 0 ? 'sub' : 'add', amount: Math.abs(d), note: what, by, at: Date.now() });
+  o.adjust.push({ kind: d < 0 ? 'sub' : 'add', amount: Math.abs(d),
+    note: what + (why ? ' — ' + why : ''), by, at: Date.now() });
   o.updatedAt = Date.now();
   save();
 
