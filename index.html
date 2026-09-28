@@ -2686,8 +2686,13 @@ function asapAt(mode){
 /* Слот, на який підемо, якщо людина лишила «Якнайшвидше» */
 function chosenSlot(mode){
   if(pickWhen) return slotMs(new Date(pickWhen.day),pickWhen.h);
+  /* Точний час, а не початок години. Раніше 19:39 записувалось як
+     19:00 — і в панелі замовлення виглядало простроченим за пів години
+     до того, як його взагалі мали приготувати (власник, 28.09).
+     Завантаження мангала від цього не страждає: воно й так зводить час
+     до години окремо (hourFloor). */
   const e=asapAt(mode);
-  return e? new Date(e).setMinutes(0,0,0) : 0;
+  return e? e.getTime() : 0;
 }
 function asapLabel(mode){
   const e=asapAt(mode);
@@ -2716,8 +2721,20 @@ function slotsFor(d,mode){
   }
   return out;
 }
+/* Рядок часу в замовленні. Раніше він починався зі слова «Якнайшвидше»,
+   і оператор читав його як назву режиму, а не як час: «Якнайшвидше ·
+   орієнтовно з 19:39». Тепер це просто фраза про замовлення (власник,
+   28.09). */
 function whenLabel(mode){
-  if(!pickWhen) return 'Якнайшвидше · '+asapLabel(mode);
+  const soon=mode==='delivery'?'Привеземо':'Готове';
+  if(!pickWhen){
+    const e=asapAt(mode);
+    if(!e) return 'на мангал вільного часу немає';
+    const h=String(e.getHours()).padStart(2,'0')+':'+String(e.getMinutes()).padStart(2,'0');
+    return dayKey(e)===dayKey(new Date())
+      ? `${soon} орієнтовно з ${h}`
+      : `${dayLabel(e)}, ${soon.toLowerCase()} орієнтовно з ${h}`;
+  }
   const d=new Date(pickWhen.day);
   /* На доставці кажемо «орієнтовно»: везе партнерське таксі, і хвилина
      в хвилину не буває. На самовивозі час твердий — людина приходить
