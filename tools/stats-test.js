@@ -9,6 +9,9 @@ const CAT = require(path.join(__dirname, '..', 'catalog.js'));
 const cut = re => { const m = src.match(re); if (!m) { console.error('не знайшли: ' + re); process.exit(1) } return m[0] };
 const code = [
   cut(/const kyivHour = ms =>[\s\S]*?hour12: false \}\)\);/),
+  cut(/const kyivDate = \(ts = Date\.now\(\)\) =>[\s\S]*?const futureDay = o => [^\n]*/),
+  cut(/function dayStats\(shop, day\) \{[\s\S]*?\n\}/),
+  cut(/function dayText\(shop, day\) \{[\s\S]*?\n\}/),
   cut(/function statsRange\(shopList, from, to\) \{[\s\S]*?\n\}/),
   cut(/const cmp = \(a, b\) => \{[\s\S]*?\n\};/),
   cut(/function statsText\(shopList, days, title\) \{[\s\S]*?\n\}/)
@@ -22,6 +25,7 @@ const env = {
   nameOf: CAT.nameOf,          // підпис позиції: «Люля кебаб курячий» замість двох однакових
   SHOPS: ['Свободи 52', 'Шевченка 142а'],
   CANCELED: 'canceled',
+  FINAL: new Set(['done','canceled']),
   esc: s => String(s),
   money: n => CAT.kop(n).toFixed(2).replace(/\.00$/, '') + ' ₴',
   wLabel: g => (g >= 1000 ? (g / 1000).toFixed(g % 100 ? 2 : g % 1000 ? 1 : 0) + ' кг' : g + ' г'),
@@ -29,7 +33,7 @@ const env = {
 };
 const build = orders => {
   env.db = { orders };
-  const fn = new Function(...Object.keys(env), `${code}; return { statsRange, statsText }`);
+  const fn = new Function(...Object.keys(env), `${code}; return { statsRange, statsText, dayStats, dayText }`);
   return fn(...Object.values(env));
 };
 
@@ -82,6 +86,23 @@ t.push(['години видачі рахуються', /1[78]:00 — 2/.test(w)
 // 6. старі номери позицій не ламають топ
 s = build({ 1: ord({ lines: [{ id: 'p0' }, { id: id('Ошийок') }] }) });
 t.push(['позицій поза прайсом у топі немає', !has(s.statsText([0], 7), 'p0')]);
+
+// 7. підсумок дня: що зроблено сьогодні, а що лише чекає свого дня
+const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Kyiv' });
+const HOUR = 3600e3;
+s = build({
+  1: ord({ createdAt: Date.now(), status: 'done', slotAt: Date.now() - HOUR }),
+  2: ord({ createdAt: Date.now(), status: 'cooking', slotAt: Date.now() + HOUR }),
+  3: ord({ createdAt: Date.now(), status: 'accepted', slotAt: Date.now() + 2 * 24 * 3600e3 })
+});
+let dd = s.dayStats(0, today);
+t.push(['«ще в роботі» — лише сьогоднішні', dd.open === 1]);
+t.push(['замовлення на інший день лічимо окремо', dd.later === 1]);
+let dt = s.dayText(0, today);
+t.push(['у підсумку обидва рядки й різними словами',
+  has(dt, 'Ще в роботі: 1') && has(dt, 'Чекають свого дня: 1')]);
+s = build({ 1: ord({ createdAt: Date.now(), status: 'done', slotAt: Date.now() - HOUR }) });
+t.push(['коли чекати нічого — рядка немає', !has(s.dayText(0, today), 'Чекають свого дня')]);
 
 let bad = 0;
 for (const [name, ok] of t) { console.log((ok ? '  ok  ' : 'ПАДАЄ') + ' · ' + name); if (!ok) bad++ }

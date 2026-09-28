@@ -270,6 +270,7 @@ function dayStrip(d){
     <span>на мангал <b>${wLabel(d.fg)}</b></span>
     <span class="mut">самовивіз ${d.pickup} · доставка ${d.delivery}</span>
     ${d.canceled?`<span class="mut">скасовано ${d.canceled}</span>`:''}
+    ${d.later?`<span class="mut">чекають свого дня ${d.later}</span>`:''}
   </div>`;
 }
 
@@ -329,7 +330,7 @@ function draw(d){
     +(d.orders.length?'':'<p class="empty">Замовлень зараз немає.</p>')
     +sect('Нові — прийняти в роботу','hot',g[0],now)
     +sect('У роботі','',g[1],now)
-    +sect('На інші дні','later',g[2],now)
+    +sect('Чекають свого дня','later',g[2],now)
     +doneSect(g[3],now);
   if(typed){ put('fv',typed.v); put('fn',typed.n) }
   const dh=w.querySelector('[data-done]');

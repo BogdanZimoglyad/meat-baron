@@ -776,7 +776,11 @@ function dayStats(shop, day) {
   return {
     all: list.length,
     canceled: list.filter(o => o.status === CANCELED).length,
-    open: list.filter(o => !FINAL.has(o.status)).length,
+    /* «Ще в роботі» — тільки про сьогодні. Замовлення на середу теж не
+       закрите, але сьогодні з ним робити нічого, і в підсумку дня воно
+       читалось як недороблена робота (власник, 28.09). Рахуємо окремо. */
+    open: list.filter(o => !FINAL.has(o.status) && !futureDay(o)).length,
+    later: list.filter(o => !FINAL.has(o.status) && futureDay(o)).length,
     pickup: live.filter(o => o.mode === 'pickup').length,
     delivery: live.filter(o => o.mode === 'delivery').length,
     ship: live.reduce((s, o) => s + (o.ship || 0), 0),
@@ -793,7 +797,8 @@ function dayText(shop, day) {
     `На мангал: <b>${wLabel(d.fg)}</b>\n` +
     `Сума: <b>${money(d.sum)}</b>` + (d.ship ? ` (з них доставка ${money(d.ship)})` : '') +
     (d.canceled ? `\nСкасовано: ${d.canceled}` : '') +
-    (d.open ? `\nЩе в роботі: ${d.open}` : '');
+    (d.open ? `\nЩе в роботі: ${d.open}` : '') +
+    (d.later ? `\nЧекають свого дня: ${d.later}` : '');
 }
 
 bot.onText(/^\/day(?:@\w+)?/, msg => {
