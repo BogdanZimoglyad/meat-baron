@@ -1078,6 +1078,11 @@ const CATS=[
    доки встигають зібрати й посмажити до закриття: у будні до 19:00,
    у неділю до 18:20 (власник, 19.09). */
 const SHOP_OPEN=8;
+/* Коли на точці зʼявляється оператор. Це не те саме, що відкриття:
+   з восьмої в магазині вже є кому зважити й віддати сире, а замовлення
+   з сайту підтверджує оператор, і він приходить на девʼяту (власник,
+   28.09). Використовується лише в тексті для тих, хто замовив уночі. */
+const OPERATOR_FROM=9;
 const closeHour=d=>d.getDay()===0?19:20;               // 0 — неділя
 const lastOrderMin=d=>d.getDay()===0?18*60+20:19*60; // хвилини від опівночі
 const GRILL_FROM=10;                    // мангал з 10:00
@@ -3240,8 +3245,8 @@ function openStatus(startStatus){
          не бере (власник, 28.09). */''}
     ${status==='new'&&closedNow()?`<div class="ready-note off">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-      <span><b>Зараз точка зачинена</b><span>Оператор підтвердить замовлення зранку й подзвонить, якщо будуть питання.
-      Замовлення приймаємо з ${SHOP_OPEN}:00 до ${Math.floor(lastOrderMin(new Date()) / 60)}:00.</span></span>
+      <span><b>Зараз точка зачинена</b><span>Замовлення прийнято — оператор підтвердить його зранку, після ${OPERATOR_FROM}:00,
+      і подзвонить, якщо будуть питання.</span></span>
     </div>`:''}
     ${status==='ready'?`<div class="ready-note">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5.5 5.5L20 7"/></svg>
