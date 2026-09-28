@@ -910,8 +910,14 @@ app.get('/api/op/orders', (req, res) => {
   const a = panelOf(req);
   if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
   const DAY = 24 * 3600 * 1000;
+  const today = kyivDate();
   const list = Object.values(db.orders)
-    .filter(o => o.shop === a.shop && (!FINAL.has(o.status) || Date.now() - (o.updatedAt || o.createdAt || 0) < 2 * 3600 * 1000))
+    /* Зроблені лишаємо до кінця дня, а не на дві години, як було: о
+       восьмій вечора оператор не бачив нічого з ранкової зміни, хоча
+       саме там питання «а це ми вже віддали?» (власник, 28.09).
+       Купка «Завершені» згорнута, тож на екран вони не тиснуть. */
+    .filter(o => o.shop === a.shop
+      && (!FINAL.has(o.status) || kyivDate(o.updatedAt || o.createdAt || 0) === today))
     .filter(o => Date.now() - (o.createdAt || 0) < 3 * DAY)
     /* Найближче за часом видачі — зверху: саме цим замовленням треба
        займатись першими. Без часу (якнайшвидше) — за номером. */

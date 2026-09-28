@@ -300,7 +300,7 @@ const sect=(title,cls,list,now)=>{
 
 const doneSect=(list,now)=> list.length
   ? `<section class="sect done"><h2 data-done="1" role="button" tabindex="0">
-       ${showDone?'▾':'▸'} Завершені<i>${list.length}</i></h2>
+       ${showDone?'▾':'▸'} Завершені сьогодні<i>${list.length}</i></h2>
      ${showDone?grid(list,now):''}</section>`
   : '';
 
