@@ -2143,13 +2143,18 @@ async function applyAdjust(o, kind, amount, note, by) {
    Суму рахуємо заново з самих рядків — тим самим правилом, що й
    приймання з сайту. Інакше панель рахувала б по-своєму й розійшлася б
    із сайтом на копійки, а потім і на позиції. */
+function fryOf(lines) {
+  const fg = (lines || []).reduce((s, l) => s + (l.fry ? fryableG(l) : 0), 0);
+  const on = fg >= MIN_G;                    // смаження лише коли є що смажити
+  return { fg, on, cost: on ? kop(fg / 1000 * FRY_RATE) : 0 };
+}
+
 function retotal(o) {
   const goods = kop((o.lines || []).reduce((s, l) => s + l.sum, 0));
-  const fg = (o.lines || []).reduce((s, l) => s + (l.fry ? fryableG(l) : 0), 0);
-  o.fg = fg;
-  o.fry = fg >= MIN_G;                       // смаження лише коли є що смажити
-  const fryCost = o.fry ? kop(fg / 1000 * FRY_RATE) : 0;
-  return kop(goods + fryCost + (o.ship || 0));
+  const f = fryOf(o.lines);
+  o.fg = f.fg;
+  o.fry = f.on;
+  return kop(goods + f.cost + (o.ship || 0));
 }
 
 /* Ціну рахує сервер, а не панель: усе, що приходить від браузера, — це
@@ -2158,7 +2163,14 @@ async function applyLine(o, act, raw, by) {
   if (!canEdit(o, 'fact')) return { err: lockedText('fact') };
   o.lines = o.lines || [];
   const before = o.total;
-  let what;
+  /* Смаження рахуємо до й після правки: додали мʼясо — виросла ще й
+     вартість мангала, прибрали останнє — вона зникла зовсім. */
+  const fryBefore = fryOf(o.lines).cost;
+  /* Знімок складу: якщо далі не зійдеться сума, треба повернути все як
+     було. Інакше рядки вже змінені в памʼяті, а зберегтись не встигли —
+     і замовлення лишається наполовину зміненим. */
+  const wasLines = o.lines.slice();
+  let what, goodsDelta = 0;
 
   if (act === 'del') {
     const i = Number(raw.i);
@@ -2167,6 +2179,7 @@ async function applyLine(o, act, raw, by) {
        скасування: хай іде через кнопку скасування з причиною. */
     if (o.lines.length < 2) return { err: 'Це остання позиція. Якщо замовлення не потрібне — скасуйте його.' };
     const [gone] = o.lines.splice(i, 1);
+    goodsDelta = -gone.sum;
     what = 'прибрали ' + lineTitle(gone) + ' · ' + qtyText(gone);
   } else {
     if (o.lines.length >= 40) return { err: 'У замовленні вже забагато позицій' };
@@ -2191,12 +2204,25 @@ async function applyLine(o, act, raw, by) {
       ...(v ? { v } : {})
     };
     o.lines.push(line);
+    goodsDelta = line.sum;
     what = 'додали ' + lineTitle(line) + ' · ' + qtyText(line) + (line.fry ? ' · на мангал' : '');
   }
 
-  o.total = retotal(o);
+  /* Додаємо різницю до поточної суми, а не рахуємо все наново. Інакше
+     затирається те, що оператор уже поправив руками: зважив на касі,
+     виставив «🧾 Фактична сума» 406.90 замість 366.90 — і після
+     додавання позиції ті сорок гривень зникали (знайдено на прогоні
+     28.09). Склад і вага на мангал при цьому беруться з рядків. */
+  const f = fryOf(o.lines);
+  o.fg = f.fg;
+  o.fry = f.on;
+  o.total = kop(before + goodsDelta + (f.cost - fryBefore));
   if (o.total <= 0 || o.total > MAX_TOTAL) {          // не буває, але хай буде
-    return { err: `Сума вийшла б ${money(o.total)} — так не можна.` };
+    const bad = o.total;
+    o.lines = wasLines;
+    const back = fryOf(o.lines);
+    o.fg = back.fg; o.fry = back.on; o.total = before;
+    return { err: `Сума вийшла б ${money(bad)} — так не можна.` };
   }
   if (o.totalOrig == null) o.totalOrig = before;
 

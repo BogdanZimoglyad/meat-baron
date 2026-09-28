@@ -11,6 +11,7 @@ const CAT = require(path.join(__dirname, '..', 'catalog.js'));
 const cut = re => { const m = src.match(re); if (!m) { console.error('не знайшли: ' + re); process.exit(1) } return m[0] };
 const code = [
   cut(/function qtyText\(l\) \{[\s\S]*?\n\}/),
+  cut(/function fryOf\(lines\) \{[\s\S]*?\n\}/),
   cut(/function retotal\(o\) \{[\s\S]*?\n\}/),
   cut(/async function applyLine\(o, act, raw, by\) \{[\s\S]*?\n\}/)
 ].join('\n');
@@ -135,6 +136,24 @@ const round = n => Math.round(n * 100) / 100;
   const real = CAT.lineSum({ unit: item('Сулугуні').unit, price: item('Сулугуні').price, g: 500,
     grp: item('Сулугуні').grp, name: 'Сулугуні' });
   ok('ціну з браузера ігноруємо — рахуємо з прайсу', round(o.lines[1].sum) === round(real));
+
+  /* Оператор зважив на касі й виправив суму, а потім клієнт попросив
+     ще позицію. Поправка з каси має лишитись: спершу тут рахувалось
+     усе наново з рядків, і сорок гривень зникали (знайдено 28.09). */
+  o = order();
+  const fact = CAT.kop(o.total + 40);
+  o.total = fact;
+  o.adjust = [{ kind: 'fact', amount: fact, from: o.totalOrig, note: 'зважили' }];
+  await api.applyLine(o, 'add', { id: id('Сулугуні'), g: 500 }, 'п');
+  ok('поправка з каси не зникає після додавання позиції',
+    round(o.total) === round(fact + o.lines[1].sum));
+
+  o = order({ lines: [line('Ошийок', 1000), line('Сулугуні', 500)] });
+  const fact2 = CAT.kop(o.total + 40);
+  o.total = fact2;
+  const dropped = o.lines[1].sum;
+  await api.applyLine(o, 'del', { i: 1 }, 'п');
+  ok('і після прибирання теж', round(o.total) === round(fact2 - dropped));
 
   // ---------- доставка не губиться ----------
   o = order({ ship: 150 });
