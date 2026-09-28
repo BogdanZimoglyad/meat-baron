@@ -2612,6 +2612,11 @@ let fryWanted=false;
 const openFrom=()=>fryWanted?GRILL_FROM:SHOP_OPEN;
 /* Чи вже пізно замовляти на сьогодні — і на мангал, і на сире */
 const closedForToday=()=>{ const n=new Date(); return n.getHours()*60+n.getMinutes()>lastOrderMin(n) };
+/* Точка зачинена зовсім: до відкриття або після закриття. Не те саме,
+   що closedForToday — там межа прийому замовлень на сьогодні, а тут
+   питання, чи є зараз кому відповісти. */
+const closedNow=()=>{ const n=new Date(); const h=n.getHours()+n.getMinutes()/60;
+  return h<SHOP_OPEN||h>=closeHour(n) };
 
 /* ---------- завантаження мангала ----------
    Мангал тягне близько 15 кг за годину, але частину годин зʼїдають ті,
@@ -3228,6 +3233,15 @@ function openStatus(startStatus){
     ${off?`<div class="ready-note off">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
       <span><b>Точка скасувала замовлення</b><span>${esc(cancelNote()||'причину уточнить оператор')}</span></span>
+    </div>`:''}
+    ${/* Замовили ввечері, коли точка вже зачинена: людина сидить і не
+         розуміє, чому тихо. Кажемо прямо, що чекати відповіді зранку, і
+         називаємо години — інакше вона передзвонює на точку, де ніхто
+         не бере (власник, 28.09). */''}
+    ${status==='new'&&closedNow()?`<div class="ready-note off">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <span><b>Зараз точка зачинена</b><span>Оператор підтвердить замовлення зранку й подзвонить, якщо будуть питання.
+      Замовлення приймаємо з ${SHOP_OPEN}:00 до ${Math.floor(lastOrderMin(new Date()) / 60)}:00.</span></span>
     </div>`:''}
     ${status==='ready'?`<div class="ready-note">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5.5 5.5L20 7"/></svg>
