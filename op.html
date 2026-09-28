@@ -60,6 +60,10 @@ button{font:inherit;cursor:pointer;border:none}
   border-radius:999px;padding:1px 9px;font-size:12px}
 .sect.done h2{cursor:pointer;user-select:none}
 .sect.done .card{opacity:.72}
+/* На інші дні — приглушено: сьогодні з ними робити нічого */
+.sect.later h2{color:var(--warn)}
+.sect.later h2 i{border-color:rgba(216,161,58,.4)}
+.sect.later .card{opacity:.82}
 .card{background:var(--coal);border:1px solid var(--line);border-radius:14px;padding:14px;
   display:flex;flex-direction:column;gap:10px}
 .card.new{border-color:rgba(224,74,60,.6);box-shadow:0 0 0 1px rgba(224,74,60,.25)}
@@ -245,8 +249,15 @@ let view='orders', SHOP=null, stockQ='', DATA=null;
    займають постійно. Розгортаються натисканням на заголовок. */
 let showDone=false;
 
+/* Замовлення на інший день лежить прийнятим до самого дня видачі — так і
+   задумано, готувати наперед не можна. Але в «У роботі» воно заважало:
+   висіло серед сьогоднішніх по два дні, і оператор щоразу відсіював його
+   очима (власник, 28.09 — замовлення на середу). Тепер їм окрема купка.
+   Нові туди не потрапляють: їх треба прийняти одразу, хай там яка дата. */
 const groupOf=o=> o.status==='new' ? 0
-                : (o.status==='done'||o.status==='canceled') ? 2 : 1;
+                : (o.status==='done'||o.status==='canceled') ? 3
+                : o.day ? 2
+                : 1;
 
 /* Підсумок дня: скільки вже прийняли, на яку суму, скільки мʼяса на
    мангал. Рахує сервер — той самий підсумок, що йде в чат після
@@ -312,13 +323,14 @@ function draw(d){
      і набране зникло. Тож знімаємо значення до перемальовки й повертаємо
      після неї. */
   const typed=form?{v:val('fv'),n:val('fn')}:null;
-  const g=[[],[],[]];
+  const g=[[],[],[],[]];
   d.orders.forEach(o=>g[groupOf(o)].push(o));
   w.innerHTML=dayStrip(d.day)
     +(d.orders.length?'':'<p class="empty">Замовлень зараз немає.</p>')
     +sect('Нові — прийняти в роботу','hot',g[0],now)
     +sect('У роботі','',g[1],now)
-    +doneSect(g[2],now);
+    +sect('На інші дні','later',g[2],now)
+    +doneSect(g[3],now);
   if(typed){ put('fv',typed.v); put('fn',typed.n) }
   const dh=w.querySelector('[data-done]');
   if(dh) dh.onclick=()=>{ showDone=!showDone; draw(d) };

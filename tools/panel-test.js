@@ -108,10 +108,15 @@ t.push(['а готувати на завтра — ні, і сказано ко�
 // 8. купки: нове окремо, робота окремо, зроблене окремо
 const groupOf = pick('groupOf');
 t.push(['нове — у першу купку', groupOf({ status: 'new' }) === 0]);
-t.push(['усе, що в роботі, — у другу',
+t.push(['усе, що в роботі сьогодні, — у другу',
   ['accepted', 'cooking', 'ready', 'onway'].every(s => groupOf({ status: s }) === 1)]);
-t.push(['видане й скасоване — у третю',
-  groupOf({ status: 'done' }) === 2 && groupOf({ status: 'canceled' }) === 2]);
+t.push(['прийняте на інший день — в окрему купку',
+  ['accepted', 'cooking', 'ready'].every(s => groupOf({ status: s, day: 'завтра' }) === 2)]);
+t.push(['а нове на інший день усе одно в «Нових» — його треба прийняти',
+  groupOf({ status: 'new', day: 'завтра' }) === 0]);
+t.push(['видане й скасоване — в останню',
+  groupOf({ status: 'done' }) === 3 && groupOf({ status: 'canceled' }) === 3
+  && groupOf({ status: 'done', day: 'завтра' }) === 3]);
 
 // 9. підсумок дня
 const dayStrip = pick('dayStrip');
