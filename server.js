@@ -1231,7 +1231,7 @@ bot.onText(/^\/sms(?:@\w+)?(?:\s+(\S+))?/, async (msg, m) => {
   if (to.length !== 12) {
     return bot.sendMessage(msg.chat.id, 'Напишіть номер у форматі 380XXXXXXXXX: /sms 380661234567');
   }
-  const ok = await smsSend('+' + to, 'Перевірка звʼязку. Мясний Барон.', 'перевірка');
+  const ok = await smsSend('+' + to, 'Перевірка звʼязку. Мʼясний Барон.', 'перевірка');
   bot.sendMessage(msg.chat.id, ok
     ? '✅ SMS відправлено. Якщо не дійде за пару хвилин — питання до TurboSMS.'
     : '⚠️ Не вдалося. Дивіться логи Railway: там код помилки від TurboSMS.');
@@ -2733,7 +2733,7 @@ function notifyCancel(o, why) {
     pushTo(o.telKey, '✖️ Замовлення скасовано', `№ ${o.no} — ${why}`, SITE + '?order=' + o.no);
     const short = String(why || '').slice(0, 40);
     return smsSend(o.tel,
-      `Замовлення №${o.no} скасовано. ${short}` + (tel ? ` Тел: ${tel}` : ''),
+      `${SMS_BRAND}: №${o.no} скасовано. ${short}` + (tel ? ` Тел: ${tel}` : ''),
       '№' + o.no + ' скасовано');
   }
   bot.sendMessage(u.tgId, text, {
@@ -2784,7 +2784,7 @@ function notifyAdjust(o, a) {
 /* ---------- сповіщення клієнту ----------
    Хто увійшов на сайті — той уже писав нашому боту, і ми знаємо його
    чат. Тоді пишемо туди: це безкоштовно, доходить одразу і не губиться
-   серед реклами, як SMS. Решті лишається SMS, поки що лише в лозі.    */
+   серед реклами, як SMS. Решті — push у браузер і SMS про готове. */
 const SITE = (process.env.SITE_URL || 'https://meat-baron.kh.ua/').replace(/\/+$/, '/');
 
 const NOTE = {
@@ -2846,7 +2846,7 @@ function notify(o, st) {
 
 /* ---------- push у браузер ----------
    Для тих, хто не входив через Telegram: у них зараз немає жодних
-   сповіщень — SMS ще не підключені, а бота вони не відкривали. Працює
+   сповіщень, крім SMS про готове й скасування. Працює
    на Android у браузері, а на айфоні — коли сайт додано на екран
    (з iOS 16.4), тобто саме для тих, кому ми показуємо підказку.
 
@@ -2925,12 +2925,18 @@ async function pushTo(telKey, title, body, url) {
 }
 
 /* ---------- SMS ----------
-   Для тих, хто не входив через Telegram. Підключення до TurboSMS
-   робиться тут; поки лише лог — щоб було видно, коли має піти SMS.   */
+   Для тих, хто не входив через Telegram: лише «готове» й скасування.
+   TurboSMS запрацював 30.09 (імʼя відправника пройшло модерацію). Без
+   ключів у змінних — лише лог, щоб було видно, коли SMS мала б піти. */
 const TURBOSMS_TOKEN = process.env.TURBOSMS_TOKEN || '';
 const TURBOSMS_SENDER = process.env.TURBOSMS_SENDER || '';
 const SMS_ON = !!(TURBOSMS_TOKEN && TURBOSMS_SENDER);
 const SMS_URL = 'https://api.turbosms.ua/message/send.json';
+/* Назву пишемо в самому тексті: поки оператори не зареєстрували імʼя
+   MeatBaron, SMS приходять від загального «Best-Shop», і без назви
+   людина не зрозуміла б, від кого це (перевірено 30.09). І потім не
+   завадить — латинське MeatBaron не всі впізнають. */
+const SMS_BRAND = 'Мʼясний Барон';
 
 /* Одна SMS кирилицею — це 70 символів, далі йде друга й друга ціна.
    Тому тексти короткі, і кожен рядок нижче міряний. */
@@ -2974,9 +2980,10 @@ async function smsSend(tel, text, why) {
 
 function sendSms(o, st) {
   if (st !== 'ready') return;              // SMS-ками про кожен крок не сиплемо
+  /* До 70 знаків — одна SMS: «…№1040 готове. Чекаємо: вул. Шевченка 142а» — 56 */
   const text = o.mode === 'pickup'
-    ? `Замовлення №${o.no} готове. Чекаємо: ${o.shopName}`
-    : `Замовлення №${o.no} готове, курєр виїжджає.`;
+    ? `${SMS_BRAND}: №${o.no} готове. Чекаємо: ${o.shopName}`
+    : `${SMS_BRAND}: замовлення №${o.no} готове, курʼєр виїжджає.`;
   smsSend(o.tel, text, '№' + o.no + ' готове');
 }
 

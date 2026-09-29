@@ -3236,13 +3236,10 @@ function openStatus(startStatus){
       ['Готується', reached>=1? (reached===1? (o.fry?'мʼясо на мангалі':'збираємо замовлення') : '')
         : laterDay? 'почнемо у день видачі' : startText()],
       /* третій елемент — значок у кружечку замість галочки */
-      /* Без входу нічого не надсилаємо: SMS ще не підключені (TurboSMS
-         чекає альфа-імені), і обіцяти їх — брехати людині, яка сидітиме
-         й чекатиме. Кажемо правду, а поруч пропонуємо Telegram.
-         Коли SMS запрацюють — повернути сюди «надішлемо SMS». */
+      /* Без входу про готове шлемо SMS — TurboSMS запрацював 30.09. Хто
+         ввімкнув сповіщення, отримає ще й їх, тож і пишемо про телефон. */
       ['Готове', reached>=2 ? '' : me ? 'напишемо в Telegram'
-        : (canPush()&&Notification.permission==='granted' ? 'сповістимо на телефон'
-                                                         : 'стежте за статусом на цій сторінці'),'🔥'],[o.mode==='pickup'?'Видано':'Передано курʼєру','','🤝']];
+        : (canPush()&&Notification.permission==='granted' ? 'сповістимо на телефон' : 'надішлемо SMS'),'🔥'],[o.mode==='pickup'?'Видано':'Передано курʼєру','','🤝']];
     sIn.innerHTML=`<div class="grab-zone"><div class="grab"></div></div>
     <div class="done-ic${off?' off':''}"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round">
       <path d="${off?'M6 6l12 12M18 6L6 18':'M4 12.5l5.5 5.5L20 7'}"/></svg></div>
@@ -3273,21 +3270,21 @@ function openStatus(startStatus){
         <div class="st-b"><div class="t">${s[0]}${i===cur?'<span class="st-now">зараз</span>':''}</div>${s[1]?`<div class="s">${s[1]}</div>`:''}</div>
       </div>`).join('')}</div>`}
 
-    ${/* Хто замовляв без входу, статусів не отримує: SMS поки не
-         підключені, і людина сидить і не знає, коли забирати.
-         Найкоротший шлях — сповіщення просто в телефон: один дотик, без
+    ${/* Хто замовляв без входу, отримає SMS лише про готове й
+         скасування — вони платні. Про решту кроків (прийняли, зважили,
+         переніс час) — сповіщення просто в телефон: один дотик, без
          Telegram і без номера. Де вони неможливі (айфон, не доданий на
          екран) — пропонуємо Telegram, як і раніше. */''}
     ${!me&&!off&&canPush()&&Notification.permission!=='granted'?`<div class="ready-note tg">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
-      <span><b>Сповістимо, коли буде готове</b>
-      <span>Повідомлення прийде на цей телефон — Telegram не потрібен.</span>
+      <span><b>Стежте за кожним кроком</b>
+      <span>Про готовність надішлемо SMS. Увімкніть сповіщення — і дізнаєтесь ще й коли замовлення візьмуть у роботу чи зміниться сума. Telegram не потрібен.</span>
       <button class="lnk" id="stPush" type="button">Увімкнути сповіщення</button></span>
     </div>`
     : !me&&!off?`<div class="ready-note tg">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 3.5L2.5 10.8l6 2.2 2.2 6 3.1-4.7 5.1 3.9z"/></svg>
       <span><b>Підключіть Telegram — і статус прийде одразу</b>
-      <span>Напишемо, коли точка візьме замовлення в роботу і коли воно буде готове.</span>
+      <span>Про готовність надішлемо SMS. У Telegram напишемо ще й коли точка візьме замовлення в роботу чи зміниться сума.</span>
       <button class="lnk" id="stTg" type="button">Увійти через Telegram</button></span>
     </div>`:''}
 
