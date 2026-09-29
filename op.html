@@ -65,7 +65,7 @@ button{font:inherit;cursor:pointer;border:none}
 @keyframes sideHot{50%{box-shadow:0 0 0 3px rgba(224,74,60,.3)}}
 .side button.dlv:not(.on){color:var(--warn)}
 /* Календарик праворуч — на широкому моніторі точки там було порожньо
-   (власник, 30.09). На вужчому екрані він не влазить: там є вкладка. */
+   (власник, 29.09). На вужчому екрані він не влазить: там є вкладка. */
 .rside{display:none}
 @media (min-width:1400px){
   .board{grid-template-columns:210px minmax(0,1fr) 380px}
@@ -146,7 +146,7 @@ button{font:inherit;cursor:pointer;border:none}
   border:1px solid var(--line-2);color:var(--bone);display:grid;place-items:center;
   text-decoration:none;padding:0 14px;font-size:15px}
 /* Нове замовлення — кнопка дзвінка горить вогнем: спершу подзвонити
-   клієнту й підтвердити (власник, 30.09). Прийняли — гасне. */
+   клієнту й підтвердити (власник, 29.09). Прийняли — гасне. */
 .act .tel.fire{position:relative;overflow:hidden;border-color:#ffb13b;color:#fff;font-size:20px;
   background:linear-gradient(0deg,#8f1d12 0%,#e04a3c 35%,#ff8a1e 65%,#ffd54a 100%);background-size:100% 220%;
   animation:telFire 1.1s ease-in-out infinite alternate,telGlow .9s ease-in-out infinite alternate}
@@ -379,7 +379,7 @@ function dayStrip(d){
   if(!d||!d.all) return '<div class="day"><span>Сьогодні замовлень із сайту ще не було</span></div>';
   /* Рахує за днем оформлення — так само, як підсумок у чаті. Календар
      праворуч рахує за днем видачі, тож числа можуть не збігатись:
-     підписуємо, щоб не плутали (власник, 30.09). */
+     підписуємо, щоб не плутали (власник, 29.09). */
   return `<div class="day">
     <span class="mut">Оформили сьогодні:</span>
     <span><b>${d.all-d.canceled}</b> замовлень</span>
