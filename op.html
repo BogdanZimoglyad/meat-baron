@@ -143,6 +143,8 @@ button{font:inherit;cursor:pointer;border:none}
   border:1px solid var(--line-2);color:var(--bone);font-size:14px;padding:0 12px}
 .srow .danger{color:var(--ember-hot);border-color:rgba(224,74,60,.4)}
 .srow .back{color:var(--ok);border-color:rgba(123,168,79,.45)}
+.srow .gone{font-style:normal;font-size:12px;color:var(--ember-hot);
+  border:1px solid rgba(224,74,60,.4);border-radius:999px;padding:1px 8px;margin-left:6px}
 .hint2{color:var(--smoke);font-size:14px;padding:4px 2px}
 .state{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:15px}
 .state.shut{border-color:rgba(224,74,60,.5);color:var(--ember-hot)}
@@ -503,9 +505,15 @@ function searchForm(){
     <label>Що додати</label>
     <input type="text" id="fv" autocomplete="off" placeholder="Назва: ошийок, сулугуні, лаваш…" autofocus>
     ${q.length<2?'<div class="hint">Наберіть хоча б дві літери.</div>'
-      : hits.length?hits.map(i=>`<div class="srow">
-            <span>${esc(i.grp)} · ${esc(itemName(i))}</span>
-            <button data-pick="${esc(i.id)}">Обрати</button></div>`).join('')
+      : hits.length?hits.map(i=>{
+          /* Позначаємо те, що оператор сам зранку відправив у стоп-лист:
+             інакше легко пообіцяти клієнтові те, чого сьогодні немає.
+             Додати все одно можна — може, привезли чи знайшли. */
+          const off=SHOP&&(SHOP.stop||[]).includes(i.id);
+          return `<div class="srow">
+            <span>${esc(i.grp)} · ${esc(itemName(i))}${off?' <em class="gone">сьогодні немає</em>':''}</span>
+            <button data-pick="${esc(i.id)}">Обрати</button></div>`;
+        }).join('')
       : '<div class="hint">Нічого схожого не знайшли.</div>'}
     <div class="row"><button class="no" data-close="1">Назад</button></div>
   </div>`;
@@ -829,6 +837,10 @@ async function load(){
   document.addEventListener('pointerdown',audioOn);   // будь-який дотик заводить звук
   audioOn();                                          // а раптом браузер і так дозволяє
   await load();
+  /* Стан точки потрібен уже на екрані замовлень — щоб у пошуку позицій
+     було видно, чого сьогодні немає. Раніше він приїжджав лише при
+     переході на вкладку стоп-листа. */
+  loadShop();
   setInterval(load,10000);
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) load() });
   /* Esc закриває форму й повертає оновлення — на планшеті є клавіатура */
