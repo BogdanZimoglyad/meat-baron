@@ -588,17 +588,26 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .st{display:flex;gap:12px}
 .st-l{display:flex;flex-direction:column;align-items:center;flex:0 0 auto}
 .st-d{width:19px;height:19px;border-radius:50%;border:2px solid var(--line-2);display:grid;place-items:center;font-size:10px}
-.st.on .st-d{background:var(--ember);border-color:var(--ember);color:#fff}
-.st.done .st-d{background:var(--ok);border-color:var(--ok);color:#fff}
+/* Пройдене — зелене з галочкою. Той крок, де замовлення зараз, — теж
+   зелений, але пульсує й підписаний «зараз». Те, що попереду, — сіре.
+   Раніше наступний крок горів червоним, і люди читали його як «уже
+   почалось»: точка лише прийняла, а на екрані «Готується» (власник, 29.09). */
+.st.done .st-d,.st.cur .st-d{background:var(--ok);border-color:var(--ok);color:#fff}
+.st.cur .st-d{animation:stPulse 1.8s ease-out infinite}
+/* Точка ще не підтвердила — кільце без заливки, але теж «живе» */
+.st.wait .st-d{border-color:var(--bone);animation:stPulse 1.8s ease-out infinite}
+@keyframes stPulse{0%{box-shadow:0 0 0 0 rgba(123,168,79,.55)}70%{box-shadow:0 0 0 9px rgba(123,168,79,0)}100%{box-shadow:0 0 0 0 rgba(123,168,79,0)}}
+.st-now{display:inline-block;margin-left:7px;padding:1px 7px;border-radius:999px;background:rgba(123,168,79,.18);
+  color:var(--ok);font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;vertical-align:2px}
 /* кроки зі значком: «Готове» 🔥, «Видано» 🤝; ще не настали — приглушені */
 .st-d.ic{font-size:11px;line-height:1}
-.st:not(.on):not(.done) .st-d.ic{opacity:.45}
+.st:not(.cur):not(.done) .st-d.ic{opacity:.45}
 .st-bar{width:2px;flex:1;min-height:24px;background:var(--line)}
 .st.done .st-bar{background:var(--ok)}
 .st-b{padding-bottom:14px}
 .st-b .t{font-size:14px;font-weight:500}
 .st .st-b .t{color:var(--smoke)}
-.st.on .st-b .t,.st.done .st-b .t{color:var(--bone)}
+.st.cur .st-b .t,.st.wait .st-b .t,.st.done .st-b .t{color:var(--bone)}
 .st-b .s{font-size:11.5px;color:var(--smoke)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
 /* спосіб отримання */
@@ -3204,22 +3213,34 @@ function openStatus(startStatus){
                                :['accepted','cooking','ready','done'];
   const cancelNote=()=>((o.adjust||[]).filter(a=>a.kind==='cancel').pop()||{}).note||'';
   const draw=(status)=>{
-    /* Зелений — крок уже пройдено, червоний — той, що попереду. Раніше
-       «Прийнято» лишалось червоним і після того, як оператор натиснув
-       «Прийняти в роботу», і здавалось, що замовлення ще не взяли. */
+    /* Зелений — крок пройдено, пульс і «зараз» — на ньому замовлення
+       зараз, сіре — попереду. Червоного «наступного» кроку більше немає:
+       його читали як уже розпочатий (власник, 29.09). */
     const off=status==='canceled';              // скасоване — без кроків і без галочки
     const laterDay=!!o.slotAt&&new Date(o.slotAt).toDateString()!==new Date().toDateString()&&o.slotAt>Date.now();
     const reached=status==='done'? STK.length-1 : STK.indexOf(status);   // -1 — точка ще не підтвердила
+    /* Крок, на якому замовлення зараз. Видане — ніде: усе пройдено. */
+    const cur=status==='done'? -1 : reached;
+    /* Коли почнуть готувати: за годину до видачі, доставку — за півтори,
+       як і дозволяє точці сервер */
+    const startText=()=>{
+      if(!o.slotAt) return 'почнемо найближчим часом';
+      const at=o.slotAt-(o.mode==='delivery'?90:60)*60000;
+      if(at<=Date.now()) return 'ось-ось почнемо';
+      const d=new Date(at);
+      return 'почнемо близько '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+    };
     const steps=[['Прийнято',status==='new'?'чекаємо підтвердження точки':'оператор підтвердив'],
       /* Замовлення на інший день сьогодні ніхто не готує — не обіцяємо
          цього й на сайті: інакше воно всю ніч «готується». */
-      ['Готується', laterDay? 'почнемо у день видачі' : (o.fry?'мʼясо на мангалі':'збираємо замовлення')],
+      ['Готується', reached>=1? (reached===1? (o.fry?'мʼясо на мангалі':'збираємо замовлення') : '')
+        : laterDay? 'почнемо у день видачі' : startText()],
       /* третій елемент — значок у кружечку замість галочки */
       /* Без входу нічого не надсилаємо: SMS ще не підключені (TurboSMS
          чекає альфа-імені), і обіцяти їх — брехати людині, яка сидітиме
          й чекатиме. Кажемо правду, а поруч пропонуємо Telegram.
          Коли SMS запрацюють — повернути сюди «надішлемо SMS». */
-      ['Готове', me ? 'напишемо в Telegram'
+      ['Готове', reached>=2 ? '' : me ? 'напишемо в Telegram'
         : (canPush()&&Notification.permission==='granted' ? 'сповістимо на телефон'
                                                          : 'стежте за статусом на цій сторінці'),'🔥'],[o.mode==='pickup'?'Видано':'Передано курʼєру','','🤝']];
     sIn.innerHTML=`<div class="grab-zone"><div class="grab"></div></div>
@@ -3247,9 +3268,9 @@ function openStatus(startStatus){
       <span><b>Замовлення готове</b><span>${o.mode==='pickup'?'Чекаємо на вас за адресою '+o.shop:'Курʼєр уже виїжджає'}</span></span>
     </div>`:''}
     ${off?'':`<div class="box steps">${steps.map((s,i)=>`
-      <div class="st ${i<=reached?'done':i===reached+1?'on':''}">
+      <div class="st ${i===cur?'cur':i<=reached?'done':cur<0&&reached<0&&i===0?'wait':''}">
         <div class="st-l"><div class="st-d${s[2]?' ic':''}">${s[2]||(i<=reached?'✓':'')}</div>${i<3?'<div class="st-bar"></div>':''}</div>
-        <div class="st-b"><div class="t">${s[0]}</div>${s[1]?`<div class="s">${s[1]}</div>`:''}</div>
+        <div class="st-b"><div class="t">${s[0]}${i===cur?'<span class="st-now">зараз</span>':''}</div>${s[1]?`<div class="s">${s[1]}</div>`:''}</div>
       </div>`).join('')}</div>`}
 
     ${/* Хто замовляв без входу, статусів не отримує: SMS поки не
