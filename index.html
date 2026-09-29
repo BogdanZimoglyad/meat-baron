@@ -2653,6 +2653,16 @@ function slotFree(ms){
 }
 
 /* Найраніший можливий час — точний, разом із хвилинами. */
+/* Найраніший час того дня, коли день тільки починається: відкриття (на
+   мангал — 10:00), а доставка — на ті самі 40 хв пізніше, що й удень:
+   спершу приготувати, потім довезти. Раніше вранішня доставка
+   отримувала час відкриття, і о 21:00 сайт обіцяв «завтра привеземо
+   з 10:00» — коли мангал лише розпалюють (знайдено 29.09). */
+function dayStart(d,mode){
+  const t=new Date(d); t.setHours(openFrom(),0,0,0);
+  if(mode==='delivery') t.setMinutes(LEAD_DELIVERY-LEAD_PICKUP);
+  return t;
+}
 function earliestExact(mode){
   const n=new Date(); const nowMin=n.getHours()*60+n.getMinutes();
   let lead=mode==='delivery'?LEAD_DELIVERY:LEAD_PICKUP;
@@ -2660,19 +2670,13 @@ function earliestExact(mode){
   if(mode!=='delivery' && nowMin+lead>closeMin && nowMin+LEAD_PICKUP_LATE<=closeMin) lead=LEAD_PICKUP_LATE;
   const t=new Date(Date.now()+lead*60000);
   t.setSeconds(0,0);
-  const from=openFrom();
+  const next=()=>{ const x=new Date(t); x.setDate(x.getDate()+1); return dayStart(x,mode) };
   // ще не відчинено — чекаємо на відкриття
-  if(t.getHours()<from) t.setHours(from,0,0,0);
+  if(t<dayStart(t,mode)) return dayStart(t,mode);
   // на сьогодні вже не приймаємо — найближче завтра
-  if(closedForToday()&&dayKey(t)===dayKey(new Date())){
-    t.setDate(t.getDate()+1);
-    t.setHours(from,0,0,0);
-  }
+  if(closedForToday()&&dayKey(t)===dayKey(new Date())) return next();
   // після останньої видачі — переносимо на завтра
-  if(t.getHours()*60+t.getMinutes()>closeHour(t)*60){
-    t.setDate(t.getDate()+1);
-    t.setHours(from,0,0,0);
-  }
+  if(t.getHours()*60+t.getMinutes()>closeHour(t)*60) return next();
   return t;
 }
 /* Те саме, округлене вниз до години: слот — це година на видачу,
@@ -2722,10 +2726,10 @@ function slotsFor(d,mode){
   if(closedForToday()&&dayKey(d)===dayKey(new Date())) return out;   // на сьогодні вже пізно
   const sameDay=dayKey(d)===dayKey(e);
   let h=Math.max(openFrom(), sameDay? e.getHours():openFrom());
-  const close=closeHour(d);
+  const close=closeHour(d), st=dayStart(d,mode);
   for(; h<close; h+=SLOT_STEP/60){
     const from=new Date(d); from.setHours(Math.floor(h),Math.round((h%1)*60),0,0);
-    if(from<e) continue;
+    if(from<e||from<st) continue;               // доставка вранці — не раніше, ніж приготують і довезуть
     const ms=from.getTime();
     /* Мангал рахується погодинно, тож вільність питаємо в тієї години,
        у яку слот потрапляє. */
