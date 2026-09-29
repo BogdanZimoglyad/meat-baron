@@ -1366,18 +1366,20 @@ const SYN={
  'кур':'курка куряча','цыплен':'курка','говя':'яловичина',
  'индейк':'індик індича','индюш':'індича','индюк':'індик',
  'утк':'качка','утин':'качка',
- 'шея':'ошийок ошийка','шеи':'ошийок ошийка','ошеек':'ошийок ошийка','ошейк':'ошийок ошийка','шейк':'ошийок ошийка',
+ 'шея':'ошийок ошийка','шеи':'ошийок ошийка','шия':'ошийок ошийка','шиї':'ошийок ошийка','ошеек':'ошийок ошийка','ошейк':'ошийок ошийка','шейк':'ошийок ошийка',
  'курин':'куряча','грудк':'філе','крылыш':'крило','картоф':'картопля',
  'чеснок':'часниковий','чесноч':'часниковий','сливочн':'вершково','брусник':'брусничний','горчиц':'гірчичний',
  'ребр':'реберця','ребер':'реберця',
- 'голен':'гомілка','ножк':'гомілка','окороч':'гомілка',
+ 'голен':'гомілка','ножк':'гомілка','окороч':'гомілка','бедр':'стегно','стегн':'стегно',
  'отбивн':'відбивної','корейк':'відбивної','кост':'кістці',
  'колбас':'ковбаски','сосиск':'ковбаски','сардел':'ковбаски',
  'венск':'віденська','охотнич':'мисливська',
  'лук':'цибулеві','кольц':'кільця','овощ':'овочі','шампинь':'печериці',
  'яблок':'яблуками','палочк':'палички','набор':'сет','четверт':'чверть',
  'миньон':'міньйон','деревенск':'по-селянськи','хлеб':'хліб','вырезк':'вирізка',
- 'сыро':'мариноване','барбекю':'bbq'
+ 'сыро':'мариноване','барбекю':'bbq',
+ /* додано 29.09 після прогону пошуку: так пишуть, а в каталозі інакше */
+ 'ягня':'баранина','ягнят':'баранина','ягнен':'баранина','ягнён':'баранина','кетчуп':'соуси'
 };
 const SYN_F=Object.keys(SYN).map(k=>[fold(k),tokens(fold(SYN[k]))]);
 
@@ -2050,12 +2052,16 @@ function openItem(id, editIdx){
   const editing=Number.isInteger(editIdx);
   if(variantsOf(it)&&!editing){openVariants(it); return}      // соуси: спершу який саме
   if(isCount(it)&&!editing){addToCart(it,1); return}
-  const MAXG=6000;
+  /* До 20 кг — стільки на позицію приймає сервер і панель. Було 6 кг, і
+     більше мовчки обрізалось до 6, хоча компанія бере й по 10 кг
+     (власник, 29.09). Повзунок лишається до 6 кг — інакше ним не
+     влучити в півкіло; більше — вводять числом. */
+  const MAXG=MAX_LINE_G, RGMAX=6000;
   const por=portionOf(it);                       // вага однієї штуки, якщо є
   let g=editing? Math.max(cart[editIdx].g,it.minG) : Math.max(1000,it.minG);
   /* Штучне на вагу (картопля з салом): поле й повзунок рахують штуками,
      інакше можна було ввести 1000 г і отримати «3 шт · ≈1 кг». */
-  const k=por||1, lo=por?Math.max(1,Math.ceil(it.minG/por)):it.minG, hiQ=Math.floor(MAXG/k);
+  const k=por||1, lo=por?Math.max(1,Math.ceil(it.minG/por)):it.minG, hiQ=Math.floor(MAXG/k), rgQ=Math.floor(RGMAX/k);
   if(editing&&por) g=Math.max(por,Math.round(g/por)*por);
   if(!editing&&it.minG>1000) g=it.minG;
   if(!editing&&por) g=Math.max(por,Math.round(1000/por)*por);   // найближче ціле число штук
@@ -2075,7 +2081,7 @@ function openItem(id, editIdx){
   <span class="lbl">${por?'Оберіть кількість':'Оберіть вагу'}</span>
   <div class="wgrid">${quick.map(v=>`<button class="w" data-g="${v}" aria-pressed="${v===g}">${wLabel(v)}${por?`<i>${v/por} шт</i>`:''}</button>`).join('')}</div>
   <div class="rowline">
-    <input type="range" id="rg" min="${lo*k}" max="${hiQ*k}" step="${por||50}" value="${g}" aria-label="${por?'Кількість':'Вага'}">
+    <input type="range" id="rg" min="${lo*k}" max="${rgQ*k}" step="${por||50}" value="${g}" aria-label="${por?'Кількість':'Вага'}">
     <span class="wbox"><input id="wv" type="number" inputmode="numeric" min="${lo}" max="${hiQ}" step="${por?1:10}" value="${g/k}" aria-label="${por?'Кількість, шт':'Вага у грамах'}"><i>${por?'шт':'г'}</i></span>
   </div>
   ${/* Дрібний текст — під кнопкою, а не над нею: кожен рядок над кнопкою
@@ -2086,13 +2092,13 @@ function openItem(id, editIdx){
       ? `<button class="cta" id="addBtn" disabled>Сьогодні немає</button>
          <p class="hint" style="text-align:center;margin:6px 0 0">Закінчилось на точці «${esc(SHOPS[shop][0])}». Завтра зранку знову буде.</p>`
       : `<button class="cta" id="addBtn">${editing?'Зберегти':'Додати в кошик'}</button>`}
-    <p class="hint">${por?`Продається штуками, ціна — за вагу: одна приблизно ${por} г. Точну суму порахуємо, коли зважимо.`:`Мінімальна вага — ${it.minG} г, можна ввести свою.`} ${canFry(it)?'Смаження на мангалі позначається в кошику.':''}</p>
+    <p class="hint">${por?`Продається штуками, ціна — за вагу: одна приблизно ${por} г. Точну суму порахуємо, коли зважимо.`:`Мінімальна вага — ${it.minG} г, до ${MAXG/1000} кг — можна ввести свою.`} ${canFry(it)?'Смаження на мангалі позначається в кошику.':''}</p>
   </div>`);
   bindItemActs(it,sIn);
   const rg=sIn.querySelector('#rg'),wv=sIn.querySelector('#wv'),tv=sIn.querySelector('#tv');
   const paint=(syncField)=>{
     tv.textContent=money(it.price*g/100);
-    rg.value=Math.min(g,MAXG);
+    rg.value=Math.min(g,rgQ*k);
     if(syncField!==false) wv.value=g/k;
     sIn.querySelectorAll('.w').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.g===g));
   };
@@ -2113,10 +2119,13 @@ function openItem(id, editIdx){
 }
 /* v — різновид, наприклад соус «Ткемалі». Різні соуси — різні рядки
    кошика, інакше оператор не знав би, скільки якого класти. */
+/* Скільки однієї позиції приймає сервер — більше він відхилить усе
+   замовлення. Додали те саме вдруге — складаємо, але не понад межу. */
+const MAX_LINE_G=20000;
 function addToCart(it,g,v){
   v=v||'';
   const ex=cart.find(l=>l.id===it.id&&(l.v||'')===v);
-  if(ex) ex.g+=g;
+  if(ex) ex.g=Math.min(isCount(it)?99:MAX_LINE_G, ex.g+g);
   /* Смаження за замовчуванням увімкнене — галочку можна зняти в кошику.
      Раніше його треба було вмикати, і люди пропускали: забирали сире. */
   else cart.push({id:it.id,name:it.name,grp:it.grp,price:priceOf(it,v),unit:it.unit,cat:it.cat,minG:it.minG,g,...(canFry(it)?{fry:true}:{}),...(v?{v}:{})});
@@ -2565,9 +2574,8 @@ function paintLines(){
     }
     else if(p){
       const l=cart[+p.dataset.p];
-      const hi=isCount(l)?99:6000;
-      /* Більше межі вже набрали (двічі додали по 5 кг) — «+» не має
-         зменшувати до 6 кг, просто не додає. */
+      const hi=isCount(l)?99:MAX_LINE_G;
+      /* Більше межі вже набрали — «+» не має зменшувати, просто не додає. */
       if(l.g<hi) l.g=Math.min(hi, l.g+stepOf(l));
     }
     else return;
@@ -3247,7 +3255,7 @@ function openStatus(startStatus){
     sIn.innerHTML=`<div class="grab-zone"><div class="grab"></div></div>
     <div class="done-ic${off?' off':''}"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round">
       <path d="${off?'M6 6l12 12M18 6L6 18':'M4 12.5l5.5 5.5L20 7'}"/></svg></div>
-    <h3 style="text-align:center;font-size:23px;text-transform:uppercase">${off?'Замовлення скасовано':'Замовлення прийнято'}</h3>
+    <h3 style="text-align:center;font-size:23px;text-transform:uppercase">${off?'Замовлення скасовано':'Замовлення оформлено'}</h3>
     <p style="text-align:center;color:var(--smoke);font-size:13px;margin:5px 0 4px">№ ${o.no} · ${o.shop}</p>
     <p class="o-when" style="text-align:center;color:var(--ember-hot);font-size:13.5px;margin:0 0 18px">${o.when||''}</p>
 
@@ -3261,7 +3269,7 @@ function openStatus(startStatus){
          не бере (власник, 28.09). */''}
     ${status==='new'&&closedNow()?`<div class="ready-note off">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-      <span><b>Зараз точка зачинена</b><span>Замовлення прийнято — оператор підтвердить його зранку, після ${OPERATOR_FROM}:00,
+      <span><b>Зараз точка зачинена</b><span>Замовлення отримали — оператор підтвердить його зранку, після ${OPERATOR_FROM}:00,
       і подзвонить, якщо будуть питання.</span></span>
     </div>`:''}
     ${status==='ready'?`<div class="ready-note">
