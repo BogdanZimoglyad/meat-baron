@@ -956,6 +956,55 @@ app.post('/api/op/order/:no/adjust', async (req, res) => {
   res.json({ ok: true, order: opOrder(o) });
 });
 
+/* ---------- календар у панелі ----------
+   Скільки замовлень на кожен день — наперед, щоб планувати закупівлю й
+   мангал, і назад, щоб знайти, що було (власник, 29.09). Екран замовлень
+   показує лише сьогоднішнє й живе; тут — будь-який день.
+   День замовлення — день видачі, а не оформлення: оператору важливо, на
+   коли готувати. У старих замовлень без часу — день оформлення. */
+const dayOfOrder = o => kyivDate(o.slotAt || o.createdAt || 0);
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+app.get('/api/op/calendar', (req, res) => {
+  if (tooOften('status', ipOf(req), RATE.status)) {
+    return res.status(429).json({ error: 'Забагато запитів. Зачекайте кілька хвилин.' });
+  }
+  const a = panelOf(req);
+  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  const from = String(req.query.from || ''), to = String(req.query.to || '');
+  if (!DAY_RE.test(from) || !DAY_RE.test(to) || from > to) return res.status(400).json({ error: 'Невірні дати' });
+  const days = {};
+  for (const no in db.orders) {
+    const o = db.orders[no];
+    if (o.shop !== a.shop) continue;
+    const d = dayOfOrder(o);
+    if (d < from || d > to) continue;
+    const x = days[d] || (days[d] = { n: 0, fg: 0, sum: 0, off: 0 });
+    /* Скасовані рахуємо окремо: у плані на день їх немає, але оператор
+       має бачити, що вони були */
+    if (o.status === CANCELED) { x.off++; continue }
+    x.n++;
+    x.fg += o.fry ? (o.fg || 0) : 0;
+    x.sum = kop(x.sum + (o.total || 0));
+  }
+  res.json({ ok: true, today: kyivDate(), days });
+});
+
+app.get('/api/op/day', (req, res) => {
+  if (tooOften('status', ipOf(req), RATE.status)) {
+    return res.status(429).json({ error: 'Забагато запитів. Зачекайте кілька хвилин.' });
+  }
+  const a = panelOf(req);
+  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  const d = String(req.query.d || '');
+  if (!DAY_RE.test(d)) return res.status(400).json({ error: 'Невірна дата' });
+  const list = Object.values(db.orders)
+    .filter(o => o.shop === a.shop && dayOfOrder(o) === d)
+    .sort((x, y) => (x.slotAt || x.createdAt || 0) - (y.slotAt || y.createdAt || 0))
+    .map(opOrder);
+  res.json({ ok: true, day: d, label: dayLabelK(d), orders: list });
+});
+
 /* ---------- стоп-лист і мангал у панелі ----------
    У боті це /stop і /mangal. На планшеті оператору зручніше екраном:
    пошук по прайсу під палець і завантаження годин одразу видно.
@@ -2287,7 +2336,9 @@ async function applyLine(o, act, raw, by) {
    знає, коли встигне. З тієї ж причини забиту годину мангала не
    забороняємо, а лише попереджаємо: оператор підтверджує вдруге. */
 const TIME_STATUSES = new Set(['new', 'accepted']);
-const TIME_DAYS = 7;
+/* Оператор переносить на два тижні вперед — далі, ніж сайт дозволяє
+   замовити (тиждень): «давайте на наступні вихідні» (власник, 29.09) */
+const TIME_DAYS = 14;
 const TIME_STEP_MIN = 30;
 const GRILL_FROM_H = 10;
 const TIME_WDAY = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];

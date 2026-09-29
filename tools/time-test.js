@@ -51,7 +51,7 @@ const ok = (name, cond) => t.push([name, cond]);
   // ---------- що можна обрати ----------
   const days = api.timeChoices(order());
   const tm = days.find(d => d.day === tomorrow);
-  ok('тиждень наперед', days.length >= 6 && days.length <= 7);
+  ok('два тижні наперед', days.length >= 13 && days.length <= 14);
   ok('сире — з 08:00', tm && tm.slots[0].label === '08:00');
   ok('крок пів години', tm && tm.slots[1].at - tm.slots[0].at === 30 * 60000);
   const sunday = days.find(d => d.label.startsWith('Нд') || new Date(d.day + 'T12:00Z').getUTCDay() === 0);
