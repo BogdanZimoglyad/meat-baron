@@ -377,7 +377,11 @@ const groupOf=o=> o.status==='new' ? 0
    закриття, тож цифри в панелі й у боті не розходяться. */
 function dayStrip(d){
   if(!d||!d.all) return '<div class="day"><span>Сьогодні замовлень із сайту ще не було</span></div>';
+  /* Рахує за днем оформлення — так само, як підсумок у чаті. Календар
+     праворуч рахує за днем видачі, тож числа можуть не збігатись:
+     підписуємо, щоб не плутали (власник, 30.09). */
   return `<div class="day">
+    <span class="mut">Оформили сьогодні:</span>
     <span><b>${d.all-d.canceled}</b> замовлень</span>
     <span><b>${money(d.sum)}</b></span>
     <span>на мангал <b>${wLabel(d.fg)}</b></span>
