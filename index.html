@@ -3620,7 +3620,15 @@ async function openOrder(no,known){
               нього кнопка «Отримав замовлення» билася об 403 у всіх, хто
               не входив через Telegram: там перевірка йде саме по ньому. */
            ckey:my.ckey||'',
-           fry:!!known.fry||!!my.fry, fg:known.fg||my.fg||0, lines:(my.lines&&my.lines.length)?my.lines:(known.lines||[])};
+           /* Склад беремо з сервера, якщо він його прислав: оператор міг
+              додати чи прибрати позицію на прохання клієнта, і памʼять
+              браузера про це не знає. Раніше перевага була в памʼяті —
+              людина бачила старий список і нову суму (знайдено 28.09).
+              Памʼять лишається запасним шляхом: за чужим посиланням
+              сервер складу не віддає. */
+           ...(known.lines&&known.lines.length
+               ? {lines:known.lines, fry:!!known.fry, fg:known.fg||0}
+               : {lines:my.lines||[], fry:!!known.fry||!!my.fry, fg:known.fg||my.fg||0})};
     return openStatus(known.status);
   }
   const v=readLastList().find(x=>String(x.no)===String(no))||{};
