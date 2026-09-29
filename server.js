@@ -904,12 +904,33 @@ const opOrder = o => ({
   lines: (o.lines || []).map(l => ({ name: nameOf(l), qty: l.g, unit: l.unit, sum: l.sum, fry: !!l.fry, v: l.v || '' }))
 });
 
-app.get('/api/op/orders', (req, res) => {
-  if (tooOften('status', ipOf(req), RATE.status)) {
-    return res.status(429).json({ error: 'Забагато запитів. Зачекайте кілька хвилин.' });
-  }
+/* Ліміт для панелі — окремий на кожен планшет, за його ключем, а не на
+   адресу. Усі пристрої точки виходять в інтернет з однієї адреси, і
+   спільні 300 запитів за 10 хвилин ділили між собою монітор, планшет і
+   телефони клієнтів, що стежать за замовленням. Панель на екрані
+   замовлень — ~80, на календарі — ~180: двох пристроїв вистачало, щоб
+   сервер почав відмовляти, і панель писала «звʼязку немає», а голос
+   замовкав (знайдено 30.09). Без ключа — старий ліміт на адресу. */
+function opGate(req, res) {
   const a = panelOf(req);
-  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  if (!a) {
+    if (tooOften('status', ipOf(req), RATE.status)) {
+      res.status(429).json({ error: 'Забагато запитів. Зачекайте кілька хвилин.' });
+      return null;
+    }
+    res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+    return null;
+  }
+  if (tooOften('op', a.token, RATE.op)) {
+    res.status(429).json({ error: 'Забагато запитів. Зачекайте кілька хвилин.' });
+    return null;
+  }
+  return a;
+}
+
+app.get('/api/op/orders', (req, res) => {
+  const a = opGate(req, res);
+  if (!a) return;
   const DAY = 24 * 3600 * 1000;
   const today = kyivDate();
   const list = Object.values(db.orders)
@@ -966,11 +987,8 @@ const dayOfOrder = o => kyivDate(o.slotAt || o.createdAt || 0);
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 app.get('/api/op/calendar', (req, res) => {
-  if (tooOften('status', ipOf(req), RATE.status)) {
-    return res.status(429).json({ error: 'Забагато запитів. Зачекайте кілька хвилин.' });
-  }
-  const a = panelOf(req);
-  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  const a = opGate(req, res);
+  if (!a) return;
   const from = String(req.query.from || ''), to = String(req.query.to || '');
   if (!DAY_RE.test(from) || !DAY_RE.test(to) || from > to) return res.status(400).json({ error: 'Невірні дати' });
   const days = {};
@@ -991,11 +1009,8 @@ app.get('/api/op/calendar', (req, res) => {
 });
 
 app.get('/api/op/day', (req, res) => {
-  if (tooOften('status', ipOf(req), RATE.status)) {
-    return res.status(429).json({ error: 'Забагато запитів. Зачекайте кілька хвилин.' });
-  }
-  const a = panelOf(req);
-  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  const a = opGate(req, res);
+  if (!a) return;
   const d = String(req.query.d || '');
   if (!DAY_RE.test(d)) return res.status(400).json({ error: 'Невірна дата' });
   const list = Object.values(db.orders)
@@ -1547,7 +1562,7 @@ function tooOften(bucket, ip, max) {
 /* Сайт питає статус раз на 15 секунд, і той, хто увійшов, разом із ним
    питає своє активне замовлення — це вже 80 запитів за вікно. Плюс
    пробудження вкладки. Тому ліміт вищий, ніж був. */
-const RATE = { order: 5, status: 300, history: 20, auth: 10, poll: 120, grill: 120, popular: 60 };
+const RATE = { order: 5, status: 300, op: 600, history: 20, auth: 10, poll: 120, grill: 120, popular: 60 };
 
 /* ---------- завантаження мангала ----------
    Мангал тягне близько 15 кг за годину (власник, 19.09), але частину
