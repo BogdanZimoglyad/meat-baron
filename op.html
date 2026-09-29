@@ -64,6 +64,25 @@ button{font:inherit;cursor:pointer;border:none}
 .side button.hot:not(.on) i{background:var(--ember);border-color:var(--ember);color:#fff}
 @keyframes sideHot{50%{box-shadow:0 0 0 3px rgba(224,74,60,.3)}}
 .side button.dlv:not(.on){color:var(--warn)}
+/* Календарик праворуч — на широкому моніторі точки там було порожньо
+   (власник, 30.09). На вужчому екрані він не влазить: там є вкладка. */
+.rside{display:none}
+@media (min-width:1400px){
+  .board{grid-template-columns:210px minmax(0,1fr) 380px}
+  .rside{display:flex;flex-direction:column;gap:8px;position:sticky;top:10px;
+    max-height:calc(100vh - 20px);overflow-y:auto}
+}
+.rside .calhd b{font-size:15px}
+.rside .calhd button{min-height:38px;min-width:42px;font-size:16px}
+.rside .cal{gap:4px}
+.rside .cday{min-height:46px;padding:4px 6px;font-size:11.5px}
+.rside .cday b{font-size:14px}
+.rside .cday .k,.rside .cday .x{display:none}
+.rside .cday .n{font-size:11px;white-space:nowrap}
+.rside .dsum{font-size:13.5px;padding:10px 12px}
+.rside .dsum b{font-size:15px}
+.rside .crow{font-size:13px;padding:8px 10px}
+.rside .crow .h b{font-size:14px}
 @media (max-width:760px){
   .board{grid-template-columns:1fr}
   .side{flex-direction:row;overflow-x:auto;position:static;padding-bottom:2px}
@@ -445,7 +464,9 @@ function draw(d){
       +sect('У роботі','',g[1],now)
       +sect('Чекають свого дня','later',g[2],now)
       +doneSect(g[3],now);
-  w.innerHTML=dayStrip(d.day)+`<div class="board">${side}<div class="main">${body}</div></div>`;
+  w.innerHTML=dayStrip(d.day)+`<div class="board">${side}<div class="main">${body}</div>
+    <aside class="rside" id="rcal">${rcalHtml()}</aside></div>`;
+  bindRcal();
   w.querySelectorAll('[data-grp]').forEach(b=>b.onclick=()=>{
     grp=b.dataset.grp; form=null;
     try{ localStorage.setItem('mb-op-grp',grp) }catch(e){}
@@ -884,9 +905,9 @@ const gridOf=ym=>{ const first=ym+'-01', last=dAdd(mAdd(ym,1)+'-01',-1);
   return [dAdd(first,-dWeek(first)), dAdd(last,6-dWeek(last))] };
 const CAL={month:'',today:'',days:{},pick:'',day:null};
 
-function drawCal(){
-  const w=$('wrap');
-  if(!CAL.month){ w.innerHTML='<p class="empty">Завантажую…</p>'; return }
+/* Сітка місяця з кнопками гортання. Та сама і на вкладці, і праворуч
+   на екрані замовлень — там лише дрібніша. */
+function calGrid(){
   const [start,end]=gridOf(CAL.month);
   let g=WD.map(x=>`<div class="wd">${x}</div>`).join('');
   for(let d=start; d<=end; d=dAdd(d,1)){
@@ -899,19 +920,31 @@ function drawCal(){
       +(x.off?`<span class="x">✖ ${x.off}</span>`:'')+`</button>`;
   }
   const [y,m]=CAL.month.split('-').map(Number);
-  w.innerHTML=`<div class="screen">
-    <div class="calhd"><button data-cm="-1">‹</button><b>${MONTHS[m-1]} ${y}</b>
+  return `<div class="calhd"><button data-cm="-1">‹</button><b>${MONTHS[m-1]} ${y}</b>
       <button class="today-btn" data-cm="0">Сьогодні</button><button data-cm="1">›</button></div>
-    <div class="cal">${g}</div>
-    <div id="cDay">${dayHtml()}</div>
-  </div>`;
-  w.querySelectorAll('[data-cday]').forEach(b=>b.onclick=()=>pickDay(b.dataset.cday));
-  w.querySelectorAll('[data-cm]').forEach(b=>b.onclick=()=>{
+    <div class="cal">${g}</div>`;
+}
+function bindCal(root){
+  root.querySelectorAll('[data-cday]').forEach(b=>b.onclick=()=>pickDay(b.dataset.cday));
+  root.querySelectorAll('[data-cm]').forEach(b=>b.onclick=()=>{
     const n=+b.dataset.cm;
-    if(n){ CAL.month=mAdd(CAL.month,n); drawCal(); loadCal(); }
+    if(n){ CAL.month=mAdd(CAL.month,n); CAL.days={}; paintCal(); loadCal(); }
     else pickDay(CAL.today);
   });
 }
+function drawCal(){
+  const w=$('wrap');
+  if(!CAL.month){ w.innerHTML='<p class="empty">Завантажую…</p>'; return }
+  w.innerHTML=`<div class="screen">${calGrid()}<div id="cDay">${dayHtml()}</div></div>`;
+  bindCal(w);
+}
+/* Праворуч на екрані замовлень: малюємо лише свій шматок, щоб не
+   чіпати відкриту форму в картці */
+const rcalHtml=()=> CAL.month ? calGrid()+`<div id="rDay">${dayHtml()}</div>` : '<p class="hint2">Завантажую календар…</p>';
+function bindRcal(){ const el=$('rcal'); if(el) bindCal(el) }
+function paintRcal(){ const el=$('rcal'); if(!el) return; el.innerHTML=rcalHtml(); bindCal(el) }
+function paintCal(){ if(view==='cal') drawCal(); else if(view==='orders') paintRcal() }
+let calAt=0;                       // коли календар востаннє питали в сервера
 
 function dayHtml(){
   if(!CAL.pick) return '<p class="hint2">Оберіть день, щоб побачити його замовлення.</p>';
@@ -929,7 +962,7 @@ function dayHtml(){
       <div class="l">${(o.lines||[]).map(l=>esc(l.name)+(l.v?' «'+esc(l.v)+'»':'')+' '+(l.unit==='вага'?wLabel(l.qty):l.qty+' шт')).join(', ')}</div>
       ${o.note?`<div class="l">💬 ${esc(o.note)}</div>`:''}
     </div>`).join('')
-    +(CAL.pick>=CAL.today?'<p class="hint2">Змінити замовлення — на екрані «Замовлення».</p>':'');
+    +(view==='cal'&&CAL.pick>=CAL.today?'<p class="hint2">Змінити замовлення — на екрані «Замовлення».</p>':'');
 }
 
 async function opGet(path){
@@ -950,21 +983,23 @@ async function loadCal(){
   const m=CAL.month, [from,to]=gridOf(m);
   const d=await opGet(`/api/op/calendar?from=${from}&to=${to}`);
   if(!d||CAL.month!==m) return;
-  CAL.days=d.days||{}; CAL.today=d.today;
-  if(view==='cal') drawCal();
+  CAL.days=d.days||{}; CAL.today=d.today; calAt=Date.now();
+  paintCal();
 }
 async function loadDay(){
   const p=CAL.pick;
   const d=await opGet('/api/op/day?d='+p);
   if(CAL.pick!==p) return;
   CAL.day=d||{label:p,orders:[]};
-  if(view==='cal'&&$('cDay')) $('cDay').innerHTML=dayHtml();
+  const el=$(view==='cal'?'cDay':'rDay'); if(el) el.innerHTML=dayHtml();
 }
 function pickDay(d){
   CAL.pick=d; CAL.day=null;
-  /* День із сусіднього місяця — перегортаємо на нього */
-  if(d.slice(0,7)!==CAL.month){ CAL.month=d.slice(0,7); CAL.days={}; loadCal() }
-  drawCal(); loadDay();
+  /* День поза видимою сіткою («Сьогодні» з іншого місяця) — перегортаємо
+     на нього. Сусідній день, що й так видно в сітці, лишаємо на місці. */
+  const [a,b]=gridOf(CAL.month);
+  if(d<a||d>b){ CAL.month=d.slice(0,7); CAL.days={}; loadCal() }
+  paintCal(); loadDay();
 }
 
 /* Один шлях для обох екранів: відправили, показали помилку, якщо є,
@@ -1206,6 +1241,7 @@ async function load(){
        Календар — тим самим тактом: нове замовлення на завтра має
        зʼявитись у клітинці без перезаходу. */
     if(view==='cal'){ loadCal(); if(CAL.pick) loadDay() }
+    else if(view==='orders'&&Date.now()-calAt>60000){ loadCal(); if(CAL.pick) loadDay() }
     else if(view!=='orders'){
       await loadShop();
       if(view==='stock') paintStock(); else if(view==='grill') drawGrill();
