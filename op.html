@@ -145,6 +145,17 @@ button{font:inherit;cursor:pointer;border:none}
 .act .tel{min-height:52px;min-width:56px;border-radius:12px;background:var(--coal);
   border:1px solid var(--line-2);color:var(--bone);display:grid;place-items:center;
   text-decoration:none;padding:0 14px;font-size:15px}
+/* Нове замовлення — кнопка дзвінка горить вогнем: спершу подзвонити
+   клієнту й підтвердити (власник, 30.09). Прийняли — гасне. */
+.act .tel.fire{position:relative;overflow:hidden;border-color:#ffb13b;color:#fff;font-size:20px;
+  background:linear-gradient(0deg,#8f1d12 0%,#e04a3c 35%,#ff8a1e 65%,#ffd54a 100%);background-size:100% 220%;
+  animation:telFire 1.1s ease-in-out infinite alternate,telGlow .9s ease-in-out infinite alternate}
+.act .tel.fire::after{content:"";position:absolute;inset:-40% -10% 0;pointer-events:none;
+  background:radial-gradient(ellipse at 50% 100%,rgba(255,213,74,.55),transparent 60%);
+  animation:telFlick .45s steps(2) infinite alternate}
+@keyframes telFire{from{background-position:0 100%}to{background-position:0 0}}
+@keyframes telGlow{from{box-shadow:0 0 6px 1px rgba(255,120,30,.55)}to{box-shadow:0 0 18px 5px rgba(255,90,20,.85)}}
+@keyframes telFlick{from{opacity:.55;transform:translateY(4%)}to{opacity:1;transform:translateY(-4%)}}
 /* дрібні дії: сума, коментар, скасування */
 .more{display:flex;gap:6px;flex-wrap:wrap}
 .more button{flex:1;min-width:64px;min-height:40px;border-radius:10px;background:var(--char);
@@ -567,7 +578,7 @@ function card(o,now){
     <div class="act">
       ${nx?`<button class="go" data-go="${o.no}" data-st="${nx[0]}" ${soon?'disabled':''}>${soon?soonText:nx[1]}</button>`
            :`<button class="go" disabled>${esc(o.label)}</button>`}
-      <a class="tel" href="tel:${esc(o.tel)}">📞</a>
+      <a class="tel${o.status==='new'?' fire':''}" href="tel:${esc(o.tel)}">📞</a>
     </div>
     ${form&&form.no===o.no? formHtml(o,form.kind) : more(o)}
   </article>`;
