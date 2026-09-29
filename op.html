@@ -69,6 +69,10 @@ button{font:inherit;cursor:pointer;border:none}
 .card.new{border-color:rgba(224,74,60,.6);box-shadow:0 0 0 1px rgba(224,74,60,.25)}
 .card.ready{border-color:rgba(123,168,79,.5)}
 .card.late{border-color:rgba(216,161,58,.65)}
+/* застрягле — про нього зараз нагадує голос */
+.card.nag{border-color:var(--warn);animation:nagGlow 1.6s ease-in-out infinite}
+@keyframes nagGlow{50%{box-shadow:0 0 0 3px rgba(216,161,58,.35)}}
+#voice{cursor:pointer}
 .hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .hd .no{font-size:22px;font-weight:600}
 .hd .st{font-size:13px;padding:3px 10px;border-radius:999px;background:var(--line);color:var(--bone)}
@@ -224,6 +228,7 @@ button{font:inherit;cursor:pointer;border:none}
   </div>
   <div class="cnt">
     <span class="pill off" id="mute" hidden>🔇 торкніться екрана, щоб увімкнути звук</span>
+    <span class="pill" id="voice" role="button" hidden></span>
     <span class="pill" id="net">звʼязок…</span>
     <span class="pill hot" id="cNew" hidden>нових: 0</span>
     <span class="pill" id="cWork">у роботі: 0</span>
@@ -364,6 +369,7 @@ function draw(d){
   if(freshNos.some(no=>!seenNew.has(no))) beep();
   seenNew=new Set(freshNos);
 
+  nag(d);                            // голос — на будь-якому екрані
   if(view!=='orders') return;        // лічильники оновили, а екран зараз інший
   const w=$('wrap');
   /* Три купки замість однієї стрічки: нові, ті, що в роботі, і зроблені.
@@ -461,7 +467,8 @@ function card(o,now){
      виглядає як «сьогодні о девʼятій». */
   const soonText=o.day?`готувати ${esc(o.day)}`:`можна з ${hhmm(o.startAt)}`;
   const late=o.slotAt&&now>o.slotAt&&o.status!=='done'&&o.status!=='canceled';
-  const cls=o.status==='new'?'new':o.status==='ready'?'ready':late?'late':'';
+  const nagged=typeof NAGGED!=='undefined'&&NAGGED.has(o.no);
+  const cls=(o.status==='new'?'new':o.status==='ready'?'ready':late?'late':'')+(nagged?' nag':'');
   const when=o.slotAt? hhmm(o.slotAt) : 'якнайшвидше';
   return `<article class="card ${cls}">
     <div class="hd">
@@ -936,6 +943,99 @@ function setView(v){
   loadShop().then(()=>{ if(view===v) v==='stock'?drawStock():drawGrill() });
 }
 
+/* ---------- голосові нагадування ----------
+   Оператор забуває закрити замовлення: видав, а «Видано» не натиснув;
+   готове висить; час видачі підійшов, а готувати не почали (власник,
+   29.09). Писк чути, але до планшета все одно треба підійти й шукати,
+   що сталося, — тож панель каже словами, яке замовлення і що з ним.
+
+   Перше нагадування — через 5 хв після того, як замовлення «застрягло»,
+   далі кожні 2 хв, доки його не зрушать. Фрази короткі й без імен та
+   сум: біля каси стоять покупці. */
+const NAG_FIRST=5*60000, NAG_EVERY=2*60000;
+const plural=(n,a,b,c)=>{ const t=n%10,h=n%100; return t===1&&h!==11?a:t>=2&&t<=4&&(h<12||h>14)?b:c };
+const mins=ms=>{ const n=Math.max(1,Math.round(ms/60000)); return n+' '+plural(n,'хвилину','хвилини','хвилин') };
+
+/* Чи застрягло замовлення, з якого моменту і що сказати. null — усе гаразд.
+   Неприйняте нагадуємо завжди — і на завтра теж: прийняти його треба
+   зараз. Решту на інший день не чіпаємо: їм ще рано. */
+function stuckOf(o,now){
+  if(o.status==='new')
+    return {since:o.createdAt, say:`Нове замовлення ${o.no} чекає, щоб його прийняли`};
+  if(o.day) return null;
+  if(o.status==='accepted'&&o.startAt)
+    return {since:o.startAt, say:`Замовлення ${o.no}: час починати готувати`};
+  if(o.status==='cooking'&&o.slotAt)
+    return {since:o.slotAt, say:`Замовлення ${o.no} вже мало бути готове`};
+  if(o.status==='ready'){
+    /* Самовивіз рахуємо від часу видачі: готове о першій на пʼяту — не
+       забуте, людина просто ще не прийшла */
+    const since=o.mode==='pickup'? Math.max(o.readyAt||0,o.slotAt||0) : o.readyAt;
+    return {since, say: o.mode==='pickup'
+      ? `Замовлення ${o.no} готове вже ${mins(now-since)}. Якщо видали — натисніть «Видано»`
+      : `Замовлення ${o.no} готове. Передали курʼєру?`};
+  }
+  return null;
+}
+
+/* Кого треба нагадати саме зараз. told — коли про кожне говорили востаннє. */
+function nagDue(orders,now,told){
+  const out=[];
+  for(const o of orders){
+    const s=stuckOf(o,now);
+    if(!s||!s.since||now-s.since<NAG_FIRST) continue;
+    const last=told[o.no]||0;
+    /* Після зміни статусу відлік іде з нуля: last раніше за since —
+       це нагадування було про попередній крок */
+    if(last>=s.since&&now-last<NAG_EVERY) continue;
+    out.push({no:o.no,say:s.say});
+  }
+  return out;
+}
+
+let told={}, NAGGED=new Set(), quietTill=0, VOICE=null;
+function pickVoice(){
+  try{ VOICE=speechSynthesis.getVoices().find(v=>/^uk/i.test(v.lang))||null }catch(e){ VOICE=null }
+  paintVoice();
+}
+function paintVoice(){
+  const el=$('voice'); if(!el) return;
+  const q=quietTill>Date.now();
+  el.hidden=false;
+  el.className='pill'+(q||!VOICE?' off':'');
+  el.textContent= q ? `🔕 тиша до ${hhmm(quietTill)} · увімкнути`
+    : VOICE ? '🗣 нагадування голосом' : '🔈 немає українського голосу — лише сигнал';
+}
+/* Дотик до позначки: у тиші — повернути звук, інакше тиша на 10 хв (година
+   пік, черга біля каси). Заразом це й перевірка голосу. */
+function voiceTap(){
+  audioOn();
+  if(quietTill>Date.now()){ quietTill=0; speak(['Нагадування увімкнено']) }
+  else{ quietTill=Date.now()+10*60000; }
+  paintVoice();
+}
+function speak(list){
+  beep();
+  if(!VOICE){ setTimeout(beep,260); return }
+  try{
+    const show=list.slice(0,3);
+    if(list.length>3) show.push(`І ще ${list.length-3} ${plural(list.length-3,'замовлення','замовлення','замовлень')}`);
+    show.forEach(t=>{ const u=new SpeechSynthesisUtterance(t); u.voice=VOICE; u.lang=VOICE.lang; speechSynthesis.speak(u) });
+  }catch(e){}
+}
+function nag(d){
+  const now=d.now||Date.now();
+  paintVoice();                       // тиша могла скінчитись
+  const live=(d.orders||[]).filter(o=>o.status!=='done'&&o.status!=='canceled');
+  /* Підсвітка картки — поки замовлення застрягле, навіть у тиші */
+  NAGGED=new Set(live.filter(o=>{ const s=stuckOf(o,now); return s&&s.since&&now-s.since>=NAG_FIRST }).map(o=>o.no));
+  const due=nagDue(live,now,told);
+  if(!due.length) return;
+  due.forEach(x=>told[x.no]=now);
+  if(quietTill>Date.now()) return;
+  speak(due.map(x=>x.say));
+}
+
 /* Короткий сигнал: планшет стоїть поруч із касою, і панель часто в фоні.
    Браузер не дає вмикати звук до першого дотику до сторінки, а панель
    може простояти відкритою й недоторканою півдня — тоді нове замовлення
@@ -1068,6 +1168,10 @@ async function load(){
   if(!token) return askEnter();
   $('tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>setView(b.dataset.view));
   document.addEventListener('pointerdown',audioOn);   // будь-який дотик заводить звук
+  /* Голоси браузер віддає не одразу — список приходить подією */
+  try{ speechSynthesis.onvoiceschanged=pickVoice }catch(e){}
+  pickVoice();
+  $('voice').onclick=voiceTap;
   audioOn();                                          // а раптом браузер і так дозволяє
   await load();
   /* Стан точки потрібен уже на екрані замовлень — щоб у пошуку позицій
