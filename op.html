@@ -46,6 +46,30 @@ button{font:inherit;cursor:pointer;border:none}
 .day b{color:var(--bone);font-size:17px;font-weight:600}
 .day .mut{font-size:13px}
 
+/* Купки — кнопками зліва: оператор бачить лічильники всіх разом і
+   відкриває одну. Дрібні заголовки між картками губились (власник, 29.09). */
+.board{display:grid;grid-template-columns:210px minmax(0,1fr);gap:16px;align-items:start}
+.side{display:flex;flex-direction:column;gap:8px;position:sticky;top:10px}
+.side button{display:flex;align-items:center;gap:10px;min-height:58px;padding:0 14px;border-radius:12px;
+  background:var(--coal);border:1px solid var(--line);color:var(--bone);font-size:17px;font-weight:500;text-align:left}
+.side button span{flex:1}
+.side button i{font-style:normal;min-width:30px;text-align:center;border-radius:999px;padding:2px 9px;
+  background:var(--char);border:1px solid var(--line-2);font-size:15px;font-weight:600}
+.side button.on{background:var(--ember);border-color:var(--ember);color:#fff}
+.side button.on i{background:rgba(0,0,0,.2);border-color:transparent;color:#fff}
+.side button.zero{color:var(--smoke)}
+.side button.zero i{opacity:.5}
+/* нові, поки їх не відкрили, — горять */
+.side button.hot:not(.on){border-color:rgba(224,74,60,.7);color:var(--ember-hot);animation:sideHot 1.4s ease-in-out infinite}
+.side button.hot:not(.on) i{background:var(--ember);border-color:var(--ember);color:#fff}
+@keyframes sideHot{50%{box-shadow:0 0 0 3px rgba(224,74,60,.3)}}
+.side button.dlv:not(.on){color:var(--warn)}
+@media (max-width:760px){
+  .board{grid-template-columns:1fr}
+  .side{flex-direction:row;overflow-x:auto;position:static;padding-bottom:2px}
+  .side button{min-height:48px;flex:0 0 auto;font-size:15px}
+}
+
 /* купки: нові, в роботі, завершені */
 .sect{margin-bottom:18px}
 .sect h2{display:flex;align-items:center;gap:8px;margin:0 0 9px;
@@ -304,6 +328,9 @@ let view='orders', SHOP=null, stockQ='', DATA=null;
 /* Зроблені за день ховаємо: вони цікаві раз на зміну, а місце на екрані
    займають постійно. Розгортаються натисканням на заголовок. */
 let showDone=false, formSig='';
+/* Яка купка відкрита — памʼятаємо на планшеті між перезаходами */
+let grp='all';
+try{ grp=localStorage.getItem('mb-op-grp')||'all' }catch(e){}
 
 /* Замовлення на інший день лежить прийнятим до самого дня видачі — так і
    задумано, готувати наперед не можна. Але в «У роботі» воно заважало:
@@ -335,20 +362,21 @@ function dayStrip(d){
    губилась (власник, 27.09). Порядок роботи при цьому не ламається:
    нове лишається в новому, готове в готовому. */
 const grid=(l,now)=>`<div class="grid">${l.map(o=>card(o,now)).join('')}</div>`;
-const sect=(title,cls,list,now)=>{
+const sect=(title,cls,list,now,split=true)=>{
   if(!list.length) return '';
-  const own=list.filter(o=>o.mode!=='delivery');
-  const dlv=list.filter(o=>o.mode==='delivery');
+  /* Коли відкрита кнопка «Доставка», ділити вже нема на що */
+  const own=split?list.filter(o=>o.mode!=='delivery'):list;
+  const dlv=split?list.filter(o=>o.mode==='delivery'):[];
   return `<section class="sect ${cls}"><h2>${title}<i>${list.length}</i></h2>
     ${own.length?grid(own,now):''}
     ${dlv.length?`<h3 class="sub">🚕 Доставка<i>${dlv.length}</i></h3>${grid(dlv,now)}`:''}
   </section>`;
 };
 
-const doneSect=(list,now)=> list.length
+const doneSect=(list,now,open)=> list.length
   ? `<section class="sect done"><h2 data-done="1" role="button" tabindex="0">
-       ${showDone?'▾':'▸'} Завершені сьогодні<i>${list.length}</i></h2>
-     ${showDone?grid(list,now):''}</section>`
+       ${showDone||open?'▾':'▸'} Завершені сьогодні<i>${list.length}</i></h2>
+     ${showDone||open?grid(list,now):''}</section>`
   : '';
 
 function draw(d){
@@ -389,12 +417,40 @@ function draw(d){
   formSig=sig;
   const g=[[],[],[],[]];
   d.orders.forEach(o=>g[groupOf(o)].push(o));
-  w.innerHTML=dayStrip(d.day)
-    +(d.orders.length?'':'<p class="empty">Замовлень зараз немає.</p>')
-    +sect('Нові — прийняти в роботу','hot',g[0],now)
-    +sect('У роботі','',g[1],now)
-    +sect('Чекають свого дня','later',g[2],now)
-    +doneSect(g[3],now);
+  const dl=[[],[],[],[]];
+  d.orders.filter(o=>o.mode==='delivery').forEach(o=>dl[groupOf(o)].push(o));
+  const dlvLive=dl[0].length+dl[1].length+dl[2].length;
+  const n={all:live.length,new:g[0].length,work:g[1].length,dlv:dlvLive,later:g[2].length,done:g[3].length};
+  const btn=(k,t,cls)=>`<button data-grp="${k}" class="${grp===k?'on':''} ${n[k]?'':'zero'} ${cls||''}"><span>${t}</span><i>${n[k]}</i></button>`;
+  const side=`<nav class="side">
+      ${btn('all','Усі')}
+      ${btn('new','Нові',n.new?'hot':'')}
+      ${btn('work','У роботі')}
+      ${btn('dlv','🚕 Доставка','dlv')}
+      ${btn('later','Чекають свого дня')}
+      ${btn('done','Завершені')}
+    </nav>`;
+  const E='<p class="empty">Тут зараз порожньо.</p>';
+  const body=
+      grp==='new'  ? sect('Нові — прийняти в роботу','hot',g[0],now)||E
+    : grp==='work' ? sect('У роботі','',g[1],now)||E
+    : grp==='later'? sect('Чекають свого дня','later',g[2],now)||E
+    : grp==='done' ? doneSect(g[3],now,true)||E
+    : grp==='dlv'  ? (sect('Нові — прийняти в роботу','hot',dl[0],now,false)
+                     +sect('У роботі','',dl[1],now,false)
+                     +sect('Чекають свого дня','later',dl[2],now,false)
+                     +doneSect(dl[3],now))||E
+    : (d.orders.length?'':'<p class="empty">Замовлень зараз немає.</p>')
+      +sect('Нові — прийняти в роботу','hot',g[0],now)
+      +sect('У роботі','',g[1],now)
+      +sect('Чекають свого дня','later',g[2],now)
+      +doneSect(g[3],now);
+  w.innerHTML=dayStrip(d.day)+`<div class="board">${side}<div class="main">${body}</div></div>`;
+  w.querySelectorAll('[data-grp]').forEach(b=>b.onclick=()=>{
+    grp=b.dataset.grp; form=null;
+    try{ localStorage.setItem('mb-op-grp',grp) }catch(e){}
+    draw(d); window.scrollTo(0,0);
+  });
   if(typed){ put('fv',typed.v); put('fn',typed.n) }
   const dh=w.querySelector('[data-done]');
   if(dh) dh.onclick=()=>{ showDone=!showDone; draw(d) };
