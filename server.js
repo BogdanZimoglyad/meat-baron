@@ -899,7 +899,8 @@ const opOrder = o => ({
   startAt: o.slotAt ? o.slotAt - (o.mode === 'delivery' ? 90 : 60) * 60000 : 0,
   /* Що саме зараз дозволено міняти: панель питає тут, а не вгадує —
      правила живуть на сервері й міняються разом із ним. */
-  can: { money: canEdit(o, 'fact'), ship: canEdit(o, 'ship'), cancel: canEdit(o, 'cancel') },
+  can: { money: canEdit(o, 'fact'), ship: canEdit(o, 'ship'), cancel: canEdit(o, 'cancel'),
+         time: TIME_STATUSES.has(o.status) },
   lines: (o.lines || []).map(l => ({ name: nameOf(l), qty: l.g, unit: l.unit, sum: l.sum, fry: !!l.fry, v: l.v || '' }))
 });
 
@@ -918,7 +919,10 @@ app.get('/api/op/orders', (req, res) => {
        Купка «Завершені» згорнута, тож на екран вони не тиснуть. */
     .filter(o => o.shop === a.shop
       && (!FINAL.has(o.status) || kyivDate(o.updatedAt || o.createdAt || 0) === today))
-    .filter(o => Date.now() - (o.createdAt || 0) < 3 * DAY)
+    /* Три дні від створення — щоб не тягнути старе. Але замовлення на
+       тиждень наперед (сайт це дозволяє, а тепер і перенесення) мусить
+       бути видно до свого дня, інакше воно зникало з панелі на третій. */
+    .filter(o => Date.now() - (o.createdAt || 0) < 3 * DAY || (o.slotAt || 0) > Date.now() - DAY)
     /* Найближче за часом видачі — зверху: саме цим замовленням треба
        займатись першими. Без часу (якнайшвидше) — за номером. */
     .sort((x, y) => (x.slotAt || x.createdAt || 0) - (y.slotAt || y.createdAt || 0))
@@ -1023,6 +1027,29 @@ app.post('/api/op/order/:no/line', async (req, res) => {
   const act = b.act === 'del' ? 'del' : 'add';
   const r = await applyLine(o, act, b, 'панель · ' + SHOPS[a.shop]);
   if (r.err) return res.status(409).json({ error: r.err, order: opOrder(o) });
+  res.json({ ok: true, order: opOrder(o) });
+});
+
+/* Перенести на інший час: клієнт передзвонив і передумав. Спершу панель
+   питає, які слоти є, — правила годин живуть тут, а не в браузері. */
+app.get('/api/op/order/:no/times', (req, res) => {
+  const a = panelOf(req);
+  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  const o = db.orders[req.params.no];
+  if (!o) return res.status(404).json({ error: 'Замовлення не знайдено' });
+  if (o.shop !== a.shop) return res.status(403).json({ error: 'Це замовлення іншої точки' });
+  res.json({ ok: true, slotAt: o.slotAt || 0, days: timeChoices(o) });
+});
+
+app.post('/api/op/order/:no/time', async (req, res) => {
+  const a = panelOf(req);
+  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  const o = db.orders[req.params.no];
+  if (!o) return res.status(404).json({ error: 'Замовлення не знайдено' });
+  if (o.shop !== a.shop) return res.status(403).json({ error: 'Це замовлення іншої точки' });
+  const r = await applyTime(o, req.body || {}, 'панель · ' + SHOPS[a.shop]);
+  if (r.err) return res.status(409).json({ error: r.err, order: opOrder(o) });
+  if (r.warn) return res.json({ ok: false, warn: r.warn });
   res.json({ ok: true, order: opOrder(o) });
 });
 
@@ -1801,6 +1828,9 @@ app.get('/api/order/:no', (req, res) => {
   /* slotAt — щоб сайт знав, що замовлення на інший день, і не писав
      «готується» напередодні. Часу видачі й так не секрет. */
   res.json({ no: o.no, status: o.status, label: LABEL[o.status], total: o.total, mode: o.mode, slotAt: o.slotAt || 0,
+             /* Час оператор тепер може перенести — сторінка клієнта бере
+                його звідси, а не з памʼяті браузера (29.09) */
+             when: o.when || '',
              ...(adjustmentsOf(o).length ? { totalOrig: o.totalOrig, adjust: pubAdjust(o) } : {}) });   // зміни оператора
 });
 
@@ -2238,6 +2268,117 @@ async function applyLine(o, act, raw, by) {
   o.adjust = adjustmentsOf(o).slice();
   o.adjust.push({ kind: d < 0 ? 'sub' : 'add', amount: Math.abs(d),
     note: what + (why ? ' — ' + why : ''), by, at: Date.now() });
+  o.updatedAt = Date.now();
+  save();
+
+  await editCard(o);
+  notifyAdjust(o, o.adjust[o.adjust.length - 1]);
+  return { ok: true };
+}
+
+/* ---------- час видачі міняє оператор ----------
+   Клієнт передзвонює: «давайте на завтра» чи «на шосту замість третьої».
+   Час був незмінний, і змінити його не було як (власник, 29.09).
+
+   Лише для нових і прийнятих: коли вже готують, час не чіпаємо
+   (власник, 29.09). Години ті самі, що на сайті: з відкриття (на мангал —
+   з 10:00) до закриття, крок пів години, тиждень наперед. Випередження
+   на готування не тримаємо — оператор щойно говорив із клієнтом і сам
+   знає, коли встигне. З тієї ж причини забиту годину мангала не
+   забороняємо, а лише попереджаємо: оператор підтверджує вдруге. */
+const TIME_STATUSES = new Set(['new', 'accepted']);
+const TIME_DAYS = 7;
+const TIME_STEP_MIN = 30;
+const GRILL_FROM_H = 10;
+const TIME_WDAY = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+const TIME_MON = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня',
+  'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
+
+/* Київські дата й час → мітка часу. Railway живе за UTC, і зсув Києва
+   влітку й узимку різний — тож питаємо його в самого годинника. */
+function kyivMs(day, h, m) {
+  const [y, mo, d] = day.split('-').map(Number);
+  const guess = Date.UTC(y, mo - 1, d, h, m);
+  const at = tz => new Date(new Date(guess).toLocaleString('en-US', { timeZone: tz }));
+  return guess - (at('Europe/Kyiv') - at('UTC'));
+}
+const wdayOf = day => { const [y, mo, d] = day.split('-').map(Number); return new Date(Date.UTC(y, mo - 1, d)).getUTCDay() };
+/* Як на сайті: «Сьогодні», «Завтра», «Пт, 3 жовтня» */
+function dayLabelK(day) {
+  if (day === kyivDate()) return 'Сьогодні';
+  if (day === kyivDate(Date.now() + 24 * HOUR)) return 'Завтра';
+  const [, mo, d] = day.split('-').map(Number);
+  return `${TIME_WDAY[wdayOf(day)]}, ${d} ${TIME_MON[mo - 1]}`;
+}
+/* Рядок часу — той самий вигляд, що дає сайт при виборі часу */
+const timeLabel = (o, at) =>
+  `${dayLabelK(kyivDate(at))} · ${o.mode === 'delivery' ? 'орієнтовно о ' : 'о '}${hhmm(at)}`;
+
+/* Мангал на годину, куди хочемо перенести, — без самого цього
+   замовлення: переносимо в межах тієї ж години, і воно не має
+   заважати саме собі. */
+function grillFor(o, at, load) {
+  load = load || grillLoad(o.shop);
+  const key = hourFloor(at);
+  const mine = o.fry && o.slotAt && hourFloor(o.slotAt) === key ? (o.fg || 0) : 0;
+  return { used: Math.max(0, (load[key] || 0) - mine), cap: capOf(o.shop, at), busy: at < grillBusyUntil(o.shop) };
+}
+
+/* Що можна обрати: дні з півгодинними слотами */
+function timeChoices(o) {
+  const now = Date.now(), out = [];
+  const from = (o.fry ? GRILL_FROM_H : OPEN_HOUR) * 60;
+  const load = o.fry ? grillLoad(o.shop) : null;
+  for (let i = 0; i < TIME_DAYS; i++) {
+    const day = kyivDate(now + i * 24 * HOUR);
+    if (out.some(x => x.day === day)) continue;           // перехід на зимовий час
+    const close = (wdayOf(day) === 0 ? 19 : 20) * 60;
+    const slots = [];
+    for (let t = from; t < close; t += TIME_STEP_MIN) {
+      const at = kyivMs(day, Math.floor(t / 60), t % 60);
+      if (at <= now) continue;
+      const s = { at, label: hhmm(at) };
+      if (o.fry) {
+        const g = grillFor(o, at, load);
+        s.full = g.busy || g.used + (o.fg || 0) > g.cap;
+      }
+      slots.push(s);
+    }
+    if (slots.length) out.push({ day, label: dayLabelK(day), slots });
+  }
+  return out;
+}
+
+async function applyTime(o, raw, by) {
+  if (!TIME_STATUSES.has(o.status)) return { err: 'Час можна змінити, лише поки замовлення не почали готувати' };
+  const at = Math.round(Number(raw.at) / 60000) * 60000;
+  if (!timeChoices(o).some(d => d.slots.some(s => s.at === at))) {
+    return { err: 'На цей час точка не працює або він уже минув' };
+  }
+  if (at === o.slotAt) return { err: 'Замовлення й так на цей час' };
+  if (o.fry && !raw.force) {
+    const g = grillFor(o, at);
+    if (g.busy) {
+      return { warn: `Мангал для сайту закритий до ${hhmm(grillBusyUntil(o.shop))}. Все одно поставити на ${hhmm(at)}?` };
+    }
+    if (g.used + (o.fg || 0) > g.cap) {
+      return { warn: `На ${hhmm(hourFloor(at))} на мангалі вже ${wLabel(g.used)} з ${wLabel(g.cap)}, ` +
+        `із цим замовленням буде ${wLabel(g.used + (o.fg || 0))}. Все одно поставити?` };
+    }
+  }
+
+  const was = o.when || (o.slotAt ? timeLabel(o, o.slotAt) : 'якнайшвидше');
+  o.slotAt = at;
+  o.when = timeLabel(o, at);
+  /* Пишемо звичайним коментарем 💬 — як правку складу пишемо плюсом чи
+     мінусом: картка в чаті, сторінка клієнта й сповіщення вже вміють
+     його показати. А новий час сам стає в замовлення: 🕒 у картці,
+     «на завтра» в панелі, мангал рахує нову годину. */
+  const why = String(raw.note || '').trim().slice(0, 120);
+  o.adjust = adjustmentsOf(o).slice();
+  if (o.totalOrig == null) o.totalOrig = o.total;
+  o.adjust.push({ kind: 'note', amount: 0,
+    note: `новий час — ${o.when} (було: ${was})` + (why ? '. ' + why : ''), by, at: Date.now() });
   o.updatedAt = Date.now();
   save();
 

@@ -13,6 +13,7 @@ const code = [
   cut(/function more\(o\)\{[\s\S]*?\n\}/),
   cut(/const FORM=\{[\s\S]*?\n\};/),
   cut(/function formHtml\(o,kind\)\{[\s\S]*?\n\}/),
+  cut(/function timeForm\(o\)\{[\s\S]*?\n\}/),
   cut(/const groupOf=o=>[\s\S]*?: 1;/),
   cut(/function dayStrip\(d\)\{[\s\S]*?\n\}/)
 ].join('\n');
@@ -70,6 +71,25 @@ t.push(['на виданому жодної дрібної дії', !has(h, 'cla
 // 3. доставка
 h = draw(ord({ mode: 'delivery', addr: 'Шевченка 1', can: { money: true, ship: true, cancel: true } }), NOW);
 t.push(['вартість доставки — тільки для доставки', has(h, 'data-kind="ship"')]);
+
+// 3а. перенесення часу — лише поки не готують (сервер каже can.time)
+h = draw(ord({ can: { money: true, ship: false, cancel: true, time: true } }), NOW);
+t.push(['кнопка «Час» є, коли сервер дозволяє', has(h, 'data-kind="time"')]);
+h = draw(ord({ status: 'cooking', label: 'Готується', can: { money: false, ship: false, cancel: true, time: false } }), NOW);
+t.push(['коли готують — кнопки «Час» немає', !has(h, 'data-kind="time"')]);
+{
+  const days = [{ day: 'a', label: 'Сьогодні', slots: [{ at: NOW + 60 * MIN, label: '14:00' }] },
+                { day: 'b', label: 'Завтра', slots: [{ at: NOW + 25 * 60 * MIN, label: '10:00', full: true },
+                                                      { at: NOW + 26 * 60 * MIN, label: '11:00' }] }];
+  h = draw(ord({ fry: true, fg: 1000 }), NOW, { no: 101, kind: 'time' });
+  t.push(['поки слоти вантажаться — «Завантажую»', has(h, 'Завантажую')]);
+  h = draw(ord({ fry: true, fg: 1000 }), NOW, { no: 101, kind: 'time', days, day: 1, at: 0 });
+  t.push(['обрано день — видно його години', has(h, '>10:00<') && has(h, '>11:00<') && !has(h, '>14:00<')]);
+  t.push(['забита година мангала позначена', /data-tat="\d+" class="[^"]*full/.test(h)]);
+  t.push(['без обраної години кнопка неактивна', /data-settime="101" disabled/.test(h)]);
+  h = draw(ord(), NOW, { no: 101, kind: 'time', days, day: 1, at: NOW + 26 * 60 * MIN });
+  t.push(['обрали годину — кнопка «Перенести на 11:00»', has(h, 'Перенести на 11:00') && !/data-settime="101" +disabled/.test(h)]);
+}
 
 // 4. форма замість кнопок
 h = draw(ord(), NOW, { no: 101, kind: 'fact' });

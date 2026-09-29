@@ -3227,7 +3227,7 @@ function openStatus(startStatus){
       <path d="${off?'M6 6l12 12M18 6L6 18':'M4 12.5l5.5 5.5L20 7'}"/></svg></div>
     <h3 style="text-align:center;font-size:23px;text-transform:uppercase">${off?'Замовлення скасовано':'Замовлення прийнято'}</h3>
     <p style="text-align:center;color:var(--smoke);font-size:13px;margin:5px 0 4px">№ ${o.no} · ${o.shop}</p>
-    <p style="text-align:center;color:var(--ember-hot);font-size:13.5px;margin:0 0 18px">${o.when||''}</p>
+    <p class="o-when" style="text-align:center;color:var(--ember-hot);font-size:13.5px;margin:0 0 18px">${o.when||''}</p>
 
     ${off?`<div class="ready-note off">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -3351,6 +3351,9 @@ function openStatus(startStatus){
       try{const r=await req(API+'/api/order/'+o.no,null,8000);const d=await r.json();
         /* сума могла змінитись: оператор зважив замовлення */
         if(Number.isFinite(d.total)){o.total=d.total; o.totalOrig=d.totalOrig; o.adjust=d.adjust||[]; if(d.slotAt) o.slotAt=d.slotAt}
+        /* Оператор міг перенести час — показуємо новий, не чекаючи, поки
+           людина перевідкриє сторінку. */
+        if(d.when&&d.when!==o.when){ o.when=d.when; const w=document.querySelector('.o-when'); if(w) w.textContent=d.when }
         if(pollTick!==tick) return;
         if(d.status){draw(d.status); if(d.status==='done'||d.status==='canceled'){clearInterval(poll);clearLast(o.no)} showActiveBar()}
       }catch(e){}
@@ -3482,7 +3485,7 @@ async function localActive(){
   const list=readLastList();
   const out=[];
   for(const v of list){
-    let st='new';
+    let st='new', when=v.when;
     try{
       const r=await req(API+'/api/order/'+v.no,null,8000);
       /* Сервер точно не знає такого замовлення — забуваємо. Інші помилки
@@ -3490,9 +3493,10 @@ async function localActive(){
       if(r.status===404){ clearLast(v.no); continue }
       const d=await r.json();
       if(d.status) st=d.status;
+      if(d.when) when=d.when;                // оператор міг перенести час
     }catch(e){}
     if(ST_OVER(st)){ clearLast(v.no); continue }
-    out.push({...v, status:st, shopName:v.shop});
+    out.push({...v, status:st, when, shopName:v.shop});
   }
   return out;
 }
@@ -3630,7 +3634,9 @@ async function openOrder(no,known){
   let r=null,d=null;
   try{ r=await req(API+'/api/order/'+no,null,10000); d=await r.json() }catch(e){}
   if(r&&r.ok&&d&&d.no){
-    order={no:d.no, shop:(mine&&v.shop)||SHOPS[shop][0], when:(mine&&v.when)||'', slotAt:d.slotAt||(mine&&v.slotAt)||0,
+    /* Час — із сервера: оператор міг перенести замовлення на прохання
+       клієнта, а памʼять браузера пам'ятає той, що обирали (29.09). */
+    order={no:d.no, shop:(mine&&v.shop)||SHOPS[shop][0], when:d.when||(mine&&v.when)||'', slotAt:d.slotAt||(mine&&v.slotAt)||0,
            total:d.total, totalOrig:d.totalOrig, adjust:d.adjust||[], mode:d.mode||'pickup',
            ckey:(mine&&v.ckey)||'',
            fry:mine&&!!v.fry, fg:(mine&&v.fg)||0, lines:(mine&&v.lines)||[]};

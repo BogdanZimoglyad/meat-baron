@@ -121,6 +121,9 @@ button{font:inherit;cursor:pointer;border:none}
 .vars button{min-height:40px;padding:0 12px;border-radius:10px;background:var(--coal);
   border:1px solid var(--line-2);color:var(--bone);font-size:14px}
 .vars button.on{background:var(--ember);border-color:var(--ember);color:#fff;font-weight:600}
+/* забита година мангала: обрати можна, але видно, що там уже повно */
+.vars button.full{border-color:rgba(224,74,60,.55);color:var(--smoke)}
+.vars button.cur{outline:2px dashed var(--line-2);outline-offset:2px}
 .form .chk{min-height:44px;border-radius:10px;background:var(--coal);
   border:1px solid var(--line-2);color:var(--bone);font-size:15px;text-align:left;padding:0 14px}
 .form .chk.on{color:var(--ember-hot);border-color:rgba(224,74,60,.5)}
@@ -355,7 +358,12 @@ function draw(d){
   w.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>step(b.dataset.go,b.dataset.st,b));
   w.querySelectorAll('[data-form]').forEach(b=>b.onclick=()=>{
     form={no:+b.dataset.form,kind:b.dataset.kind}; draw(d); focusForm();
+    if(form.kind==='time') loadTimes(form);
   });
+  /* ---- перенесення часу ---- */
+  w.querySelectorAll('[data-tday]').forEach(b=>b.onclick=()=>{ form.day=+b.dataset.tday; form.at=0; draw(d) });
+  w.querySelectorAll('[data-tat]').forEach(b=>b.onclick=()=>{ form.at=+b.dataset.tat; draw(d) });
+  w.querySelectorAll('[data-settime]').forEach(b=>b.onclick=()=>setTime(b));
   w.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{ form=null; draw(d) });
   w.querySelectorAll('[data-send]').forEach(b=>b.onclick=()=>send(b));
   /* ---- склад замовлення ---- */
@@ -456,6 +464,9 @@ function more(o){
     b.push(['fact','🧾 Сума'],['plus','➕ Позиція'],['minus','➖ Позиція'],['note','💬']);
   }
   if(can.ship&&o.mode==='delivery') b.push(['ship','🚕 Доставка']);
+  /* Перенести на інший день чи годину: клієнт передзвонив і передумав
+     (власник, 29.09). Лише поки не почали готувати — так каже сервер. */
+  if(can.time) b.push(['time','🕒 Час']);
   if(can.cancel) b.push(['cancel','✖️ Скасувати',1]);
   if(!b.length) return '';
   return `<div class="more">${b.map(([k,t,danger])=>
@@ -547,8 +558,72 @@ function pickForm(){
   </div>`;
 }
 
+/* ---------- перенесення часу ----------
+   Які дні й години можна обрати, каже сервер: там графік точки, київський
+   час і мангал. Панель лише малює кнопки. */
+async function loadTimes(f){
+  try{
+    const r=await fetch(API+'/api/op/order/'+f.no+'/times',{headers:{Authorization:'Bearer '+token}});
+    const d=await r.json().catch(()=>({}));
+    if(form!==f) return;                      // форму вже закрили
+    if(!r.ok){ form=null; alert(d.error||'Не вдалося'); return DATA&&draw(DATA) }
+    f.days=d.days||[]; f.cur=d.slotAt||0;
+    /* Одразу відкриваємо день, на який замовлення стоїть зараз */
+    const i=f.days.findIndex(x=>x.slots.some(s=>s.at===f.cur));
+    f.day=i<0?0:i; f.at=0;
+  }catch(e){ if(form===f){ form=null; alert('Немає звʼязку') } }
+  if(DATA) draw(DATA);
+}
+
+function timeForm(o){
+  if(!form.days) return `<div class="form"><label>Новий час</label><div class="hint">Завантажую…</div>
+    <div class="row"><button class="no" data-close="1">Назад</button></div></div>`;
+  if(!form.days.length) return `<div class="form"><label>Новий час</label>
+    <div class="hint">Вільних годин на тиждень наперед немає.</div>
+    <div class="row"><button class="no" data-close="1">Назад</button></div></div>`;
+  const day=form.days[form.day]||form.days[0];
+  const pick=day.slots.find(s=>s.at===form.at);
+  return `<div class="form">
+    <label>Новий час · зараз ${o.day?esc(o.day)+' ':''}${o.slotAt?hhmm(o.slotAt):'якнайшвидше'}</label>
+    <div class="vars">${form.days.map((x,i)=>
+      `<button data-tday="${i}" class="${i===form.day?'on':''}">${esc(x.label)}</button>`).join('')}</div>
+    <div class="vars">${day.slots.map(s=>
+      `<button data-tat="${s.at}" class="${s.at===form.at?'on':''}${s.full?' full':''}${s.at===form.cur?' cur':''}">${esc(s.label)}</button>`).join('')}</div>
+    ${o.fry?'<div class="hint">Червона рамка — на мангалі ця година вже заповнена. Поставити можна, спитаємо ще раз.</div>':''}
+    <input type="text" id="fn" placeholder="Причина, якщо треба: клієнт попросив">
+    <div class="hint">Клієнт отримає сповіщення з новим часом.</div>
+    <div class="row">
+      <button class="ok" data-settime="${o.no}" ${pick?'':'disabled'}>${pick?'Перенести на '+esc(pick.label):'Оберіть годину'}</button>
+      <button class="no" data-close="1">Назад</button>
+    </div>
+  </div>`;
+}
+
+async function setTime(btn){
+  const f=form; if(!f||!f.at) return;
+  const note=String(val('fn')||'').trim();
+  btn.disabled=true; const was=btn.textContent; btn.textContent='…';
+  const go=async force=>{
+    const r=await fetch(API+'/api/op/order/'+f.no+'/time',{method:'POST',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+      body:JSON.stringify({at:f.at,note,force})});
+    return [r,await r.json().catch(()=>({}))];
+  };
+  try{
+    let [r,d]=await go(false);
+    /* Мангал на цю годину забитий — сервер питає, чи точно */
+    if(r.ok&&d.warn){
+      if(!confirm(d.warn)){ btn.disabled=false; btn.textContent=was; return }
+      [r,d]=await go(true);
+    }
+    if(!r.ok||!d.ok){ btn.disabled=false; btn.textContent=was; return alert(d.error||d.warn||'Не вдалося') }
+    form=null; await load();
+  }catch(e){ btn.disabled=false; btn.textContent=was; alert('Немає звʼязку') }
+}
+
 function formHtml(o,kind){
   if(kind==='plus'||kind==='minus') return lineForms(o,kind);
+  if(kind==='time') return timeForm(o);
   const f=FORM[kind];
   return `<div class="form">
     <label>${f.t}</label>
