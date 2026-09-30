@@ -1330,9 +1330,12 @@ function statsPage(shopList, fromDay, toDay, by = 'created') {
   const now = Date.now();
   const end = kyivMs(dayAdd(toDay, 1), 0, 0);
   const from = kyivMs(fromDay, 0, 0), to = by === 'slot' ? end : Math.min(now, end);
-  const span = Math.max(1, to - from);
+  /* Попередній — той самий відрізок, зсунутий на повну довжину періоду.
+     Для «сьогодні» о 11:00 це вчора з 0:00 до 11:00, а не вчорашній
+     вечір: раніше зсували на прожиту частину, і стрілки ▲▼ брехали. */
+  const shift = Math.max(1, end - from);
   const cur = statsRange(shopList, from, to, at);
-  const prev = statsRange(shopList, from - span, from, at);
+  const prev = statsRange(shopList, from - shift, to - shift, at);
 
   /* Усі — для списку замовлень; без тестових — для цифр */
   const inRangeAll = Object.values(db.orders).filter(o =>

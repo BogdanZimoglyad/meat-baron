@@ -2454,6 +2454,7 @@ function restoreCart(){
   }
   orderNote=String(s.note||'').slice(0,400);
   fryWanted=fryGrams()>0;
+  if(cart.length) hit('cart');                // статистика: повернувся з кошиком — він у кошику
   restoringCart=true; paintBar(); restoringCart=false;
 }
 
@@ -3972,9 +3973,11 @@ function repeatSum(items){
 function repeatOrder(lines){
   const {items,skipped}=repeatItems(lines);
   let added=0;
+  if(items.length) hit('cart');              // статистика: кошик зібрано повтором
   items.forEach(({it,g,v,fry})=>{
     const ex=cart.find(c=>c.id===it.id&&(c.v||'')===v);
-    if(ex) ex.g+=g;
+    /* не понад межу позиції — інакше сервер відхилив би все замовлення */
+    if(ex) ex.g=Math.min(isCount(it)?99:MAX_LINE_G, ex.g+g);
     else cart.push({id:it.id,name:it.name,grp:it.grp,price:priceOf(it,v),unit:it.unit,cat:it.cat,minG:it.minG,g,
                     fry,...(v?{v}:{})});
     added++;
