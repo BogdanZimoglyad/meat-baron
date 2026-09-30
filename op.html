@@ -128,6 +128,13 @@ button{font:inherit;cursor:pointer;border:none}
 .hd .time em{font-style:normal;color:var(--warn)}
 .meta{font-size:14px;color:var(--smoke)}
 .meta b{color:var(--bone);font-weight:500}
+/* Імʼя й телефон — утричі більші: оператор набирає номер із монітора,
+   стоячи біля каси, і дрібного 14px звідти не видно (власник, 30.09).
+   Телефон — групами цифр, так його легше читати вголос і набирати. */
+.who{display:flex;flex-direction:column;gap:2px;margin-bottom:6px}
+.who .nm{font-size:38px;line-height:1.1;font-weight:700;color:var(--bone);overflow-wrap:anywhere}
+.who .ph{font-size:38px;line-height:1.1;font-weight:600;color:var(--bone);letter-spacing:.01em;
+  white-space:nowrap;font-variant-numeric:tabular-nums}
 .lines{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:8px 0;
   display:flex;flex-direction:column;gap:4px;font-size:15px}
 .ln{display:flex;justify-content:space-between;gap:10px}
@@ -318,6 +325,8 @@ const put=(id,v)=>{ const e=$(id); if(e&&v!=null) e.value=v };
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const money=n=>(Math.round(n*100)/100).toFixed(2).replace(/\.00$/,'')+' ₴';
 const hhmm=ms=>new Date(ms).toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});
+/* +380979705744 → 097 970 57 44 */
+const telGroups=t=>String(t||'').replace(/^\+38/,'').replace(/^(\d{3})(\d{3})(\d{2})(\d{2})$/,'$1 $2 $3 $4');
 const wLabel=g=>g>=1000?(g/1000).toFixed(g%100?2:g%1000?1:0)+' кг':g+' г';
 
 async function claim(code){
@@ -569,9 +578,9 @@ function card(o,now){
       <span class="time">${o.day?`<em>${esc(o.day)}</em> `:''}${esc(when)}<small>${o.mode==='delivery'?'доставка':'самовивіз'}</small></span>
     </div>
     <div class="meta">
-      <b>${esc(o.nm)}</b> · ${esc(o.tel)}
-      ${o.mode==='delivery'&&o.addr?`<br>${esc(o.addr)}`:''}
-      ${o.fry?`<br>🔥 на мангал ${wLabel(o.fg)}`:''}
+      <div class="who"><span class="nm">${esc(o.nm)}</span><span class="ph">${esc(telGroups(o.tel))}</span></div>
+      ${o.mode==='delivery'&&o.addr?`${esc(o.addr)}<br>`:''}
+      ${o.fry?`🔥 на мангал ${wLabel(o.fg)}`:''}
       ${o.pay==='card'?'<br>💳 картка на місці':''}
     </div>
     <div class="lines">${o.lines.map(l=>`<div class="ln">

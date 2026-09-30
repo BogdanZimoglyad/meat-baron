@@ -18,6 +18,7 @@ const code = [
   cut(/const WD=\[[^\n]*/),
   cut(/const dAdd=[^\n]*/),
   cut(/const dWeek=[^\n]*/),
+  cut(/const telGroups=[^\n]*/),
   cut(/const groupOf=o=>[\s\S]*?: 1;/),
   cut(/function dayStrip\(d\)\{[\s\S]*?\n\}/)
 ].join('\n');
@@ -96,6 +97,11 @@ t.push(['коли готують — кнопки «Час» немає', !has(h
   h = draw(ord(), NOW, { no: 101, kind: 'time', days, day: 1, at: NOW + 26 * 60 * MIN });
   t.push(['обрали годину — кнопка «Перенести на 11:00»', has(h, 'Перенести на 11:00') && !/data-settime="101" +disabled/.test(h)]);
 }
+
+// 3б. імʼя й телефон — великим, телефон групами цифр
+h = draw(ord({ tel: '+380979705744', nm: 'Надія' }), NOW);
+t.push(['телефон групами: 097 970 57 44', has(h, '<span class="ph">097 970 57 44</span>')]);
+t.push(['імʼя окремим великим рядком', has(h, '<span class="nm">Надія</span>')]);
 
 // 4. форма замість кнопок
 h = draw(ord(), NOW, { no: 101, kind: 'fact' });
