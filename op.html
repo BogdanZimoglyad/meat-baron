@@ -252,7 +252,19 @@ button{font:inherit;cursor:pointer;border:none}
 .cday.out{opacity:.35}
 .cday.past b{color:var(--smoke)}
 .cday.today{border-color:var(--warn)}
-.cday.on{border-color:var(--ember);background:rgba(196,52,42,.16)}
+/* Обраний день видно одразу: заливка й товста рамка. Дні сусіднього
+   місяця бліді, і тонка рамка на блідій клітинці губилась — оператор
+   тиснув 2 жовтня й не бачив, що обрано саме його (власник, 30.09). */
+.cday.on{opacity:1;border:2px solid var(--ember);background:rgba(196,52,42,.34);box-shadow:0 0 0 2px rgba(196,52,42,.25)}
+.cday.on b{color:#fff}
+/* замовлення в списку дня — натискається й відкриває повну картку */
+.crow[data-open]{cursor:pointer}
+.crow[data-open]:hover{border-color:var(--line-2)}
+.crow .go-in{margin-left:8px;color:var(--ember-hot);font-size:13px;white-space:nowrap}
+.focus-h{display:flex;align-items:center;gap:12px;margin:0 0 12px}
+.focus-h button{min-height:48px;padding:0 18px;border-radius:12px;background:var(--coal);
+  border:1px solid var(--line-2);color:var(--bone);font-size:16px}
+.focus-h span{color:var(--smoke);font-size:15px}
 .dsum{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:15px}
 .dsum b{font-size:17px}
 .crow{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14.5px;
@@ -464,7 +476,7 @@ function draw(d){
   d.orders.filter(o=>o.mode==='delivery').forEach(o=>dl[groupOf(o)].push(o));
   const dlvLive=dl[0].length+dl[1].length+dl[2].length;
   const n={all:live.length,new:g[0].length,work:g[1].length,dlv:dlvLive,later:g[2].length,done:g[3].length};
-  const btn=(k,t,cls)=>`<button data-grp="${k}" class="${grp===k?'on':''} ${n[k]?'':'zero'} ${cls||''}"><span>${t}</span><i>${n[k]}</i></button>`;
+  const btn=(k,t,cls)=>`<button data-grp="${k}" class="${grp===k&&!FOCUS?'on':''} ${n[k]?'':'zero'} ${cls||''}"><span>${t}</span><i>${n[k]}</i></button>`;
   const side=`<nav class="side">
       ${btn('all','Усі')}
       ${btn('new','Нові',n.new?'hot':'')}
@@ -474,8 +486,13 @@ function draw(d){
       ${btn('done','Завершені')}
     </nav>`;
   const E='<p class="empty">Тут зараз порожньо.</p>';
-  const body=
-      grp==='new'  ? sect('Нові — прийняти в роботу','hot',g[0],now)||E
+  /* Відкрите з календаря — свіжа копія з поточного списку, якщо вона там
+     є (тоді й кнопки актуальні), інакше та, що прийшла з календаря */
+  const fo=FOCUS&&(d.orders.find(o=>o.no===FOCUS.no)||FOCUS.copy);
+  const body= fo
+    ? `<div class="focus-h"><button data-unfocus="1">← ${FOCUS.from==='cal'?'Назад до календаря':'Назад'}</button>
+         <span>📅 ${esc(FOCUS.label)}</span></div><div class="grid">${card(fo,now)}</div>`
+    : grp==='new'  ? sect('Нові — прийняти в роботу','hot',g[0],now)||E
     : grp==='work' ? sect('У роботі','',g[1],now)||E
     : grp==='later'? sect('Чекають свого дня','later',g[2],now)||E
     : grp==='done' ? doneSect(g[3],now,true)||E
@@ -491,8 +508,10 @@ function draw(d){
   w.innerHTML=dayStrip(d.day)+`<div class="board">${side}<div class="main">${body}</div>
     <aside class="rside" id="rcal">${rcalHtml()}</aside></div>`;
   bindRcal();
+  const uf=w.querySelector('[data-unfocus]');
+  if(uf) uf.onclick=()=>{ const from=FOCUS.from; FOCUS=null; form=null; if(from==='cal') setView('cal'); else draw(d) };
   w.querySelectorAll('[data-grp]').forEach(b=>b.onclick=()=>{
-    grp=b.dataset.grp; form=null;
+    grp=b.dataset.grp; form=null; FOCUS=null;
     try{ localStorage.setItem('mb-op-grp',grp) }catch(e){}
     draw(d); window.scrollTo(0,0);
   });
@@ -928,6 +947,26 @@ const mAdd=(ym,n)=>{ const [y,m]=ym.split('-').map(Number); return new Date(Date
 const gridOf=ym=>{ const first=ym+'-01', last=dAdd(mAdd(ym,1)+'-01',-1);
   return [dAdd(first,-dWeek(first)), dAdd(last,6-dWeek(last))] };
 const CAL={month:'',today:'',days:{},pick:'',day:null};
+/* Замовлення, відкрите з календаря: на екрані замовлень показуємо лише
+   його повну картку з усіма кнопками (власник, 30.09). copy — вигляд із
+   календаря, на випадок, коли в поточному списку екрана його немає
+   (минулий день). from — куди повертатись. */
+let FOCUS=null;
+function openFocus(no){
+  const copy=((CAL.day&&CAL.day.orders)||[]).find(o=>String(o.no)===String(no));
+  if(!copy) return;
+  FOCUS={no:copy.no, copy, from:view, label:CAL.day.label||''};
+  form=null;
+  if(view!=='orders') setView('orders'); else if(DATA){ draw(DATA); window.scrollTo(0,0) }
+}
+/* Один обробник на весь документ: список дня перемальовується й на вкладці,
+   і праворуч, і після кожного оновлення — вішати на кожен рядок окремо
+   означало б губити натискання. Телефон у рядку — це дзвінок, не відкриття. */
+document.addEventListener('click',e=>{
+  const r=e.target.closest('[data-open]');
+  if(!r||e.target.closest('a')) return;
+  openFocus(r.dataset.open);
+});
 
 /* Сітка місяця з кнопками гортання. Та сама і на вкладці, і праворуч
    на екрані замовлень — там лише дрібніша. */
@@ -979,14 +1018,14 @@ function dayHtml(){
   const head=`<div class="dsum"><b>${esc(CAL.day.label)}</b> · ${live.length} зам.`
     +(fg?' · 🔥 '+wLabel(fg):'')+(sum?' · '+money(sum):'')+(off?` · скасовано ${off}`:'')+`</div>`;
   if(!list.length) return head+'<p class="hint2">Замовлень на цей день немає.</p>';
-  return head+list.map(o=>`<div class="crow${o.status==='canceled'?' off':''}">
+  return head+list.map(o=>`<div class="crow${o.status==='canceled'?' off':''}" data-open="${o.no}" role="button" tabindex="0">
       <div class="h"><b>${o.slotAt?hhmm(o.slotAt):'—'}</b><span>№ ${o.no} · ${o.mode==='delivery'?'🚕 доставка':'самовивіз'}</span>
-        <span class="s">${esc(o.label)}</span></div>
+        <span class="s">${esc(o.label)}</span><span class="go-in">Відкрити ›</span></div>
       <div>${esc(o.nm)} · <a href="tel:${esc(o.tel)}" style="color:inherit">${esc(o.tel)}</a>${o.fry?' · 🔥 '+wLabel(o.fg):''} · <b>${money(o.total)}</b></div>
       <div class="l">${(o.lines||[]).map(l=>esc(l.name)+(l.v?' «'+esc(l.v)+'»':'')+' '+(l.unit==='вага'?wLabel(l.qty):l.qty+' шт')).join(', ')}</div>
       ${o.note?`<div class="l">💬 ${esc(o.note)}</div>`:''}
     </div>`).join('')
-    +(view==='cal'&&CAL.pick>=CAL.today?'<p class="hint2">Змінити замовлення — на екрані «Замовлення».</p>':'');
+    +'<p class="hint2">Натисніть на замовлення — відкриється вся картка з кнопками.</p>';
 }
 
 async function opGet(path){
@@ -1015,6 +1054,7 @@ async function loadDay(){
   const d=await opGet('/api/op/day?d='+p);
   if(CAL.pick!==p) return;
   CAL.day=d||{label:p,orders:[]};
+  if(FOCUS){ const c=(CAL.day.orders||[]).find(o=>o.no===FOCUS.no); if(c) FOCUS.copy=c }
   const el=$(view==='cal'?'cDay':'rDay'); if(el) el.innerHTML=dayHtml();
 }
 function pickDay(d){
@@ -1288,7 +1328,7 @@ async function load(){
     try{ await claim(code) }catch(e){ return askEnter(e.message) }
   }
   if(!token) return askEnter();
-  $('tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>setView(b.dataset.view));
+  $('tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{ FOCUS=null; setView(b.dataset.view) });
   document.addEventListener('pointerdown',audioOn);   // будь-який дотик заводить звук
   /* Голоси браузер віддає не одразу — список приходить подією */
   try{ speechSynthesis.onvoiceschanged=pickVoice }catch(e){}
