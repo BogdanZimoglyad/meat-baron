@@ -339,7 +339,7 @@ function paintPick(){
   }
   const prevM=dAdd(d1,-1).slice(0,7), nextM=dAdd(lastD,1).slice(0,7);
   el.innerHTML=`<div class="pick"><div class="ph"><button data-pm="${prevM}">‹</button><b>${MON[mo-1]} ${y}</b>
-    <button data-pm="${nextM}" ${nextM>t.slice(0,7)?'disabled':''}>›</button></div>
+    <button data-pm="${nextM}">›</button></div>
     <div class="g">${g}</div>
     <div class="hint">${PICK.anchor?'Торкніться ще одного дня — покажемо період між ними. Або лишіть один день.':'Торкніться дня — покажемо його. Потім ще одного — буде період.'}${first<t?' Замовлення з сайту є з '+dm(first)+'.':''}</div></div>`;
   el.querySelectorAll('[data-pm]').forEach(x=>x.onclick=()=>{ PICK.month=x.dataset.pm; paintPick() });
