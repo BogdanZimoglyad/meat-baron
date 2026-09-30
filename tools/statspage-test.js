@@ -11,11 +11,11 @@ const CAT = require(path.join(__dirname, '..', 'catalog.js'));
 const cut = re => { const m = src.match(re); if (!m) { console.error('не знайшли: ' + re); process.exit(1) } return m[0] };
 const code = [
   cut(/const kyivHour = [\s\S]*?\);\n/),
-  cut(/function statsRange\(shopList, from, to\) \{[\s\S]*?\n\}/),
+  cut(/function statsRange\([^)]*\) \{[\s\S]*?\n\}/),
   cut(/function kyivMs\(day, h, m\) \{[\s\S]*?\n\}/),
   cut(/const wdayOf = [^\n]*/),
   cut(/const dayAdd = [^\n]*/),
-  cut(/function statsPage\(shopList, fromDay, toDay\) \{[\s\S]*?\n\}/)
+  cut(/function statsPage\([^)]*\) \{[\s\S]*?\n\}/)
 ].join('\n');
 
 const HOUR = 3600e3, DAY = 24 * HOUR;
@@ -79,13 +79,27 @@ ok('Telegram: входів 3, уперше 1; нових акаунтів 2', s.
 const one = api.statsPage([0], today, today);
 ok('один день — список його замовлень', one.days === 1 && one.orders.length === 1
   && one.orders[0].total === 800 && one.orders[0].label === 'Видано');
-ok('за період — списку замовлень немає', s.orders.length === 0);
+ok('за період — список усіх його замовлень, від ранніх до пізніх', s.orders.length === 4
+  && s.orders[0].at < s.orders[3].at);
+const o4 = s.orders.find(o => o.status === 'canceled');
+ok('у списку — усе про замовлення: склад, причина скасування', o4 && o4.lines.length === 1
+  && o4.adj.some(a => a.kind === 'cancel' && a.note === 'клієнт не відповідає'));
 const d3 = api.dayAdd(today, -3);
 const three = api.statsPage([0], d3, d3);
 ok('обраний день у минулому — лише його замовлення', three.cur.n === 1 && three.cur.sum === 600
   && three.from === d3 && three.to === d3);
 ok('перший день із замовленнями — нижня межа календаря', s.first === kyivDate(now - 40 * DAY));
 ok('dayAdd через кінець місяця', api.dayAdd('2026-09-30', 1) === '2026-10-01' && api.dayAdd('2026-03-01', -1) === '2026-02-28');
+
+// ---------- за днем видачі: видно замовлення наперед ----------
+const later = api.dayAdd(today, 3);
+add(30 * 60000, { slotAt: new Date(later + 'T14:00:00+03:00').getTime(), total: 700, note: 'тест, не готувати' });
+const byCreated = api.statsPage([0], later, later);
+const bySlot = api.statsPage([0], later, later, 'slot');
+ok('за днем замовлення майбутній день порожній', byCreated.cur.n === 0);
+ok('за днем видачі — замовлення наперед на цей день', bySlot.cur.n === 1 && bySlot.cur.sum === 700 && bySlot.by === 'slot');
+ok('коментар клієнта в списку — видно «тест»', bySlot.orders[0].note === 'тест, не готувати');
+ok('сьогодні за днем видачі не бере того, що на післязавтра', api.statsPage([0], today, today, 'slot').orders.every(o => o.note !== 'тест, не готувати'));
 
 let bad = 0;
 for (const [n, good] of t) { console.log((good ? '  ok  ' : 'ПАДАЄ') + ' · ' + n); if (!good) bad++ }

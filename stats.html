@@ -50,6 +50,36 @@ h1{font-size:20px;margin:0}
 .ol .r{text-align:right;white-space:nowrap}
 .ol.off{opacity:.5}
 .chart rect.hit[data-day]{cursor:pointer}
+/* вкладки й перемикач «за днем замовлення / видачі» */
+.views{display:flex;gap:6px;margin:0 0 10px}
+.views button{flex:1;min-height:46px;border-radius:12px;background:var(--coal);border:1px solid var(--line-2);color:var(--smoke);font-size:15px}
+.views button.on{background:var(--bone);color:var(--char);border-color:var(--bone);font-weight:600}
+.by{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 12px;color:var(--smoke);font-size:13px}
+.by button{min-height:34px;padding:0 12px;border-radius:999px;background:var(--coal);border:1px solid var(--line-2);color:var(--bone);font-size:13px}
+.by button.on{border-color:var(--ember-hot);color:var(--ember-hot);font-weight:600}
+/* список замовлень */
+.osearch input{width:100%;min-height:48px;border-radius:12px;background:var(--coal);border:1px solid var(--line-2);color:var(--bone);font-size:16px;padding:0 14px}
+.dayg{margin-top:14px}
+.dgh{display:flex;justify-content:space-between;align-items:baseline;padding:0 2px 6px;color:var(--smoke);font-size:13px}
+.dgh b{color:var(--bone);font-size:15px}
+.orow{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:6px;cursor:pointer}
+.orow.open{border-color:var(--line-2)}
+.orow.off{opacity:.6}
+.oh{display:flex;align-items:baseline;gap:8px}
+.oh .t{color:var(--smoke);font-size:13px}
+.oh .r{margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums}
+.tb{font-size:11px;font-weight:700;letter-spacing:.05em;color:#fff;background:#7a5cc4;border-radius:6px;padding:1px 6px}
+.os{color:var(--smoke);font-size:13px;margin-top:2px}
+.od{margin-top:10px;border-top:1px solid var(--line);padding-top:8px;cursor:default;font-size:14px}
+.dg{display:flex;justify-content:space-between;gap:10px;padding:3px 0}
+.dg span{color:var(--smoke)} .dg b{font-weight:500;text-align:right}
+.dg a{color:var(--bone)}
+.cm{background:rgba(216,161,58,.12);border:1px solid rgba(216,161,58,.35);border-radius:8px;padding:8px 10px;margin:8px 0}
+.dh{color:var(--smoke);font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin:10px 0 4px}
+.dl{display:flex;justify-content:space-between;gap:10px;padding:2px 0;font-variant-numeric:tabular-nums}
+.dl.tot{border-top:1px solid var(--line);margin-top:4px;padding-top:6px;font-weight:600}
+.dl small{color:var(--smoke);font-weight:400}
+.ad{padding:4px 0;border-bottom:1px solid var(--line)} .ad small{display:block;color:var(--smoke);font-size:12px}
 .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 @media(min-width:720px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .tile{background:var(--coal);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
@@ -96,12 +126,14 @@ td:first-child{max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:no
 <body>
 <div class="wrap">
   <div class="top"><h1>📈 Статистика</h1><span class="sub" id="sub">Мʼясний Барон · замовлення з сайту</span></div>
+  <div class="views" id="views"><button data-v="stats" class="on">📈 Статистика</button><button data-v="orders">🧾 Замовлення</button></div>
   <div class="per" id="per">
-    <button data-p="today">Сьогодні</button><button data-p="yday">Вчора</button>
+    <button data-p="yday">Вчора</button><button data-p="today">Сьогодні</button><button data-p="tmrw" hidden>Завтра</button>
     <button data-d="7">7 днів</button><button data-d="30" class="on">30 днів</button>
     <button data-d="90">90 днів</button><button data-d="365">Рік</button>
     <button data-p="pick">📅 Обрати</button>
   </div>
+  <div class="by" id="by">Рахувати за: <button data-by="created">днем замовлення</button><button data-by="slot">днем видачі</button></div>
   <div id="pick"></div>
   <div id="dayhd"></div>
   <div id="out"><p class="empty">Завантажую…</p></div>
@@ -115,7 +147,10 @@ const API='https://api.meat-baron.kh.ua';
 const KEY='mb-stats-token';
 /* SEL — що дивимось: {days:N} — останні N днів, або {from,to} — обране.
    Один день — from===to. */
-let token=null, DAYS=30, SEL={days:30}, PICK=null;
+/* BY — за яким днем рахуємо: коли замовили чи коли видавати (тоді видно
+   й наперед); VIEW — статистика чи список замовлень */
+let token=null, DAYS=30, SEL={days:30}, PICK=null, BY='created', VIEW='stats';
+try{ BY=localStorage.getItem('mb-stats-by')==='slot'?'slot':'created'; VIEW=localStorage.getItem('mb-stats-view')==='orders'?'orders':'stats' }catch(e){}
 try{ token=localStorage.getItem(KEY); DAYS=+localStorage.getItem('mb-stats-days')||30; SEL={days:DAYS} }catch(e){}
 /* Дати — рядками «2026-09-30»; рахуємо в UTC, щоб годинник телефона не зсунув день */
 const dAdd=(d,n)=>{const [y,m,dd]=d.split('-').map(Number);return new Date(Date.UTC(y,m-1,dd+n)).toISOString().slice(0,10)};
@@ -198,6 +233,7 @@ function render(s){
   const one=s.from===s.to;
   $('sub').textContent=`Мʼясний Барон · замовлення з сайту · ${one?dm(s.from):dm(s.from)+' — '+dm(s.to)}`;
   paintDayHd(s); paintPick();
+  if(VIEW==='orders') return renderOrdersView(s);
   if(!c.n&&!c.canceled&&!f.visit){ $('out').innerHTML=`<p class="empty">${one?'Цього дня замовлень із сайту не було.':'За цей період замовлень із сайту ще не було.'}</p>`; return }
 
   $('out').innerHTML=`
@@ -210,24 +246,20 @@ function render(s){
     ${tile('Скасовано',c.canceled,c.n+c.canceled?`${pct(c.canceled,c.n+c.canceled)} замовлень`:'')}
   </div>
 
-  <div class="card funnel">
+  ${s.by==='slot'?'':`<div class="card funnel">
     <h2>Від заходу до замовлення</h2>
     <p class="note">Скільки візитів дійшли до кожного кроку.${s.hitsSince?` Лічильник працює з ${dm(s.hitsSince)} — раніші дні тут порожні.`:' Лічильник щойно увімкнено — цифри зʼявляться з першими відвідувачами.'}</p>
     ${frow('Зайшли',f.visit,0,'')}
     ${frow('Кошик',f.cart,f.visit,f.visit?pct(f.cart,f.visit)+' від заходів':'')}
     ${frow('Оформлення',f.checkout,f.cart,f.cart?pct(f.checkout,f.cart)+' від кошика':'')}
     ${frow('Замовили',f.orders,f.checkout,f.checkout?pct(f.orders,f.checkout)+' від оформлення':'')}
-  </div>
+  </div>`}
 
   ${one?'':`<div class="card"><h2>Виручка по днях</h2><p class="note">Вихідні блідіші. Торкніться стовпчика — відкриється цей день.</p>
     ${bars(daysBars('sum'),{labelEvery:every,fmt:money,dim:weekend})}</div>
   <div class="card"><h2>Замовлень по днях</h2>
     ${bars(daysBars('n'),{labelEvery:every,h:120,dim:weekend})}</div>`}
-  ${one?`<div class="card"><h2>Замовлення за день</h2><p class="note">Від ранніх до пізніх. Час — коли оформили, у дужках — на коли.</p>
-    ${(s.orders||[]).map(o=>`<div class="ol${o.status==='canceled'?' off':''}"><b>№ ${o.no}</b>
-      <span>${hm(o.at)}${o.slotAt?' ('+(dayOfMs(o.slotAt)!==s.from?dm(dayOfMs(o.slotAt))+' ':'')+hm(o.slotAt)+')':''}</span>
-      <span class="m">${esc(o.nm)} · ${o.mode==='delivery'?'🚕':'🏪'}${o.fg?' · 🔥 '+kg(o.fg):''}</span>
-      <span class="r">${money2(o.total)}<br><small style="color:var(--smoke)">${esc(o.label)}</small></span></div>`).join('')||'<p class="note">Немає</p>'}</div>`:''}
+  ${one?`<p class="note" style="margin:12px 2px 0">Усі замовлення цього дня — на вкладці «🧾 Замовлення».</p>`:''}
 
   <div class="two">
     <div class="card"><h2>Коли замовляють</h2><p class="note">Година, коли натиснули «Підтвердити» на сайті</p>
@@ -268,6 +300,70 @@ function render(s){
       :'<p class="note">Скасувань не було 👍</p>'}</div>`;
 }
 
+/* ---------- вкладка «Замовлення» ----------
+   Усі замовлення обраного дня чи періоду, по днях. Торкнулись рядка —
+   розгортається все про замовлення. Власник так переглядає кожне й
+   позначає тестові коментарем («тест») — їх видно одразу (30.09). */
+const OPEN=new Set();
+let OQ='';
+const isTest=o=>/тест|test/i.test([o.note,...(o.adj||[]).map(a=>a.note)].join(' '));
+const dt=ms=>ms?new Date(ms).toLocaleString('uk-UA',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Kyiv'}):'—';
+const ADJ={note:'💬',add:'➕',sub:'➖',fact:'🧾',ship:'🚕',cancel:'✖️'};
+function orderDetail(o){
+  const line=l=>`<div class="dl"><span>${esc(l.name)} · ${l.unit==='вага'?kg(l.qty):l.qty+' шт'}${l.fry?' 🔥':''}</span><span>${money2(l.sum)}</span></div>`;
+  return `<div class="od">
+    <div class="dg"><span>Оформили</span><b>${dt(o.at)}</b></div>
+    <div class="dg"><span>На коли</span><b>${dt(o.slotAt)}</b></div>
+    <div class="dg"><span>Клієнт</span><b>${esc(o.nm)} · <a href="tel:${esc(o.tel)}">${esc(o.tel)}</a></b></div>
+    <div class="dg"><span>Отримання</span><b>${o.mode==='delivery'?'🚕 доставка'+(o.addr?' · '+esc(o.addr):''):'🏪 самовивіз'}</b></div>
+    <div class="dg"><span>Оплата</span><b>${o.pay==='card'?'картка на місці':'готівка'}</b></div>
+    <div class="dg"><span>Вхід через Telegram</span><b>${o.auth===true?'так':o.auth===false?'ні':'—'}</b></div>
+    ${o.note?`<div class="cm">💬 Коментар клієнта: ${esc(o.note)}</div>`:''}
+    <div class="dh">Склад</div>
+    ${(o.lines||[]).map(line).join('')}
+    ${o.fg?`<div class="dl"><span>Смаження · ${kg(o.fg)}</span><span></span></div>`:''}
+    ${o.ship?`<div class="dl"><span>Доставка</span><span>${money2(o.ship)}</span></div>`:''}
+    <div class="dl tot"><span>Разом${o.totalOrig!=null&&o.totalOrig!==o.total?` <small>(на сайті ${money2(o.totalOrig)})</small>`:''}</span><span>${money2(o.total)}</span></div>
+    ${(o.adj||[]).length?`<div class="dh">Зміни оператора</div>`+o.adj.map(a=>`<div class="ad">${ADJ[a.kind]||'•'} ${a.amount&&a.kind!=='note'&&a.kind!=='cancel'?'<b>'+money2(a.amount)+'</b> ':''}${esc(a.note||'')}
+      <small>${dt(a.at)}${a.by?' · '+esc(a.by):''}</small></div>`).join(''):''}
+  </div>`;
+}
+function renderOrders(s){
+  const q=OQ.trim().toLowerCase();
+  const all=s.orders||[];
+  const list=q?all.filter(o=>[o.no,o.nm,o.tel,o.note,...(o.adj||[]).map(a=>a.note),...(o.lines||[]).map(l=>l.name)].join(' ').toLowerCase().includes(q)):all;
+  const dayOf=o=>dayOfMs(s.by==='slot'?(o.slotAt||o.at):o.at);
+  const groups={};
+  for(const o of list){ (groups[dayOf(o)]=groups[dayOf(o)]||[]).push(o) }
+  const tests=all.filter(isTest).length;
+  const box=$('olist'); if(!box) return;
+  box.innerHTML=(list.length?Object.keys(groups).sort().map(d=>{
+      const g=groups[d], live=g.filter(o=>o.status!=='canceled');
+      return `<div class="dayg"><div class="dgh"><b>${WD[wdOf(d)]}, ${dm(d)}</b><span>${live.length} зам. · ${money(live.reduce((x,o)=>x+o.total,0))}</span></div>
+      ${g.map(o=>`<div class="orow${o.status==='canceled'?' off':''}${OPEN.has(o.no)?' open':''}" data-ono="${o.no}">
+        <div class="oh"><b>№ ${o.no}</b><span class="t">${hm(o.at)}${o.slotAt?' → '+(dayOfMs(o.slotAt)!==dayOfMs(o.at)?dm(dayOfMs(o.slotAt))+' ':'')+hm(o.slotAt):''}</span>
+          ${isTest(o)?'<span class="tb">ТЕСТ</span>':''}
+          <span class="r">${money2(o.total)}</span></div>
+        <div class="os">${esc(o.nm)} · ${o.mode==='delivery'?'🚕':'🏪'}${o.fg?' · 🔥 '+kg(o.fg):''} · ${esc(o.label)}${o.note?' · 💬':''}</div>
+        ${OPEN.has(o.no)?orderDetail(o):''}
+      </div>`).join('')}</div>`}).join('')
+    :`<p class="empty">${q?'Нічого не знайшли.':'Замовлень немає.'}</p>`)
+    +(s.ordersMore?`<p class="note">Показано 500 найсвіжіших, ще ${s.ordersMore} — оберіть коротший період.</p>`:'');
+  $('osum').textContent=`${all.length} замовлень${tests?` · тестових ${tests}`:''}${q?` · знайдено ${list.length}`:''}`;
+}
+function renderOrdersView(s){
+  $('out').innerHTML=`<div class="osearch"><input id="oq" type="search" placeholder="Пошук: номер, імʼя, телефон, «тест»…" autocomplete="off">
+    <div class="note" id="osum" style="margin-top:6px"></div></div><div id="olist"></div>`;
+  const i=$('oq'); i.value=OQ; i.oninput=()=>{ OQ=i.value; renderOrders(s) };
+  renderOrders(s);
+}
+document.addEventListener('click',e=>{
+  const r=e.target.closest&&e.target.closest('[data-ono]');
+  if(!r||e.target.closest('a')||e.target.closest('.od')) return;
+  const no=+r.dataset.ono; OPEN.has(no)?OPEN.delete(no):OPEN.add(no);
+  if(LAST) renderOrders(LAST);
+});
+
 /* Підказка на дотик і наведення: одна на всю сторінку */
 const tip=$('tip');
 function showTip(e){
@@ -287,7 +383,7 @@ async function load(){
   if(!token) return ask();
   paintPer();
   try{
-    const q=SEL.from?`from=${SEL.from}&to=${SEL.to}`:'days='+SEL.days;
+    const q=(SEL.from?`from=${SEL.from}&to=${SEL.to}`:'days='+SEL.days)+'&by='+BY;
     const r=await fetch(API+'/api/stats?'+q,{headers:{Authorization:'Bearer '+token}});
     const d=await r.json().catch(()=>({}));
     if(r.status===401){ token=null; try{localStorage.removeItem(KEY)}catch(e){} return ask('Доступ відкликано або він застарів.') }
@@ -298,6 +394,16 @@ async function load(){
 const hm=ms=>new Date(ms).toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Kyiv'});
 const dayOfMs=ms=>new Date(ms).toLocaleDateString('sv-SE',{timeZone:'Europe/Kyiv'});
 const TODAY=()=>(LAST&&LAST.today)||dayOfMs(Date.now());
+/* Останній день, який можна обрати: за днем видачі — два місяці наперед */
+const maxDay=()=>BY==='slot'?dAdd(TODAY(),60):TODAY();
+$('by').onclick=e=>{ const b=e.target.closest('[data-by]'); if(!b||b.dataset.by===BY) return;
+  BY=b.dataset.by; try{localStorage.setItem('mb-stats-by',BY)}catch(x){}
+  /* обраний день у майбутньому, а тепер рахуємо за днем замовлення — повертаємось на сьогодні */
+  if(BY==='created'&&SEL.from&&SEL.to>TODAY()) SEL={from:TODAY(),to:TODAY()};
+  go(SEL) };
+$('views').onclick=e=>{ const b=e.target.closest('[data-v]'); if(!b||b.dataset.v===VIEW) return;
+  VIEW=b.dataset.v; try{localStorage.setItem('mb-stats-view',VIEW)}catch(x){}
+  paintPer(); if(LAST) render(LAST) };
 function go(sel){ SEL=sel; $('out').innerHTML='<p class="empty">Завантажую…</p>'; window.scrollTo(0,0); load() }
 const oneDay=d=>go({from:d,to:d});
 
@@ -308,10 +414,14 @@ function paintPer(){
     const on= b.dataset.d ? (!SEL.from&&+b.dataset.d===SEL.days)
       : b.dataset.p==='today' ? (one&&SEL.from===t)
       : b.dataset.p==='yday' ? (one&&SEL.from===dAdd(t,-1))
-      : b.dataset.p==='pick' ? (!!PICK||(!!SEL.from&&!(one&&(SEL.from===t||SEL.from===dAdd(t,-1)))))
+      : b.dataset.p==='tmrw' ? (one&&SEL.from===dAdd(t,1))
+      : b.dataset.p==='pick' ? (!!PICK||(!!SEL.from&&!(one&&(SEL.from===t||SEL.from===dAdd(t,-1)||SEL.from===dAdd(t,1)))))
       : false;
-    b.classList.toggle('on',on);
+    b.classList.toggle('on',!!on);             // !! — інакше undefined перемикав би клас туди-сюди
   });
+  const tm=$('per').querySelector('[data-p="tmrw"]'); if(tm) tm.hidden=BY!=='slot';
+  $('by').querySelectorAll('[data-by]').forEach(b=>b.classList.toggle('on',b.dataset.by===BY));
+  $('views').querySelectorAll('[data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===VIEW));
 }
 /* Один день — стрілки на сусідні */
 function paintDayHd(s){
@@ -319,7 +429,7 @@ function paintDayHd(s){
   if(s.from!==s.to){ el.innerHTML=''; return }
   el.innerHTML=`<div class="dayhd"><button data-step="-1" aria-label="Попередній день">‹</button>
     <b>${WD[wdOf(s.from)]}, ${dm(s.from)}${s.from===s.today?' · сьогодні':''}</b>
-    <button data-step="1" ${s.from>=s.today?'disabled':''} aria-label="Наступний день">›</button></div>`;
+    <button data-step="1" ${s.from>=maxDay()?'disabled':''} aria-label="Наступний день">›</button></div>`;
   el.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>oneDay(dAdd(s.from,+b.dataset.step)));
 }
 /* Календар: перший дотик — цей день, другий — період між ними */
@@ -335,7 +445,7 @@ function paintPick(){
   const a=SEL.from||'', b=SEL.to||'';
   for(let d=d1; d<=lastD; d=dAdd(d,1)){
     const cls=[a&&d>=a&&d<=b?'in':'', d===a||d===b?'end':'', d===t?'today':''].join(' ');
-    g+=`<button class="d ${cls}" data-pd="${d}" ${d>t?'disabled':''}>${+d.slice(8)}</button>`;
+    g+=`<button class="d ${cls}" data-pd="${d}" ${d>maxDay()?'disabled':''}>${+d.slice(8)}</button>`;
   }
   const prevM=dAdd(d1,-1).slice(0,7), nextM=dAdd(lastD,1).slice(0,7);
   el.innerHTML=`<div class="pick"><div class="ph"><button data-pm="${prevM}">‹</button><b>${MON[mo-1]} ${y}</b>
@@ -362,6 +472,7 @@ $('per').onclick=e=>{
   if(b.dataset.d){ DAYS=+b.dataset.d; try{localStorage.setItem('mb-stats-days',DAYS)}catch(x){}; return go({days:DAYS}) }
   if(b.dataset.p==='today') return oneDay(TODAY());
   if(b.dataset.p==='yday') return oneDay(dAdd(TODAY(),-1));
+  if(b.dataset.p==='tmrw') return oneDay(dAdd(TODAY(),1));
 };
 /* Стовпчик дня на графіку — відкрити цей день */
 document.addEventListener('click',e=>{

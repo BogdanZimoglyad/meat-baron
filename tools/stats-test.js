@@ -12,7 +12,7 @@ const code = [
   cut(/const kyivDate = \(ts = Date\.now\(\)\) =>[\s\S]*?const futureDay = o => [^\n]*/),
   cut(/function dayStats\(shop, day\) \{[\s\S]*?\n\}/),
   cut(/function dayText\(shop, day\) \{[\s\S]*?\n\}/),
-  cut(/function statsRange\(shopList, from, to\) \{[\s\S]*?\n\}/),
+  cut(/function statsRange\([^)]*\) \{[\s\S]*?\n\}/),
   cut(/const cmp = \(a, b\) => \{[\s\S]*?\n\};/),
   cut(/function statsText\(shopList, days, title\) \{[\s\S]*?\n\}/)
 ].join('\n');

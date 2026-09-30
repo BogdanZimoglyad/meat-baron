@@ -1148,9 +1148,11 @@ const isOwner = msg => !!OWNER_ID && msg.from && msg.from.id === OWNER_ID;
 const kyivHour = ms => Number(new Date(ms)
   .toLocaleString('en-US', { timeZone: 'Europe/Kyiv', hour: 'numeric', hour12: false }));
 
-function statsRange(shopList, from, to) {
+/* at — за яким часом відносимо замовлення до дня: за замовчуванням коли
+   оформили (/week, /month); сторінка статистики вміє ще й за днем видачі. */
+function statsRange(shopList, from, to, at = o => o.createdAt || 0) {
   const list = Object.values(db.orders).filter(o =>
-    shopList.includes(o.shop) && (o.createdAt || 0) >= from && (o.createdAt || 0) < to);
+    shopList.includes(o.shop) && at(o) >= from && at(o) < to);
   const live = list.filter(o => o.status !== CANCELED);
   const sum = live.reduce((s, o) => s + (o.total || 0), 0);
   const items = {}, hours = {};
@@ -1299,27 +1301,31 @@ app.post('/api/hit', (req, res) => {
 const dayAdd = (day, n) => { const [y, m, d] = day.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10) };
 
 /* Уся статистика з fromDay по toDay включно — по днях за Києвом.
-   Один день — ще й список його замовлень (власник хоче дивитись по днях
-   і обирати дні календарем, 30.09). */
-function statsPage(shopList, fromDay, toDay) {
+   by='created' — за днем, коли замовили (як /week); by='slot' — за днем
+   видачі: тоді видно й замовлення наперед (власник, 30.09). Разом —
+   список замовлень періоду з усіма подробицями: власник переглядає
+   кожне окремо й позначає тестові коментарем. */
+function statsPage(shopList, fromDay, toDay, by = 'created') {
+  const at = by === 'slot' ? (o => o.slotAt || o.createdAt || 0) : (o => o.createdAt || 0);
   const today = kyivDate();
   const dayKeys = [];
   for (let d = fromDay; d <= toDay && dayKeys.length < 400; d = dayAdd(d, 1)) dayKeys.push(d);
   const now = Date.now();
-  const from = kyivMs(fromDay, 0, 0), to = Math.min(now, kyivMs(dayAdd(toDay, 1), 0, 0));
+  const end = kyivMs(dayAdd(toDay, 1), 0, 0);
+  const from = kyivMs(fromDay, 0, 0), to = by === 'slot' ? end : Math.min(now, end);
   const span = Math.max(1, to - from);
-  const cur = statsRange(shopList, from, to);
-  const prev = statsRange(shopList, from - span, from);
+  const cur = statsRange(shopList, from, to, at);
+  const prev = statsRange(shopList, from - span, from, at);
 
   const inRange = Object.values(db.orders).filter(o =>
-    shopList.includes(o.shop) && (o.createdAt || 0) >= from && (o.createdAt || 0) < to);
+    shopList.includes(o.shop) && at(o) >= from && at(o) < to);
   const live = inRange.filter(o => o.status !== CANCELED);
 
   /* по днях */
   const perDay = {};
   for (const d of dayKeys) perDay[d] = { day: d, n: 0, sum: 0, canceled: 0, ...((db.hits || {})[d] || {}) };
   for (const o of inRange) {
-    const x = perDay[kyivDate(o.createdAt)];
+    const x = perDay[kyivDate(at(o))];
     if (!x) continue;
     if (o.status === CANCELED) { x.canceled++; continue }
     x.n++; x.sum = kop(x.sum + (o.total || 0));
@@ -1383,7 +1389,7 @@ function statsPage(shopList, fromDay, toDay) {
     approx: live.some(o => o.auth === undefined)
   };
   return {
-    ok: true, days: dayKeys.length, from: fromDay, to: toDay, today,
+    ok: true, days: dayKeys.length, from: fromDay, to: toDay, today, by,
     /* з якого дня взагалі є замовлення — нижня межа календаря */
     first: kyivDate(Math.min(now, ...Object.values(db.orders).filter(o => shopList.includes(o.shop)).map(o => o.createdAt || now))),
     cur: { ...cur, items: undefined, hours: undefined },
@@ -1398,11 +1404,18 @@ function statsPage(shopList, fromDay, toDay) {
     hitsSince: Object.keys(db.hits || {}).sort()[0] || '',
     tg,
     cancels,
-    /* Один день — усі його замовлення, від ранніх до пізніх */
-    orders: dayKeys.length === 1 ? inRange.sort((a, b) => a.createdAt - b.createdAt).map(o => ({
-      no: o.no, at: o.createdAt, slotAt: o.slotAt || 0, nm: o.nm || '', mode: o.mode,
-      total: o.total || 0, status: o.status, label: LABEL[o.status] || o.status, fg: o.fry ? (o.fg || 0) : 0
-    })) : []
+    /* Усі замовлення періоду — від ранніх до пізніх, не більше 500
+       найсвіжіших. Повністю: власник переглядає кожне окремо. */
+    ordersMore: Math.max(0, inRange.length - 500),
+    orders: inRange.sort((a, b) => at(a) - at(b)).slice(-500).map(o => ({
+      no: o.no, at: o.createdAt, slotAt: o.slotAt || 0, nm: o.nm || '', tel: o.tel || '',
+      mode: o.mode, addr: o.addr || '', pay: o.pay || 'cash', auth: o.auth,
+      total: o.total || 0, totalOrig: o.totalOrig, ship: o.ship || 0,
+      status: o.status, label: LABEL[o.status] || o.status, fg: o.fry ? (o.fg || 0) : 0,
+      note: o.note || '',
+      lines: (o.lines || []).map(l => ({ name: lineTitle(l), qty: l.g, unit: l.unit, sum: l.sum || 0, fry: !!l.fry })),
+      adj: adjustmentsOf(o).map(a => ({ kind: a.kind, amount: a.amount || 0, note: a.note || '', by: a.by || '', at: a.at || 0 }))
+    }))
   };
 }
 
@@ -1413,13 +1426,16 @@ app.get('/api/stats', (req, res) => {
   }
   /* Або from/to (обрані в календарі), або «останні N днів» */
   const today = kyivDate();
+  const by = req.query.by === 'slot' ? 'slot' : 'created';
   let to = DAY_RE.test(String(req.query.to || '')) ? String(req.query.to) : today;
   let from = DAY_RE.test(String(req.query.from || '')) ? String(req.query.from) : '';
-  if (to > today) to = today;
+  /* За днем видачі можна дивитись і вперед — там замовлення наперед */
+  const maxTo = by === 'slot' ? dayAdd(today, 60) : today;
+  if (to > maxTo) to = maxTo;
   if (!from) from = dayAdd(to, 1 - Math.min(366, Math.max(1, Math.floor(Number(req.query.days) || 30))));
   if (from > to) [from, to] = [to, from];
   if (dayAdd(from, 366) < to) from = dayAdd(to, -365);             // не більше року за раз
-  res.json(statsPage(SHOPS.map((_, i) => i), from, to));
+  res.json(statsPage(SHOPS.map((_, i) => i), from, to, by));
 });
 
 /* ---------- щоденна копія бази ----------
