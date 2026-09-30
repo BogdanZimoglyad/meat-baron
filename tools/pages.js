@@ -105,15 +105,16 @@ display:grid;place-items:center;min-height:100vh;text-align:center}a{color:#e04a
 
 /* Картка бізнесу для Google (schema.org) і sitemap.xml. Магазини беремо з
    того самого SHOPS_ALL, що й сайт, — копія адрес розійшлась би з ним.
-   Години знаємо лише для точки, що приймає замовлення з сайту; для
-   решти не вигадуємо (власник, 30.09). */
+   Години (власник, 30.09): усі пн–сб 8–20, нд 8–19; точки на ринках —
+   Кінний (Захисників України) і Центральний (Різдвяна) — у неділю й
+   понеділок до 18:00. */
 (function stampSeo() {
   const org = { '@type': 'Organization', '@id': SITE + '/#org', name: 'Мʼясний Барон', url: SITE + '/',
     logo: SITE + '/logo-square.png', sameAs: ['https://www.instagram.com/meat.baron_/'] };
-  const hours = [
-    { '@type': 'OpeningHoursSpecification', dayOfWeek: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], opens: '08:00', closes: '20:00' },
-    { '@type': 'OpeningHoursSpecification', dayOfWeek: 'Sunday', opens: '08:00', closes: '19:00' }
-  ];
+  const H = (days, closes) => ({ '@type': 'OpeningHoursSpecification', dayOfWeek: days, opens: '08:00', closes });
+  const hours = [H(['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], '20:00'), H('Sunday', '19:00')];
+  const MARKET = new Set(['м-н Захисників України 7/8', 'вул. Різдвяна 16/22']);
+  const marketHours = [H(['Tuesday','Wednesday','Thursday','Friday','Saturday'], '20:00'), H(['Sunday','Monday'], '18:00')];
   const shops = CAT.SHOPS_ALL.map((s, i) => ({
     '@type': 'Store', '@id': SITE + '/#shop' + (i + 1),
     name: 'Мʼясний Барон — ' + s[0],
@@ -122,7 +123,8 @@ display:grid;place-items:center;min-height:100vh;text-align:center}a{color:#e04a
     ...(s[1] ? { telephone: s[1] } : {}),
     url: SITE + '/',
     image: SITE + '/logo-square.png',
-    ...(s[2] ? { openingHoursSpecification: hours, hasMenu: SITE + '/' } : {})
+    openingHoursSpecification: MARKET.has(s[0]) ? marketHours : hours,
+    ...(s[2] ? { hasMenu: SITE + '/' } : {})
   }));
   const json = JSON.stringify({ '@context': 'https://schema.org', '@graph': [org, ...shops] });
   const file = path.join(root, 'index.html');
