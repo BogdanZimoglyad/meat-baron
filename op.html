@@ -265,6 +265,15 @@ button{font:inherit;cursor:pointer;border:none}
 .focus-h button{min-height:48px;padding:0 18px;border-radius:12px;background:var(--coal);
   border:1px solid var(--line-2);color:var(--bone);font-size:16px}
 .focus-h span{color:var(--smoke);font-size:15px}
+/* Картку в списку можна натиснути пальцем — відкриється сама, на весь
+   екран (оператори, 30.09): з одним замовленням працюють, решта заважає */
+.grid:not(.one) .card{cursor:pointer}
+.grid.one{grid-template-columns:minmax(0,820px)}
+.grid.one .hd .no{font-size:30px}
+.grid.one .hd .time{font-size:24px}
+.grid.one .ln{font-size:19px;padding:3px 0}
+.grid.one .meta{font-size:17px}
+.grid.one .sum b{font-size:32px}
 .dsum{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:15px}
 .dsum b{font-size:17px}
 .crow{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14.5px;
@@ -490,8 +499,8 @@ function draw(d){
      є (тоді й кнопки актуальні), інакше та, що прийшла з календаря */
   const fo=FOCUS&&(d.orders.find(o=>o.no===FOCUS.no)||FOCUS.copy);
   const body= fo
-    ? `<div class="focus-h"><button data-unfocus="1">← ${FOCUS.from==='cal'?'Назад до календаря':'Назад'}</button>
-         <span>📅 ${esc(FOCUS.label)}</span></div><div class="grid">${card(fo,now)}</div>`
+    ? `<div class="focus-h"><button data-unfocus="1">← ${FOCUS.from==='cal'?'Назад до календаря':'Назад до всіх'}</button>
+         ${FOCUS.label?`<span>📅 ${esc(FOCUS.label)}</span>`:''}</div><div class="grid one">${card(fo,now)}</div>`
     : grp==='new'  ? sect('Нові — прийняти в роботу','hot',g[0],now)||E
     : grp==='work' ? sect('У роботі','',g[1],now)||E
     : grp==='later'? sect('Чекають свого дня','later',g[2],now)||E
@@ -508,6 +517,13 @@ function draw(d){
   w.innerHTML=dayStrip(d.day)+`<div class="board">${side}<div class="main">${body}</div>
     <aside class="rside" id="rcal">${rcalHtml()}</aside></div>`;
   bindRcal();
+  if(!FOCUS) w.querySelectorAll('.main [data-card]').forEach(c=>c.onclick=e=>{
+    if(e.target.closest('button,a,input,textarea,select,label,.form,.more')) return;
+    const o=d.orders.find(x=>x.no===+c.dataset.card);
+    if(!o) return;
+    FOCUS={no:o.no, copy:o, from:'orders', label:''};
+    form=null; draw(d); window.scrollTo(0,0);
+  });
   const uf=w.querySelector('[data-unfocus]');
   if(uf) uf.onclick=()=>{ const from=FOCUS.from; FOCUS=null; form=null; if(from==='cal') setView('cal'); else draw(d) };
   w.querySelectorAll('[data-grp]').forEach(b=>b.onclick=()=>{
@@ -590,7 +606,7 @@ function card(o,now){
   const nagged=typeof NAGGED!=='undefined'&&NAGGED.has(o.no);
   const cls=(o.status==='new'?'new':o.status==='ready'?'ready':late?'late':'')+(nagged?' nag':'');
   const when=o.slotAt? hhmm(o.slotAt) : 'якнайшвидше';
-  return `<article class="card ${cls}">
+  return `<article class="card ${cls}" data-card="${o.no}">
     <div class="hd">
       <span class="no">№ ${o.no}</span>
       <span class="st">${esc(o.label)}</span>
