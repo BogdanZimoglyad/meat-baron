@@ -26,6 +26,30 @@ h1{font-size:20px;margin:0}
 .per button{min-height:40px;padding:0 14px;border-radius:999px;background:var(--coal);border:1px solid var(--line-2);
   color:var(--bone);font-size:14px}
 .per button.on{background:var(--ember);border-color:var(--ember);color:#fff;font-weight:600}
+/* день: ‹ Ср, 30.09 › */
+.dayhd{display:flex;align-items:center;gap:10px;margin:0 0 14px}
+.dayhd b{flex:1;text-align:center;font-size:18px}
+.dayhd button{min-width:52px;min-height:44px;border-radius:12px;background:var(--coal);border:1px solid var(--line-2);color:var(--bone);font-size:20px}
+.dayhd button:disabled{opacity:.3}
+/* календар вибору днів */
+.pick{background:var(--coal);border:1px solid var(--line);border-radius:14px;padding:12px;margin:0 0 14px}
+.pick .ph{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.pick .ph b{flex:1;text-align:center}
+.pick .ph button{min-width:44px;min-height:40px;border-radius:10px;background:var(--char);border:1px solid var(--line-2);color:var(--bone);font-size:18px}
+.pick .g{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.pick .wd{text-align:center;color:var(--smoke);font-size:12px}
+.pick .d{min-height:42px;border-radius:9px;background:var(--char);border:1px solid var(--line);color:var(--bone);font-size:15px}
+.pick .d:disabled{opacity:.25}
+.pick .d.in{background:rgba(196,52,42,.3);border-color:rgba(224,74,60,.5)}
+.pick .d.end{background:var(--ember);border-color:var(--ember);color:#fff;font-weight:700}
+.pick .d.today{box-shadow:inset 0 0 0 1px var(--smoke)}
+.pick .hint{color:var(--smoke);font-size:12.5px;margin-top:8px}
+.ol{font-size:14px;padding:8px 0;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:baseline}
+.ol b{font-variant-numeric:tabular-nums}
+.ol .m{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--smoke)}
+.ol .r{text-align:right;white-space:nowrap}
+.ol.off{opacity:.5}
+.chart rect.hit[data-day]{cursor:pointer}
 .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 @media(min-width:720px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .tile{background:var(--coal);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
@@ -73,9 +97,13 @@ td:first-child{max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:no
 <div class="wrap">
   <div class="top"><h1>📈 Статистика</h1><span class="sub" id="sub">Мʼясний Барон · замовлення з сайту</span></div>
   <div class="per" id="per">
+    <button data-p="today">Сьогодні</button><button data-p="yday">Вчора</button>
     <button data-d="7">7 днів</button><button data-d="30" class="on">30 днів</button>
     <button data-d="90">90 днів</button><button data-d="365">Рік</button>
+    <button data-p="pick">📅 Обрати</button>
   </div>
+  <div id="pick"></div>
+  <div id="dayhd"></div>
   <div id="out"><p class="empty">Завантажую…</p></div>
 </div>
 <div id="tip"></div>
@@ -85,8 +113,13 @@ td:first-child{max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:no
    памʼятає його. Цифри рахує сервер тим самим statsRange, що й /week. */
 const API='https://api.meat-baron.kh.ua';
 const KEY='mb-stats-token';
-let token=null, DAYS=30;
-try{ token=localStorage.getItem(KEY); DAYS=+localStorage.getItem('mb-stats-days')||30 }catch(e){}
+/* SEL — що дивимось: {days:N} — останні N днів, або {from,to} — обране.
+   Один день — from===to. */
+let token=null, DAYS=30, SEL={days:30}, PICK=null;
+try{ token=localStorage.getItem(KEY); DAYS=+localStorage.getItem('mb-stats-days')||30; SEL={days:DAYS} }catch(e){}
+/* Дати — рядками «2026-09-30»; рахуємо в UTC, щоб годинник телефона не зсунув день */
+const dAdd=(d,n)=>{const [y,m,dd]=d.split('-').map(Number);return new Date(Date.UTC(y,m-1,dd+n)).toISOString().slice(0,10)};
+const MON=['Січень','Лютий','Березень','Квітень','Травень','Червень','Липень','Серпень','Вересень','Жовтень','Листопад','Грудень'];
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const money=n=>Math.round(n).toLocaleString('uk-UA').replace(/ /g,' ')+' ₴';
@@ -132,7 +165,7 @@ function bars(vals,{h=150,labelEvery=1,fmt=v=>v,dim=()=>false,half=false}={}){
       g+=`<path fill="${dim(x)?'var(--bar-dim)':'var(--bar)'}" d="M${bx},${h-padB} V${top+r} Q${bx},${top} ${bx+r},${top} H${bx+w-r} Q${bx+w},${top} ${bx+w},${top+r} V${h-padB} Z"/>`;
     }
     if(i%labelEvery===0) g+=`<text x="${bx+w/2}" y="${h-4}" text-anchor="middle">${esc(x.x)}</text>`;
-    g+=`<rect class="hit" x="${i*bw}" y="0" width="${bw}" height="${h}" data-tip="${esc(x.t)}"/>`;
+    g+=`<rect class="hit" x="${i*bw}" y="0" width="${bw}" height="${h}" data-tip="${esc(x.t)}"${x.day?` data-day="${x.day}"`:''}/>`;
   });
   return `<svg class="chart" width="${W}" height="${h}" viewBox="0 0 ${W} ${h}">${g}</svg>`;
 }
@@ -148,7 +181,7 @@ function render(s){
   /* підписів днів — стільки, скільки влазить: приблизно на кожні 34 px */
   const every=Math.max(1,Math.ceil(s.perDay.length/Math.floor(cw()/34)));
   const daysBars=key=>s.perDay.map(x=>({x:dm(x.day), v:x[key]||0,
-    t:`${WD[wdOf(x.day)]}, ${dm(x.day)} · `+(key==='sum'?money2(x.sum):`${x.n} зам.`)+(x.canceled?` · скасовано ${x.canceled}`:''), day:x.day}));
+    t:`${WD[wdOf(x.day)]}, ${dm(x.day)} · `+(key==='sum'?money2(x.sum):`${x.n} зам.`)+(x.canceled?` · скасовано ${x.canceled}`:'')+' · торкніться — відкрити день', day:x.day}));
   const weekend=x=>{const w=wdOf(x.day);return w===0||w===6};
   /* замовляють і вночі — там усі 24 години; забирають лише в години точки */
   const hours=(obj,h0=7,h1=21)=>{ const out=[]; for(let h=h0;h<=h1;h++) out.push({x:h, v:obj[h]||0, t:`${String(h).padStart(2,'0')}:00–${String(h+1).padStart(2,'0')}:00 · ${obj[h]||0} зам.`}); return out };
@@ -162,8 +195,10 @@ function render(s){
   const split=(a,b,la,lb)=>(a+b)?`<div class="split"><i style="flex:${a}"></i><i style="flex:${b}"></i></div>
     <div class="split-l"><span>${la} · ${a} (${pct(a,a+b)})</span><span>${lb} · ${b} (${pct(b,a+b)})</span></div>`:'<p class="note">Немає даних</p>';
 
-  $('sub').textContent=`Мʼясний Барон · замовлення з сайту · ${dm(s.from)} — ${dm(s.to)}`;
-  if(!c.n&&!c.canceled&&!f.visit){ $('out').innerHTML='<p class="empty">За цей період замовлень із сайту ще не було.</p>'; return }
+  const one=s.from===s.to;
+  $('sub').textContent=`Мʼясний Барон · замовлення з сайту · ${one?dm(s.from):dm(s.from)+' — '+dm(s.to)}`;
+  paintDayHd(s); paintPick();
+  if(!c.n&&!c.canceled&&!f.visit){ $('out').innerHTML=`<p class="empty">${one?'Цього дня замовлень із сайту не було.':'За цей період замовлень із сайту ще не було.'}</p>`; return }
 
   $('out').innerHTML=`
   <div class="tiles">
@@ -184,10 +219,15 @@ function render(s){
     ${frow('Замовили',f.orders,f.checkout,f.checkout?pct(f.orders,f.checkout)+' від оформлення':'')}
   </div>
 
-  <div class="card"><h2>Виручка по днях</h2><p class="note">Вихідні блідіші. Торкніться стовпчика — покаже суму.</p>
+  ${one?'':`<div class="card"><h2>Виручка по днях</h2><p class="note">Вихідні блідіші. Торкніться стовпчика — відкриється цей день.</p>
     ${bars(daysBars('sum'),{labelEvery:every,fmt:money,dim:weekend})}</div>
   <div class="card"><h2>Замовлень по днях</h2>
-    ${bars(daysBars('n'),{labelEvery:every,h:120,dim:weekend})}</div>
+    ${bars(daysBars('n'),{labelEvery:every,h:120,dim:weekend})}</div>`}
+  ${one?`<div class="card"><h2>Замовлення за день</h2><p class="note">Від ранніх до пізніх. Час — коли оформили, у дужках — на коли.</p>
+    ${(s.orders||[]).map(o=>`<div class="ol${o.status==='canceled'?' off':''}"><b>№ ${o.no}</b>
+      <span>${hm(o.at)}${o.slotAt?' ('+(dayOfMs(o.slotAt)!==s.from?dm(dayOfMs(o.slotAt))+' ':'')+hm(o.slotAt)+')':''}</span>
+      <span class="m">${esc(o.nm)} · ${o.mode==='delivery'?'🚕':'🏪'}${o.fg?' · 🔥 '+kg(o.fg):''}</span>
+      <span class="r">${money2(o.total)}<br><small style="color:var(--smoke)">${esc(o.label)}</small></span></div>`).join('')||'<p class="note">Немає</p>'}</div>`:''}
 
   <div class="two">
     <div class="card"><h2>Коли замовляють</h2><p class="note">Година, коли натиснули «Підтвердити» на сайті</p>
@@ -195,7 +235,7 @@ function render(s){
     <div class="card"><h2>Коли забирають</h2><p class="note">Година видачі — навантаження на точку й мангал</p>
       ${bars(hours(s.pickupHours||{}),{h:120,half:true})}</div>
   </div>
-  <div class="card"><h2>Дні тижня</h2><p class="note">Замовлень на день видачі</p>${bars(wk,{h:110})}</div>
+  ${one?'':`<div class="card"><h2>Дні тижня</h2><p class="note">Замовлень на день видачі</p>${bars(wk,{h:110})}</div>`}
 
   <div class="card"><h2>Що беруть</h2><p class="note">За виручкою. «Замовлень» — у скількох замовленнях була позиція.</p>
     ${s.top.length?`<table><tr><th>Позиція</th><th>Замовлень</th><th>Кількість</th><th>Сума</th></tr>
@@ -233,17 +273,89 @@ function ask(msg){
 }
 async function load(){
   if(!token) return ask();
-  $('per').querySelectorAll('button').forEach(b=>b.classList.toggle('on',+b.dataset.d===DAYS));
+  paintPer();
   try{
-    const r=await fetch(API+'/api/stats?days='+DAYS,{headers:{Authorization:'Bearer '+token}});
+    const q=SEL.from?`from=${SEL.from}&to=${SEL.to}`:'days='+SEL.days;
+    const r=await fetch(API+'/api/stats?'+q,{headers:{Authorization:'Bearer '+token}});
     const d=await r.json().catch(()=>({}));
     if(r.status===401){ token=null; try{localStorage.removeItem(KEY)}catch(e){} return ask('Доступ відкликано або він застарів.') }
     if(!r.ok||!d.ok) throw new Error(d.error||'');
     render(d);
   }catch(e){ $('out').innerHTML='<p class="empty">Немає звʼязку з сервером. Спробуйте пізніше.</p>' }
 }
-$('per').onclick=e=>{ const b=e.target.closest('[data-d]'); if(!b) return;
-  DAYS=+b.dataset.d; try{localStorage.setItem('mb-stats-days',DAYS)}catch(x){}; $('out').innerHTML='<p class="empty">Завантажую…</p>'; load() };
+const hm=ms=>new Date(ms).toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Kyiv'});
+const dayOfMs=ms=>new Date(ms).toLocaleDateString('sv-SE',{timeZone:'Europe/Kyiv'});
+const TODAY=()=>(LAST&&LAST.today)||dayOfMs(Date.now());
+function go(sel){ SEL=sel; $('out').innerHTML='<p class="empty">Завантажую…</p>'; window.scrollTo(0,0); load() }
+const oneDay=d=>go({from:d,to:d});
+
+/* Підсвічуємо кнопку, що відповідає поточному вибору */
+function paintPer(){
+  const t=TODAY(), one=SEL.from&&SEL.from===SEL.to;
+  $('per').querySelectorAll('button').forEach(b=>{
+    const on= b.dataset.d ? (!SEL.from&&+b.dataset.d===SEL.days)
+      : b.dataset.p==='today' ? (one&&SEL.from===t)
+      : b.dataset.p==='yday' ? (one&&SEL.from===dAdd(t,-1))
+      : b.dataset.p==='pick' ? (!!PICK||(!!SEL.from&&!(one&&(SEL.from===t||SEL.from===dAdd(t,-1)))))
+      : false;
+    b.classList.toggle('on',on);
+  });
+}
+/* Один день — стрілки на сусідні */
+function paintDayHd(s){
+  const el=$('dayhd');
+  if(s.from!==s.to){ el.innerHTML=''; return }
+  el.innerHTML=`<div class="dayhd"><button data-step="-1" aria-label="Попередній день">‹</button>
+    <b>${WD[wdOf(s.from)]}, ${dm(s.from)}${s.from===s.today?' · сьогодні':''}</b>
+    <button data-step="1" ${s.from>=s.today?'disabled':''} aria-label="Наступний день">›</button></div>`;
+  el.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>oneDay(dAdd(s.from,+b.dataset.step)));
+}
+/* Календар: перший дотик — цей день, другий — період між ними */
+function paintPick(){
+  const el=$('pick');
+  if(!PICK){ el.innerHTML=''; return }
+  const t=TODAY(), first=(LAST&&LAST.first)||'2026-09-01', m=PICK.month;
+  const [y,mo]=m.split('-').map(Number);
+  const d1=m+'-01', lastD=dAdd(dAdd(m+'-01',32).slice(0,7)+'-01',-1);
+  const lead=(wdOf(d1)+6)%7;
+  let g=['Пн','Вт','Ср','Чт','Пт','Сб','Нд'].map(w=>`<div class="wd">${w}</div>`).join('');
+  for(let i=0;i<lead;i++) g+='<div></div>';
+  const a=SEL.from||'', b=SEL.to||'';
+  for(let d=d1; d<=lastD; d=dAdd(d,1)){
+    const cls=[a&&d>=a&&d<=b?'in':'', d===a||d===b?'end':'', d===t?'today':''].join(' ');
+    g+=`<button class="d ${cls}" data-pd="${d}" ${d>t?'disabled':''}>${+d.slice(8)}</button>`;
+  }
+  const prevM=dAdd(d1,-1).slice(0,7), nextM=dAdd(lastD,1).slice(0,7);
+  el.innerHTML=`<div class="pick"><div class="ph"><button data-pm="${prevM}">‹</button><b>${MON[mo-1]} ${y}</b>
+    <button data-pm="${nextM}" ${nextM>t.slice(0,7)?'disabled':''}>›</button></div>
+    <div class="g">${g}</div>
+    <div class="hint">${PICK.anchor?'Торкніться ще одного дня — покажемо період між ними. Або лишіть один день.':'Торкніться дня — покажемо його. Потім ще одного — буде період.'}${first<t?' Замовлення з сайту є з '+dm(first)+'.':''}</div></div>`;
+  el.querySelectorAll('[data-pm]').forEach(x=>x.onclick=()=>{ PICK.month=x.dataset.pm; paintPick() });
+  el.querySelectorAll('[data-pd]').forEach(x=>x.onclick=()=>{
+    const d=x.dataset.pd;
+    if(PICK.anchor&&PICK.anchor!==d){
+      const [f2,t2]=PICK.anchor<d?[PICK.anchor,d]:[d,PICK.anchor];
+      PICK.anchor=''; go({from:f2,to:t2});
+    }else{ PICK.anchor=d; go({from:d,to:d}) }
+  });
+}
+
+$('per').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  if(b.dataset.p==='pick'){
+    PICK=PICK?null:{month:(SEL.from||TODAY()).slice(0,7),anchor:''};
+    paintPick(); paintPer(); return;
+  }
+  PICK=null; paintPick();
+  if(b.dataset.d){ DAYS=+b.dataset.d; try{localStorage.setItem('mb-stats-days',DAYS)}catch(x){}; return go({days:DAYS}) }
+  if(b.dataset.p==='today') return oneDay(TODAY());
+  if(b.dataset.p==='yday') return oneDay(dAdd(TODAY(),-1));
+};
+/* Стовпчик дня на графіку — відкрити цей день */
+document.addEventListener('click',e=>{
+  const r=e.target.closest&&e.target.closest('[data-day]');
+  if(r) oneDay(r.dataset.day);
+});
 
 (async function(){
   const code=location.hash.replace(/^#/,'').trim();

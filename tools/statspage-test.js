@@ -14,7 +14,8 @@ const code = [
   cut(/function statsRange\(shopList, from, to\) \{[\s\S]*?\n\}/),
   cut(/function kyivMs\(day, h, m\) \{[\s\S]*?\n\}/),
   cut(/const wdayOf = [^\n]*/),
-  cut(/function statsPage\(shopList, days\) \{[\s\S]*?\n\}/)
+  cut(/const dayAdd = [^\n]*/),
+  cut(/function statsPage\(shopList, fromDay, toDay\) \{[\s\S]*?\n\}/)
 ].join('\n');
 
 const HOUR = 3600e3, DAY = 24 * HOUR;
@@ -23,10 +24,10 @@ const byId = new Map(CAT.ITEMS.map(i => [i.id, i]));
 const item = n => CAT.ITEMS.find(i => i.name === n);
 const db = { orders: {}, hits: {} };
 const env = {
-  db, HOUR, kyivDate, CANCELED: 'canceled', kop: CAT.kop, lineTitle: CAT.lineTitle, byId,
+  db, HOUR, kyivDate, LABEL: { done: 'Видано', canceled: 'Скасовано' }, CANCELED: 'canceled', kop: CAT.kop, lineTitle: CAT.lineTitle, byId,
   adjustmentsOf: o => (Array.isArray(o.adjust) ? o.adjust : [])
 };
-const api = new Function(...Object.keys(env), `${code}; return { statsRange, statsPage }`)(...Object.values(env));
+const api = new Function(...Object.keys(env), `${code}; return { statsRange, statsPage, dayAdd }`)(...Object.values(env));
 
 const now = Date.now();
 let no = 1000;
@@ -44,7 +45,9 @@ add(40 * DAY, { total: 999, telKey: '672222222' });                        // д
 db.hits[kyivDate(now)] = { visit: 50, cart: 12, checkout: 6 };
 db.hits[kyivDate(now - DAY)] = { visit: 30, cart: 5 };
 
-const s = api.statsPage([0], 30);
+const today = kyivDate(now);
+const page = days => api.statsPage([0], api.dayAdd(today, 1 - days), today);
+const s = page(30);
 const t = [];
 const ok = (n, c) => t.push([n, c]);
 
@@ -65,7 +68,17 @@ ok('воронка: 80 заходів, 17 кошиків, 6 оформлень, 
 ok('лічильник працює з першого дня з даними', s.hitsSince === kyivDate(now - DAY));
 ok('скасування з причиною', s.cancels.length === 1 && s.cancels[0].why === 'клієнт не відповідає');
 ok('сьогоднішній день останній у ряду', s.perDay[29].day === kyivDate(now) && s.perDay[29].visit === 50);
-ok('7 днів — 7 стовпчиків', api.statsPage([0], 7).perDay.length === 7);
+ok('7 днів — 7 стовпчиків', page(7).perDay.length === 7);
+const one = api.statsPage([0], today, today);
+ok('один день — список його замовлень', one.days === 1 && one.orders.length === 1
+  && one.orders[0].total === 800 && one.orders[0].label === 'Видано');
+ok('за період — списку замовлень немає', s.orders.length === 0);
+const d3 = api.dayAdd(today, -3);
+const three = api.statsPage([0], d3, d3);
+ok('обраний день у минулому — лише його замовлення', three.cur.n === 1 && three.cur.sum === 600
+  && three.from === d3 && three.to === d3);
+ok('перший день із замовленнями — нижня межа календаря', s.first === kyivDate(now - 40 * DAY));
+ok('dayAdd через кінець місяця', api.dayAdd('2026-09-30', 1) === '2026-10-01' && api.dayAdd('2026-03-01', -1) === '2026-02-28');
 
 let bad = 0;
 for (const [n, good] of t) { console.log((good ? '  ok  ' : 'ПАДАЄ') + ' · ' + n); if (!good) bad++ }

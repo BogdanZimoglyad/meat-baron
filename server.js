@@ -1288,21 +1288,24 @@ app.post('/api/hit', (req, res) => {
   res.json({ ok: true });
 });
 
-/* Уся статистика за останні days днів — по днях за Києвом */
-function statsPage(shopList, days) {
+/* «2026-09-30» + n днів — рядком, без годинника й часових поясів */
+const dayAdd = (day, n) => { const [y, m, d] = day.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10) };
+
+/* Уся статистика з fromDay по toDay включно — по днях за Києвом.
+   Один день — ще й список його замовлень (власник хоче дивитись по днях
+   і обирати дні календарем, 30.09). */
+function statsPage(shopList, fromDay, toDay) {
   const today = kyivDate();
   const dayKeys = [];
-  for (let i = days - 1; i >= 0; i--) {
-    const d = kyivDate(Date.now() - i * 24 * HOUR);
-    if (!dayKeys.includes(d)) dayKeys.push(d);
-  }
-  const from = kyivMs(dayKeys[0], 0, 0), now = Date.now();
-  const span = now - from;
-  const cur = statsRange(shopList, from, now);
+  for (let d = fromDay; d <= toDay && dayKeys.length < 400; d = dayAdd(d, 1)) dayKeys.push(d);
+  const now = Date.now();
+  const from = kyivMs(fromDay, 0, 0), to = Math.min(now, kyivMs(dayAdd(toDay, 1), 0, 0));
+  const span = Math.max(1, to - from);
+  const cur = statsRange(shopList, from, to);
   const prev = statsRange(shopList, from - span, from);
 
   const inRange = Object.values(db.orders).filter(o =>
-    shopList.includes(o.shop) && (o.createdAt || 0) >= from && (o.createdAt || 0) < now);
+    shopList.includes(o.shop) && (o.createdAt || 0) >= from && (o.createdAt || 0) < to);
   const live = inRange.filter(o => o.status !== CANCELED);
 
   /* по днях */
@@ -1355,7 +1358,9 @@ function statsPage(shopList, days) {
 
   const hitsSum = k => dayKeys.reduce((s, d) => s + (((db.hits || {})[d] || {})[k] || 0), 0);
   return {
-    ok: true, days: dayKeys.length, from: dayKeys[0], to: today,
+    ok: true, days: dayKeys.length, from: fromDay, to: toDay, today,
+    /* з якого дня взагалі є замовлення — нижня межа календаря */
+    first: kyivDate(Math.min(now, ...Object.values(db.orders).filter(o => shopList.includes(o.shop)).map(o => o.createdAt || now))),
     cur: { ...cur, items: undefined, hours: undefined },
     prev: { n: prev.n, sum: prev.sum, avg: prev.avg, fg: prev.fg, canceled: prev.canceled },
     perDay: dayKeys.map(d => perDay[d]),
@@ -1366,7 +1371,12 @@ function statsPage(shopList, days) {
       repeat: Object.values(perPerson).filter(n => n > 1).length },
     funnel: { visit: hitsSum('visit'), cart: hitsSum('cart'), checkout: hitsSum('checkout'), orders: inRange.length },
     hitsSince: Object.keys(db.hits || {}).sort()[0] || '',
-    cancels
+    cancels,
+    /* Один день — усі його замовлення, від ранніх до пізніх */
+    orders: dayKeys.length === 1 ? inRange.sort((a, b) => a.createdAt - b.createdAt).map(o => ({
+      no: o.no, at: o.createdAt, slotAt: o.slotAt || 0, nm: o.nm || '', mode: o.mode,
+      total: o.total || 0, status: o.status, label: LABEL[o.status] || o.status, fg: o.fry ? (o.fg || 0) : 0
+    })) : []
   };
 }
 
@@ -1375,8 +1385,15 @@ app.get('/api/stats', (req, res) => {
     if (tooOften('status', ipOf(req), RATE.status)) return res.status(429).json({ error: 'Забагато запитів.' });
     return res.status(401).json({ error: 'Потрібен доступ. Напишіть боту /stats.' });
   }
-  const days = Math.min(365, Math.max(1, Math.floor(Number(req.query.days) || 30)));
-  res.json(statsPage(SHOPS.map((_, i) => i), days));
+  /* Або from/to (обрані в календарі), або «останні N днів» */
+  const today = kyivDate();
+  let to = DAY_RE.test(String(req.query.to || '')) ? String(req.query.to) : today;
+  let from = DAY_RE.test(String(req.query.from || '')) ? String(req.query.from) : '';
+  if (to > today) to = today;
+  if (!from) from = dayAdd(to, 1 - Math.min(366, Math.max(1, Math.floor(Number(req.query.days) || 30))));
+  if (from > to) [from, to] = [to, from];
+  if (dayAdd(from, 366) < to) from = dayAdd(to, -365);             // не більше року за раз
+  res.json(statsPage(SHOPS.map((_, i) => i), from, to));
 });
 
 /* ---------- щоденна копія бази ----------
