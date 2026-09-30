@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#141010">
+<title>Статистика · Мʼясний Барон</title>
+<link rel="icon" href="icon-192.png">
+<style>
+:root{
+  --char:#141010; --coal:#1b1c1f; --line:#2b2724; --line-2:#3a3531;
+  --bone:#f0e9de; --smoke:#9b938a; --ember:#c4342a; --ember-hot:#e04a3c;
+  --ok:#7ba84f; --bad:#e04a3c;
+  /* колір даних: один відтінок на всі графіки — у кожного одна величина */
+  --bar:#d9583f; --bar-dim:rgba(217,88,63,.35);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--char);color:var(--bone);
+  font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+.wrap{max-width:980px;margin:0 auto;padding:16px 16px 40px}
+h1{font-size:20px;margin:0}
+.top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.top .sub{color:var(--smoke);font-size:13px;width:100%}
+.per{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 16px}
+.per button{min-height:40px;padding:0 14px;border-radius:999px;background:var(--coal);border:1px solid var(--line-2);
+  color:var(--bone);font-size:14px}
+.per button.on{background:var(--ember);border-color:var(--ember);color:#fff;font-weight:600}
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+@media(min-width:720px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.tile{background:var(--coal);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.tile .k{color:var(--smoke);font-size:12.5px}
+.tile .v{font-size:24px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+.tile .d{font-size:12.5px;margin-top:2px;color:var(--smoke)}
+.tile .d .up{color:var(--ok)} .tile .d .down{color:var(--bad)}
+.card{background:var(--coal);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px}
+.card h2{font-size:15px;margin:0 0 2px;font-weight:600}
+.card .note{color:var(--smoke);font-size:12.5px;margin:0 0 10px}
+.chart{width:100%;height:auto;display:block;overflow:visible}
+.chart text{fill:var(--smoke);font-size:10px}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart rect.b{fill:var(--bar)}
+.chart rect.b.dim{fill:var(--bar-dim)}
+.chart rect.hit{fill:transparent;cursor:pointer}
+.funnel .row{display:grid;grid-template-columns:96px minmax(0,1fr) 124px;align-items:center;gap:10px;margin:7px 0}
+.funnel .lbl{font-size:14px}
+.funnel .trk{height:22px;background:var(--char);border-radius:4px;overflow:hidden}
+.funnel .fill{height:100%;background:var(--bar);border-radius:0 4px 4px 0}
+.funnel .num{font-size:14px;text-align:right;font-variant-numeric:tabular-nums}
+.funnel .num small{display:block;color:var(--smoke);font-size:11.5px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{color:var(--smoke);font-weight:500;font-size:12px;text-align:right;padding:6px 4px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+td{padding:7px 4px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td:first-child{max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:46%}
+.split{display:flex;height:22px;border-radius:4px;overflow:hidden;gap:2px;margin:6px 0 4px}
+.split i{display:block;background:var(--bar)}
+.split i+i{background:var(--bar-dim)}
+.split-l{display:flex;justify-content:space-between;font-size:13px;color:var(--smoke)}
+.two{display:grid;gap:12px}
+@media(min-width:720px){.two{grid-template-columns:1fr 1fr}.two .card{margin-top:0}}
+.cx{font-size:14px;padding:7px 0;border-bottom:1px solid var(--line)}
+.cx b{font-weight:600}.cx span{color:var(--smoke);font-size:12.5px}
+.empty{color:var(--smoke);text-align:center;padding:50px 16px}
+.err{background:rgba(196,52,42,.15);border:1px solid rgba(224,74,60,.5);border-radius:12px;padding:14px;margin:30px 0}
+.err code{background:var(--char);padding:2px 7px;border-radius:6px}
+#tip{position:fixed;pointer-events:none;z-index:9;background:#0b0909;border:1px solid var(--line-2);border-radius:8px;
+  padding:6px 9px;font-size:13px;color:var(--bone);white-space:nowrap;opacity:0;transition:opacity .1s}
+#tip b{font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><h1>📈 Статистика</h1><span class="sub" id="sub">Мʼясний Барон · замовлення з сайту</span></div>
+  <div class="per" id="per">
+    <button data-d="7">7 днів</button><button data-d="30" class="on">30 днів</button>
+    <button data-d="90">90 днів</button><button data-d="365">Рік</button>
+  </div>
+  <div id="out"><p class="empty">Завантажую…</p></div>
+</div>
+<div id="tip"></div>
+<script>
+/* Статистика для власника (30.09). Вхід як у панель точки: бот у
+   особистих дає разове посилання /stats, сторінка міняє код на ключ і
+   памʼятає його. Цифри рахує сервер тим самим statsRange, що й /week. */
+const API='https://api.meat-baron.kh.ua';
+const KEY='mb-stats-token';
+let token=null, DAYS=30;
+try{ token=localStorage.getItem(KEY); DAYS=+localStorage.getItem('mb-stats-days')||30 }catch(e){}
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const money=n=>Math.round(n).toLocaleString('uk-UA').replace(/ /g,' ')+' ₴';
+const money2=n=>(Math.round(n*100)/100).toLocaleString('uk-UA',{minimumFractionDigits:0,maximumFractionDigits:2}).replace(/ /g,' ')+' ₴';
+const kg=g=>g>=1000?(Math.round(g/100)/10).toLocaleString('uk-UA')+' кг':Math.round(g)+' г';
+const pct=(a,b)=>b?Math.round(a/b*100)+'%':'—';
+const WD=['Нд','Пн','Вт','Ср','Чт','Пт','Сб'];
+const dm=d=>{const [,m,dd]=d.split('-');return +dd+'.'+m};
+const wdOf=d=>{const [y,m,dd]=d.split('-').map(Number);return new Date(Date.UTC(y,m-1,dd)).getUTCDay()};
+
+/* «▲ 12%» до попереднього такого ж періоду — без порівняння цифра
+   нічого не каже. Зростання зелене, падіння червоне, і стрілка —
+   щоб не лише кольором. */
+function delta(a,b,lowerIsBetter){
+  if(!b) return '<span>попередній період — без даних</span>';
+  const d=Math.round((a-b)/b*100);
+  if(!d) return '<span>як у попередньому періоді</span>';
+  const good=lowerIsBetter? d<0 : d>0;
+  return `<span class="${good?'up':'down'}">${d>0?'▲':'▼'} ${Math.abs(d)}%</span> до попереднього`;
+}
+
+/* Стовпчики з підказкою на дотик. vals — [{x:підпис, v:число, t:текст підказки}] */
+/* Ширина — справжня ширина картки в пікселях: графік не розтягується,
+   і підписи лишаються читабельними. half — картка в пів екрана. */
+function cw(half){
+  const W=$('out').clientWidth||320;
+  return Math.max(240,(half&&window.innerWidth>=720?(W-12)/2:W)-30);
+}
+function bars(vals,{h=150,labelEvery=1,fmt=v=>v,dim=()=>false,half=false}={}){
+  const n=vals.length, W=cw(half), padB=18, padT=14;
+  const gap=W/n>=6?2:0;
+  const max=Math.max(1,...vals.map(x=>x.v));
+  const bw=W/n;
+  const y=v=>padT+(h-padT-padB)*(1-v/max);
+  let g=`<line class="grid" x1="0" x2="${W}" y1="${h-padB}" y2="${h-padB}"/>`;
+  /* верхня межа — довідково, одна лінія й число, без густої сітки */
+  g+=`<line class="grid" x1="0" x2="${W}" y1="${padT}" y2="${padT}" stroke-dasharray="3 4"/><text x="0" y="${padT-4}">${esc(fmt(max))}</text>`;
+  vals.forEach((x,i)=>{
+    const bx=i*bw+gap/2, w=Math.max(1,bw-gap), top=y(x.v), hh=h-padB-top;
+    if(x.v>0){
+      const r=Math.min(4,w/2,hh);
+      /* заокруглений лише верх — низ стоїть на осі */
+      g+=`<path fill="${dim(x)?'var(--bar-dim)':'var(--bar)'}" d="M${bx},${h-padB} V${top+r} Q${bx},${top} ${bx+r},${top} H${bx+w-r} Q${bx+w},${top} ${bx+w},${top+r} V${h-padB} Z"/>`;
+    }
+    if(i%labelEvery===0) g+=`<text x="${bx+w/2}" y="${h-4}" text-anchor="middle">${esc(x.x)}</text>`;
+    g+=`<rect class="hit" x="${i*bw}" y="0" width="${bw}" height="${h}" data-tip="${esc(x.t)}"/>`;
+  });
+  return `<svg class="chart" width="${W}" height="${h}" viewBox="0 0 ${W} ${h}">${g}</svg>`;
+}
+
+function tile(k,v,d){ return `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d||''}</div></div>` }
+
+let LAST=null;
+/* Повернули телефон — перемальовуємо під нову ширину */
+let rz=0; window.addEventListener('resize',()=>{ clearTimeout(rz); rz=setTimeout(()=>{ if(LAST) render(LAST) },200) });
+function render(s){
+  LAST=s;
+  const c=s.cur, p=s.prev;
+  /* підписів днів — стільки, скільки влазить: приблизно на кожні 34 px */
+  const every=Math.max(1,Math.ceil(s.perDay.length/Math.floor(cw()/34)));
+  const daysBars=key=>s.perDay.map(x=>({x:dm(x.day), v:x[key]||0,
+    t:`${WD[wdOf(x.day)]}, ${dm(x.day)} · `+(key==='sum'?money2(x.sum):`${x.n} зам.`)+(x.canceled?` · скасовано ${x.canceled}`:''), day:x.day}));
+  const weekend=x=>{const w=wdOf(x.day);return w===0||w===6};
+  /* замовляють і вночі — там усі 24 години; забирають лише в години точки */
+  const hours=(obj,h0=7,h1=21)=>{ const out=[]; for(let h=h0;h<=h1;h++) out.push({x:h, v:obj[h]||0, t:`${String(h).padStart(2,'0')}:00–${String(h+1).padStart(2,'0')}:00 · ${obj[h]||0} зам.`}); return out };
+  const wk=[1,2,3,4,5,6,0].map(i=>({x:WD[i], v:s.weekday[i]||0, t:`${WD[i]} · ${s.weekday[i]||0} зам.`}));
+  const f=s.funnel, fmax=Math.max(1,f.visit,f.cart,f.checkout,f.orders);
+  const frow=(l,n,prev,sub)=>`<div class="row"><span class="lbl">${l}</span>
+    <div class="trk"><div class="fill" style="width:${Math.max(n?2:0,n/fmax*100)}%"></div></div>
+    <span class="num">${n}<small>${sub||''}</small></span></div>`;
+  const pp=s.people;
+  const mode=c.pickup+c.delivery, pay=s.pay.cash+s.pay.card;
+  const split=(a,b,la,lb)=>(a+b)?`<div class="split"><i style="flex:${a}"></i><i style="flex:${b}"></i></div>
+    <div class="split-l"><span>${la} · ${a} (${pct(a,a+b)})</span><span>${lb} · ${b} (${pct(b,a+b)})</span></div>`:'<p class="note">Немає даних</p>';
+
+  $('sub').textContent=`Мʼясний Барон · замовлення з сайту · ${dm(s.from)} — ${dm(s.to)}`;
+  if(!c.n&&!c.canceled&&!f.visit){ $('out').innerHTML='<p class="empty">За цей період замовлень із сайту ще не було.</p>'; return }
+
+  $('out').innerHTML=`
+  <div class="tiles">
+    ${tile('Замовлень',c.n,delta(c.n,p.n))}
+    ${tile('Виручка',money(c.sum),delta(c.sum,p.sum))}
+    ${tile('Середній чек',money(c.avg),delta(c.avg,p.avg))}
+    ${tile('На мангал',kg(c.fg),delta(c.fg,p.fg))}
+    ${tile('Клієнтів',pp.total,`нових ${pp.fresh} · повернулись ${pp.again}`)}
+    ${tile('Скасовано',c.canceled,c.n+c.canceled?`${pct(c.canceled,c.n+c.canceled)} замовлень`:'')}
+  </div>
+
+  <div class="card funnel">
+    <h2>Від заходу до замовлення</h2>
+    <p class="note">Скільки візитів дійшли до кожного кроку.${s.hitsSince?` Лічильник працює з ${dm(s.hitsSince)} — раніші дні тут порожні.`:' Лічильник щойно увімкнено — цифри зʼявляться з першими відвідувачами.'}</p>
+    ${frow('Зайшли',f.visit,0,'')}
+    ${frow('Кошик',f.cart,f.visit,f.visit?pct(f.cart,f.visit)+' від заходів':'')}
+    ${frow('Оформлення',f.checkout,f.cart,f.cart?pct(f.checkout,f.cart)+' від кошика':'')}
+    ${frow('Замовили',f.orders,f.checkout,f.checkout?pct(f.orders,f.checkout)+' від оформлення':'')}
+  </div>
+
+  <div class="card"><h2>Виручка по днях</h2><p class="note">Вихідні блідіші. Торкніться стовпчика — покаже суму.</p>
+    ${bars(daysBars('sum'),{labelEvery:every,fmt:money,dim:weekend})}</div>
+  <div class="card"><h2>Замовлень по днях</h2>
+    ${bars(daysBars('n'),{labelEvery:every,h:120,dim:weekend})}</div>
+
+  <div class="two">
+    <div class="card"><h2>Коли замовляють</h2><p class="note">Година, коли натиснули «Підтвердити» на сайті</p>
+      ${bars(hours(s.ordered,0,23),{h:120,half:true,labelEvery:3})}</div>
+    <div class="card"><h2>Коли забирають</h2><p class="note">Година видачі — навантаження на точку й мангал</p>
+      ${bars(hours(s.pickupHours||{}),{h:120,half:true})}</div>
+  </div>
+  <div class="card"><h2>Дні тижня</h2><p class="note">Замовлень на день видачі</p>${bars(wk,{h:110})}</div>
+
+  <div class="card"><h2>Що беруть</h2><p class="note">За виручкою. «Замовлень» — у скількох замовленнях була позиція.</p>
+    ${s.top.length?`<table><tr><th>Позиція</th><th>Замовлень</th><th>Кількість</th><th>Сума</th></tr>
+    ${s.top.map(x=>`<tr><td title="${esc(x.name)}">${esc(x.name)}</td><td>${x.orders}</td><td>${x.unit==='вага'?kg(x.qty):x.qty+' шт'}</td><td>${money(x.sum)}</td></tr>`).join('')}</table>`
+    :'<p class="note">Немає даних</p>'}</div>
+
+  <div class="two">
+    <div class="card"><h2>Самовивіз і доставка</h2>${split(c.pickup,c.delivery,'Самовивіз','Доставка')}</div>
+    <div class="card"><h2>Оплата</h2>${split(s.pay.cash,s.pay.card,'Готівка','Картка')}</div>
+  </div>
+  <div class="card"><h2>Клієнти</h2>
+    <p class="note">Новий — перше замовлення з сайту припало на цей період.</p>
+    ${split(pp.fresh,pp.again,'Нові','Повернулись')}
+    <p class="note" style="margin-top:8px">Замовили більше одного разу за період: <b style="color:var(--bone)">${pp.repeat}</b></p></div>
+
+  <div class="card"><h2>Скасування</h2>
+    ${s.cancels.length?s.cancels.map(x=>`<div class="cx"><b>№ ${x.no}</b> <span>${new Date(x.at).toLocaleString('uk-UA',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})}${x.by?' · '+esc(x.by):''}</span><br>${esc(x.why||'без причини')}</div>`).join('')
+      :'<p class="note">Скасувань не було 👍</p>'}</div>`;
+}
+
+/* Підказка на дотик і наведення: одна на всю сторінку */
+const tip=$('tip');
+function showTip(e){
+  const r=e.target.closest&&e.target.closest('[data-tip]');
+  if(!r){ tip.style.opacity=0; return }
+  tip.textContent=r.dataset.tip;
+  const x=Math.min(window.innerWidth-tip.offsetWidth-8,Math.max(8,e.clientX-tip.offsetWidth/2));
+  tip.style.left=x+'px'; tip.style.top=Math.max(8,e.clientY-44)+'px'; tip.style.opacity=1;
+}
+document.addEventListener('pointermove',showTip);
+document.addEventListener('pointerdown',showTip);
+
+function ask(msg){
+  $('out').innerHTML=`<div class="err">${msg?esc(msg)+'<br><br>':''}Напишіть боту в особисті <code>/stats</code> — він дасть посилання. Відкрийте його тут один раз, далі сторінка відкриватиметься сама.</div>`;
+}
+async function load(){
+  if(!token) return ask();
+  $('per').querySelectorAll('button').forEach(b=>b.classList.toggle('on',+b.dataset.d===DAYS));
+  try{
+    const r=await fetch(API+'/api/stats?days='+DAYS,{headers:{Authorization:'Bearer '+token}});
+    const d=await r.json().catch(()=>({}));
+    if(r.status===401){ token=null; try{localStorage.removeItem(KEY)}catch(e){} return ask('Доступ відкликано або він застарів.') }
+    if(!r.ok||!d.ok) throw new Error(d.error||'');
+    render(d);
+  }catch(e){ $('out').innerHTML='<p class="empty">Немає звʼязку з сервером. Спробуйте пізніше.</p>' }
+}
+$('per').onclick=e=>{ const b=e.target.closest('[data-d]'); if(!b) return;
+  DAYS=+b.dataset.d; try{localStorage.setItem('mb-stats-days',DAYS)}catch(x){}; $('out').innerHTML='<p class="empty">Завантажую…</p>'; load() };
+
+(async function(){
+  const code=location.hash.replace(/^#/,'').trim();
+  if(code&&!token){
+    try{
+      const r=await fetch(API+'/api/stats/claim',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok||!d.token) return ask(d.error||'Не вдалося увійти');
+      token=d.token; try{localStorage.setItem(KEY,token)}catch(e){}
+    }catch(e){ return ask('Немає звʼязку з сервером.') }
+    history.replaceState(null,'',location.pathname);
+  }
+  load();
+})();
+</script>
+</body>
+</html>

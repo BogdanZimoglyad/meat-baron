@@ -825,7 +825,7 @@ setInterval(() => {
   for (const [c, v] of panelCodes) if (now - v.at > PANEL_CODE_TTL) panelCodes.delete(c);
 }, 60 * 1000).unref();
 
-bot.onText(/^\/panel(?:@\w+)?/, msg => {
+bot.onText(/^\/panel(?:@\w+)?(?:\s|$)/, msg => {   // не ловити /panel-off
   const shop = shopOfChat(msg.chat.id);
   if (shop === null) return bot.sendMessage(msg.chat.id, 'Цей чат не привʼязаний до точки. /whoami');
   const code = crypto.randomBytes(5).toString('hex');
@@ -1198,6 +1198,187 @@ function statsText(shopList, days, title) {
     (hours ? `\n<b>Коли забирають</b>\n${hours}` : '');
 }
 
+/* ---------- сторінка статистики для власника ----------
+   Бот дає цифри текстом, а власнику треба бачити картину: як ідуть дні,
+   що беруть, коли замовляють, скільки людей доходить до замовлення
+   (власник, 30.09). Сторінка stats.html — лише для власника: вхід як у
+   панель, разовим посиланням із бота, але команда працює тільки в
+   особистих і тільки для OWNER_ID.
+
+   Цифри рахує той самий statsRange, що й /week і /month, — щоб бот і
+   сторінка не розходились. Поверх нього — те, чого в боті немає: дні,
+   години, дні тижня, клієнти, воронка з сайту. */
+const statsCodes = new Map();             // разовий код → { at }
+setInterval(() => {
+  const now = Date.now();
+  for (const [c, v] of statsCodes) if (now - v.at > PANEL_CODE_TTL) statsCodes.delete(c);
+}, 60 * 1000).unref();
+
+bot.onText(/^\/stats(?:@\w+)?(?:\s|$)/, msg => {
+  if (msg.chat.type !== 'private' || !isOwner(msg)) {
+    return bot.sendMessage(msg.chat.id, 'Статистика — лише для власника, в особистих із ботом.');
+  }
+  const code = crypto.randomBytes(6).toString('hex');
+  statsCodes.set(code, { at: Date.now() });
+  bot.sendMessage(msg.chat.id,
+    `<b>Статистика</b>\n\nВідкрийте на телефоні — далі сторінка відкриватиметься сама:\n` +
+    `${SITE}stats.html#${code}\n\n` +
+    `Посилання діє 10 хвилин і лише один раз. Загубили телефон — /stats-off відкличе всі доступи.`,
+    { parse_mode: 'HTML', disable_web_page_preview: true });
+});
+
+bot.onText(/^\/stats-off(?:@\w+)?(?:\s|$)/, msg => {
+  if (msg.chat.type !== 'private' || !isOwner(msg)) return;
+  const n = Object.keys(db.statsKeys || {}).length;
+  db.statsKeys = {};
+  save();
+  bot.sendMessage(msg.chat.id, n ? `Відкликано доступів до статистики: ${n}. Знову — /stats.` : 'Доступів до статистики немає.');
+});
+
+app.post('/api/stats/claim', (req, res) => {
+  if (tooOften('auth', ipOf(req), RATE.auth)) {
+    return res.status(429).json({ error: 'Забагато спроб. Зачекайте кілька хвилин.' });
+  }
+  const code = String((req.body || {}).code || '');
+  const rec = statsCodes.get(code);
+  if (!rec || Date.now() - rec.at > PANEL_CODE_TTL) {
+    return res.status(403).json({ error: 'Посилання застаріло. Напишіть боту /stats ще раз.' });
+  }
+  statsCodes.delete(code);
+  const token = crypto.randomBytes(24).toString('hex');
+  db.statsKeys = db.statsKeys || {};
+  db.statsKeys[token] = { at: Date.now() };
+  save();
+  res.json({ ok: true, token });
+});
+
+const statsKeyOf = req => {
+  const h = String(req.headers.authorization || '');
+  const t = h.startsWith('Bearer ') ? h.slice(7).trim() : '';
+  return t && (db.statsKeys || {})[t] ? t : null;
+};
+
+/* ---------- відвідування: зайшли → кошик → оформлення ----------
+   Лічильник свій, без Google і без cookie: сайт шле лише «зайшов»,
+   «поклав у кошик», «відкрив оформлення» з випадковим номером візиту,
+   що живе до закриття вкладки. Хто це — не знаємо й не зберігаємо;
+   на диску лише числа за день. Роботи JS не виконують, тож їх тут
+   майже немає — на відміну від лічильника Cloudflare. */
+const HIT_EVENTS = ['visit', 'cart', 'checkout'];
+let hitDay = '', hitSeen = new Set();
+app.post('/api/hit', (req, res) => {
+  if (tooOften('hit', ipOf(req), RATE.hit)) return res.status(429).json({ ok: false });
+  const b = req.body || {};
+  const e = String(b.e || ''), s = String(b.s || '').slice(0, 40);
+  if (!HIT_EVENTS.includes(e) || s.length < 8) return res.status(400).json({ ok: false });
+  const day = kyivDate();
+  /* Один візит — одна подія кожного виду: перезавантаження сторінки чи
+     другий товар у кошик не множать цифри. Після перезапуску сервера
+     памʼять візитів порожня — у гіршому разі той самий візит
+     порахується двічі, а на диск усе одно йдуть лише числа. */
+  if (day !== hitDay) { hitDay = day; hitSeen = new Set() }
+  const key = e + ':' + s;
+  if (!hitSeen.has(key)) {
+    hitSeen.add(key);
+    db.hits = db.hits || {};
+    const d = db.hits[day] || (db.hits[day] = {});
+    d[e] = (d[e] || 0) + 1;
+    save();
+  }
+  res.json({ ok: true });
+});
+
+/* Уся статистика за останні days днів — по днях за Києвом */
+function statsPage(shopList, days) {
+  const today = kyivDate();
+  const dayKeys = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = kyivDate(Date.now() - i * 24 * HOUR);
+    if (!dayKeys.includes(d)) dayKeys.push(d);
+  }
+  const from = kyivMs(dayKeys[0], 0, 0), now = Date.now();
+  const span = now - from;
+  const cur = statsRange(shopList, from, now);
+  const prev = statsRange(shopList, from - span, from);
+
+  const inRange = Object.values(db.orders).filter(o =>
+    shopList.includes(o.shop) && (o.createdAt || 0) >= from && (o.createdAt || 0) < now);
+  const live = inRange.filter(o => o.status !== CANCELED);
+
+  /* по днях */
+  const perDay = {};
+  for (const d of dayKeys) perDay[d] = { day: d, n: 0, sum: 0, canceled: 0, ...((db.hits || {})[d] || {}) };
+  for (const o of inRange) {
+    const x = perDay[kyivDate(o.createdAt)];
+    if (!x) continue;
+    if (o.status === CANCELED) { x.canceled++; continue }
+    x.n++; x.sum = kop(x.sum + (o.total || 0));
+  }
+
+  /* позиції: у скількох замовленнях, скільки взяли, на яку суму */
+  const items = {};
+  for (const o of live) for (const l of (o.lines || [])) {
+    const k = l.id || l.name;
+    const it = items[k] || (items[k] = { name: lineTitle(l), unit: l.unit, orders: 0, qty: 0, sum: 0, _o: new Set() });
+    if (!it._o.has(o.no)) { it._o.add(o.no); it.orders++ }
+    it.qty += l.g || 0;
+    it.sum = kop(it.sum + (l.sum || 0));
+  }
+  const top = Object.values(items).map(({ _o, ...x }) => x).sort((a, b) => b.sum - a.sum);
+
+  /* коли замовляють (натиснули кнопку) і коли забирають (час видачі) */
+  const ordered = {}, weekday = [0, 0, 0, 0, 0, 0, 0];
+  for (const o of live) {
+    const h = kyivHour(o.createdAt); ordered[h] = (ordered[h] || 0) + 1;
+    weekday[wdayOf(kyivDate(o.slotAt || o.createdAt))]++;
+  }
+
+  /* клієнти: новий — якщо перше його замовлення взагалі припало на ці дні */
+  const firstOf = {};
+  for (const o of Object.values(db.orders)) {
+    if (o.status === CANCELED || !o.telKey) continue;
+    if (!firstOf[o.telKey] || o.createdAt < firstOf[o.telKey]) firstOf[o.telKey] = o.createdAt;
+  }
+  const people = new Set(live.map(o => o.telKey).filter(Boolean));
+  let fresh = 0;
+  for (const t of people) if (firstOf[t] >= from) fresh++;
+  const perPerson = {};
+  for (const o of live) if (o.telKey) perPerson[o.telKey] = (perPerson[o.telKey] || 0) + 1;
+
+  /* скасування з причинами — останні 15 */
+  const cancels = inRange.filter(o => o.status === CANCELED)
+    .map(o => {
+      const a = adjustmentsOf(o).filter(x => x.kind === 'cancel').pop() || {};
+      return { no: o.no, at: a.at || o.updatedAt || o.createdAt, why: a.note || '', by: a.by || '' };
+    })
+    .sort((a, b) => b.at - a.at).slice(0, 15);
+
+  const hitsSum = k => dayKeys.reduce((s, d) => s + (((db.hits || {})[d] || {})[k] || 0), 0);
+  return {
+    ok: true, days: dayKeys.length, from: dayKeys[0], to: today,
+    cur: { ...cur, items: undefined, hours: undefined },
+    prev: { n: prev.n, sum: prev.sum, avg: prev.avg, fg: prev.fg, canceled: prev.canceled },
+    perDay: dayKeys.map(d => perDay[d]),
+    top: top.slice(0, 20),
+    ordered, pickupHours: cur.hours, weekday,
+    pay: { cash: live.filter(o => o.pay !== 'card').length, card: live.filter(o => o.pay === 'card').length },
+    people: { total: people.size, fresh, again: people.size - fresh,
+      repeat: Object.values(perPerson).filter(n => n > 1).length },
+    funnel: { visit: hitsSum('visit'), cart: hitsSum('cart'), checkout: hitsSum('checkout'), orders: inRange.length },
+    hitsSince: Object.keys(db.hits || {}).sort()[0] || '',
+    cancels
+  };
+}
+
+app.get('/api/stats', (req, res) => {
+  if (!statsKeyOf(req)) {
+    if (tooOften('status', ipOf(req), RATE.status)) return res.status(429).json({ error: 'Забагато запитів.' });
+    return res.status(401).json({ error: 'Потрібен доступ. Напишіть боту /stats.' });
+  }
+  const days = Math.min(365, Math.max(1, Math.floor(Number(req.query.days) || 30)));
+  res.json(statsPage(SHOPS.map((_, i) => i), days));
+});
+
 /* ---------- щоденна копія бази ----------
    Телефони, адреси й історія покупців живуть на одному диску Railway.
    Скінчиться кредит, злетить сервіс — і все це зникне без сліду
@@ -1562,7 +1743,7 @@ function tooOften(bucket, ip, max) {
 /* Сайт питає статус раз на 15 секунд, і той, хто увійшов, разом із ним
    питає своє активне замовлення — це вже 80 запитів за вікно. Плюс
    пробудження вкладки. Тому ліміт вищий, ніж був. */
-const RATE = { order: 5, status: 300, op: 600, history: 20, auth: 10, poll: 120, grill: 120, popular: 60 };
+const RATE = { order: 5, status: 300, op: 600, hit: 200, history: 20, auth: 10, poll: 120, grill: 120, popular: 60 };
 
 /* ---------- завантаження мангала ----------
    Мангал тягне близько 15 кг за годину (власник, 19.09), але частину

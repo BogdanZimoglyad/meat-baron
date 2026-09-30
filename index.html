@@ -1299,6 +1299,21 @@ const routeLink=name=>'https://www.google.com/maps/dir/?api=1&destination='+mapQ
    шапці могла вже змінитися — дзвонити треба туди, куди пішло замовлення. */
 const shopTel=name=>((SHOPS_ALL.find(s=>s[0]===name)||[])[1])||SHOPS[shop][1]||'';
 const API='https://api.meat-baron.kh.ua'; // сервер прийому замовлень (Railway)
+/* Лічильник відвідувань для статистики власника (30.09): «зайшов»,
+   «поклав у кошик», «відкрив оформлення» — по одному разу за візит.
+   Візит — випадковий номер, що живе до закриття вкладки; ні cookie, ні
+   Google, ні хто це. Помилка мережі нічого не ламає — просто не
+   порахуємо. */
+const hit=(()=>{
+  let sid='', sent={};
+  try{ sid=sessionStorage.getItem('mb-sid')||''; sent=JSON.parse(sessionStorage.getItem('mb-hits')||'{}') }catch(e){}
+  if(!sid){ sid=Math.random().toString(36).slice(2)+Date.now().toString(36); try{ sessionStorage.setItem('mb-sid',sid) }catch(e){} }
+  return e=>{
+    if(sent[e]) return;
+    sent[e]=1; try{ sessionStorage.setItem('mb-hits',JSON.stringify(sent)) }catch(x){}
+    try{ fetch(API+'/api/hit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({e,s:sid}),keepalive:true}).catch(()=>{}) }catch(x){}
+  };
+})();
 /* запит із таймаутом — щоб на поганому звʼязку не висло назавжди */
 async function req(url,opts,ms){
   const ctl=new AbortController();
@@ -2147,6 +2162,7 @@ function openItem(id, editIdx){
    замовлення. Додали те саме вдруге — складаємо, але не понад межу. */
 const MAX_LINE_G=20000;
 function addToCart(it,g,v){
+  hit('cart');
   v=v||'';
   const ex=cart.find(l=>l.id===it.id&&(l.v||'')===v);
   if(ex) ex.g=Math.min(isCount(it)?99:MAX_LINE_G, ex.g+g);
@@ -2919,6 +2935,7 @@ function parseAddr(s){
 }
 
 function openCheckout(){
+  hit('checkout');
   /* Онлайн-оплати поки немає. Поки її не підключено, не пропонуємо:
      інакше оператор бачив би «оплачено», а грошей ніхто не брав. */
   let mode=getMode,pay='cash';
@@ -4022,6 +4039,7 @@ if('serviceWorker' in navigator){
 
 /* стартуємо після того, як усе оголошено */
 uiReady=true;
+hit('visit');                       // статистика: зайшов на сайт (раз за візит)
 showActiveBar();
 loadPopular();
 loadStock();
