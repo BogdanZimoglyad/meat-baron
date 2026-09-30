@@ -10,16 +10,18 @@ const cut = re => { const m = src.match(re); if (!m) { console.error('не зн�
 const code = [
   cut(/const NAG_FIRST=[^\n]*/),
   cut(/const plural=[^\n]*/),
+  cut(/const SAY=\{[\s\S]*?\n\};/),
+  cut(/const count=[^\n]*/),
   cut(/const mins=[^\n]*/),
-  cut(/function stuckOf\(o,now\)\{[\s\S]*?\n\}/),
-  cut(/function nagDue\(orders,now,told\)\{[\s\S]*?\n\}/)
+  cut(/function stuckOf\(o,now,L\)\{[\s\S]*?\n\}/),
+  cut(/function nagDue\(orders,now,told,L\)\{[\s\S]*?\n\}/)
 ].join('\n');
 const api = new Function(`${code}; return { stuckOf, nagDue, plural }`)();
 
 const MIN = 60000, T = Date.parse('2026-09-29T12:00:00+03:00');
 const ord = o => ({ no: 57, status: 'accepted', mode: 'pickup', day: '', createdAt: T - 60 * MIN,
   slotAt: T + 60 * MIN, startAt: T, readyAt: 0, ...o });
-const due = (o, now, told = {}) => api.nagDue([o], now, told);
+const due = (o, now, told = {}, L = 'uk') => api.nagDue([o], now, told, L);
 
 const t = [];
 const ok = (name, cond) => t.push([name, cond]);
@@ -55,15 +57,24 @@ const told = {};
 let said = [];
 for (let m = 0; m <= 12; m++) {
   const now = T + m * MIN;
-  const d = api.nagDue([o], now, told);
+  const d = api.nagDue([o], now, told, 'uk');
   d.forEach(x => { told[x.no] = now; said.push(m) });
 }
 ok('перше через 5 хв, далі кожні 2', JSON.stringify(said) === JSON.stringify([5, 7, 9, 11]));
 
 /* Зрушили замовлення — наступний крок рахується з нуля, а не «ще 2 хв» */
 o = ord({ status: 'ready', readyAt: T + 12 * MIN, slotAt: T });
-ok('новий крок — знову 5 хв спокою', api.nagDue([o], T + 14 * MIN, told).length === 0
-  && api.nagDue([o], T + 17 * MIN, told).length === 1);
+ok('новий крок — знову 5 хв спокою', api.nagDue([o], T + 14 * MIN, told, 'uk').length === 0
+  && api.nagDue([o], T + 17 * MIN, told, 'uk').length === 1);
+
+// ---------- російською: у Chrome на планшеті точки є лише російський голос ----------
+const say = (o, now) => (due(o, now, {}, 'ru')[0] || {}).say || '';
+ok('російською: «Заказ 57 готов уже 7 минут»',
+  /Заказ 57 готов уже 7 минут/.test(say(ord({ status: 'ready', readyAt: T, slotAt: T - 30 * MIN }), T + 7 * MIN)));
+ok('російською: «пора начинать готовить»', /пора начинать готовить/.test(say(ord({ status: 'accepted', startAt: T }), T + 5 * MIN)));
+ok('російською: «Передали курьеру?»', /курьеру/.test(say(ord({ status: 'ready', mode: 'delivery', readyAt: T }), T + 5 * MIN)));
+ok('мову не вказали — російською',
+  /Новый заказ/.test((api.nagDue([ord({ status: 'new', createdAt: T })], T + 6 * MIN, {})[0] || {}).say || ''));
 
 // ---------- слова ----------
 ok('1 хвилину, 3 хвилини, 5 хвилин, 11 хвилин, 22 хвилини',

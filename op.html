@@ -1125,35 +1125,55 @@ function setView(v){
    сум: біля каси стоять покупці. */
 const NAG_FIRST=5*60000, NAG_EVERY=2*60000;
 const plural=(n,a,b,c)=>{ const t=n%10,h=n%100; return t===1&&h!==11?a:t>=2&&t<=4&&(h<12||h>14)?b:c };
-const mins=ms=>{ const n=Math.max(1,Math.round(ms/60000)); return n+' '+plural(n,'хвилину','хвилини','хвилин') };
+/* Фрази двома мовами. Говоримо російською: у Chrome на планшеті точки
+   українського голосу немає, а російський («Google русский») є
+   (власник, 30.09). Якщо російського раптом немає, а український є —
+   говоримо українською. */
+const SAY={
+  ru:{min:['минуту','минуты','минут'], ord:['заказ','заказа','заказов'],
+    fresh:n=>`Новый заказ ${n} ждёт, чтобы его приняли`,
+    start:n=>`Заказ ${n}: пора начинать готовить`,
+    late:n=>`Заказ ${n} уже должен быть готов`,
+    ready:(n,m)=>`Заказ ${n} готов уже ${m}. Если выдали — нажмите «Видано»`,
+    dlv:n=>`Заказ ${n} готов. Передали курьеру?`,
+    more:m=>`И ещё ${m}`, on:'Напоминания включены'},
+  uk:{min:['хвилину','хвилини','хвилин'], ord:['замовлення','замовлення','замовлень'],
+    fresh:n=>`Нове замовлення ${n} чекає, щоб його прийняли`,
+    start:n=>`Замовлення ${n}: час починати готувати`,
+    late:n=>`Замовлення ${n} вже мало бути готове`,
+    ready:(n,m)=>`Замовлення ${n} готове вже ${m}. Якщо видали — натисніть «Видано»`,
+    dlv:n=>`Замовлення ${n} готове. Передали курʼєру?`,
+    more:m=>`І ще ${m}`, on:'Нагадування увімкнено'}
+};
+const count=(n,w)=>n+' '+plural(n,w[0],w[1],w[2]);
+const mins=(ms,L)=>count(Math.max(1,Math.round(ms/60000)),SAY[L||'ru'].min);
 
 /* Чи застрягло замовлення, з якого моменту і що сказати. null — усе гаразд.
    Неприйняте нагадуємо завжди — і на завтра теж: прийняти його треба
    зараз. Решту на інший день не чіпаємо: їм ще рано. */
-function stuckOf(o,now){
+function stuckOf(o,now,L){
+  const S=SAY[L||'ru'];
   if(o.status==='new')
-    return {since:o.createdAt, say:`Нове замовлення ${o.no} чекає, щоб його прийняли`};
+    return {since:o.createdAt, say:S.fresh(o.no)};
   if(o.day) return null;
   if(o.status==='accepted'&&o.startAt)
-    return {since:o.startAt, say:`Замовлення ${o.no}: час починати готувати`};
+    return {since:o.startAt, say:S.start(o.no)};
   if(o.status==='cooking'&&o.slotAt)
-    return {since:o.slotAt, say:`Замовлення ${o.no} вже мало бути готове`};
+    return {since:o.slotAt, say:S.late(o.no)};
   if(o.status==='ready'){
     /* Самовивіз рахуємо від часу видачі: готове о першій на пʼяту — не
        забуте, людина просто ще не прийшла */
     const since=o.mode==='pickup'? Math.max(o.readyAt||0,o.slotAt||0) : o.readyAt;
-    return {since, say: o.mode==='pickup'
-      ? `Замовлення ${o.no} готове вже ${mins(now-since)}. Якщо видали — натисніть «Видано»`
-      : `Замовлення ${o.no} готове. Передали курʼєру?`};
+    return {since, say: o.mode==='pickup' ? S.ready(o.no,mins(now-since,L)) : S.dlv(o.no)};
   }
   return null;
 }
 
 /* Кого треба нагадати саме зараз. told — коли про кожне говорили востаннє. */
-function nagDue(orders,now,told){
+function nagDue(orders,now,told,L){
   const out=[];
   for(const o of orders){
-    const s=stuckOf(o,now);
+    const s=stuckOf(o,now,L);
     if(!s||!s.since||now-s.since<NAG_FIRST) continue;
     const last=told[o.no]||0;
     /* Після зміни статусу відлік іде з нуля: last раніше за since —
@@ -1164,9 +1184,13 @@ function nagDue(orders,now,told){
   return out;
 }
 
-let told={}, NAGGED=new Set(), quietTill=0, VOICE=null;
+let told={}, NAGGED=new Set(), quietTill=0, VOICE=null, LANG='ru';
 function pickVoice(){
-  try{ VOICE=speechSynthesis.getVoices().find(v=>/^uk/i.test(v.lang))||null }catch(e){ VOICE=null }
+  try{
+    const vs=speechSynthesis.getVoices();
+    VOICE=vs.find(v=>/^ru/i.test(v.lang))||vs.find(v=>/^uk/i.test(v.lang))||null;
+  }catch(e){ VOICE=null }
+  LANG=VOICE&&/^uk/i.test(VOICE.lang)?'uk':'ru';
   paintVoice();
 }
 function paintVoice(){
@@ -1175,13 +1199,13 @@ function paintVoice(){
   el.hidden=false;
   el.className='pill'+(q||!VOICE?' off':'');
   el.textContent= q ? `🔕 тиша до ${hhmm(quietTill)} · увімкнути`
-    : VOICE ? '🗣 нагадування голосом' : '🔈 немає українського голосу — лише сигнал';
+    : VOICE ? '🗣 нагадування голосом' : '🔈 немає голосу в браузері — лише сигнал';
 }
 /* Дотик до позначки: у тиші — повернути звук, інакше тиша на 10 хв (година
    пік, черга біля каси). Заразом це й перевірка голосу. */
 function voiceTap(){
   audioOn();
-  if(quietTill>Date.now()){ quietTill=0; speak(['Нагадування увімкнено']) }
+  if(quietTill>Date.now()){ quietTill=0; speak([SAY[LANG].on]) }
   else{ quietTill=Date.now()+10*60000; }
   paintVoice();
 }
@@ -1190,7 +1214,7 @@ function speak(list){
   if(!VOICE){ setTimeout(beep,260); return }
   try{
     const show=list.slice(0,3);
-    if(list.length>3) show.push(`І ще ${list.length-3} ${plural(list.length-3,'замовлення','замовлення','замовлень')}`);
+    if(list.length>3) show.push(SAY[LANG].more(count(list.length-3,SAY[LANG].ord)));
     show.forEach(t=>{ const u=new SpeechSynthesisUtterance(t); u.voice=VOICE; u.lang=VOICE.lang; speechSynthesis.speak(u) });
   }catch(e){}
 }
@@ -1199,8 +1223,8 @@ function nag(d){
   paintVoice();                       // тиша могла скінчитись
   const live=(d.orders||[]).filter(o=>o.status!=='done'&&o.status!=='canceled');
   /* Підсвітка картки — поки замовлення застрягле, навіть у тиші */
-  NAGGED=new Set(live.filter(o=>{ const s=stuckOf(o,now); return s&&s.since&&now-s.since>=NAG_FIRST }).map(o=>o.no));
-  const due=nagDue(live,now,told);
+  NAGGED=new Set(live.filter(o=>{ const s=stuckOf(o,now,LANG); return s&&s.since&&now-s.since>=NAG_FIRST }).map(o=>o.no));
+  const due=nagDue(live,now,told,LANG);
   if(!due.length) return;
   due.forEach(x=>told[x.no]=now);
   if(quietTill>Date.now()) return;
