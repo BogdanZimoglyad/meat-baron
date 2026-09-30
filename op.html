@@ -519,6 +519,9 @@ function draw(d){
   bindRcal();
   if(!FOCUS) w.querySelectorAll('.main [data-card]').forEach(c=>c.onclick=e=>{
     if(e.target.closest('button,a,input,textarea,select,label,.form,.more')) return;
+    /* Поки відкрита форма (сума, коментар, позиція) — дотик поруч нічого
+       не відкриває: інакше форма закрилась би разом із набраним */
+    if(form) return;
     const o=d.orders.find(x=>x.no===+c.dataset.card);
     if(!o) return;
     FOCUS={no:o.no, copy:o, from:'orders', label:''};
@@ -1346,6 +1349,10 @@ async function load(){
     lastOk=Date.now();
     $('net').textContent='оновлено '+hhmm(lastOk);
     $('net').classList.remove('off');
+    /* Відкрите з календаря замовлення минулого дня в цьому списку не
+       живе — після дії з ним підтягуємо його свіжий вигляд з календаря,
+       інакше картка показувала б старий статус до наступної хвилини */
+    if(FOCUS&&!d.orders.some(o=>o.no===FOCUS.no)&&CAL.pick) loadDay().then(()=>{ if(FOCUS&&view==='orders'&&!form) draw(DATA) });
     draw(d);
     /* Стоп-лист і мангал міняють і з бота — тримаємо екран свіжим.
        Календар — тим самим тактом: нове замовлення на завтра має
