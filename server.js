@@ -315,7 +315,14 @@ bot.on('contact', msg => {
   }
 
   const name = [c.first_name, c.last_name].filter(Boolean).join(' ').slice(0, 60);
+  /* Для статистики власника: скільки входів за день і скільки з них
+     уперше (30.09). Лише числа — хто саме, тут не пишемо. */
+  const firstLogin = !(db.users[telKey] && db.users[telKey].tgId);
+  db.logins = db.logins || {};
+  const lg = db.logins[kyivDate()] || (db.logins[kyivDate()] = { n: 0, fresh: 0 });
+  lg.n++; if (firstLogin) lg.fresh++;
   const u = db.users[telKey] || { telKey, createdAt: Date.now() };
+  if (firstLogin) u.tgSince = Date.now();   // коли вперше увійшов через Telegram
   u.tel = '+380' + telKey;
   u.tgId = msg.from.id;
   if (!u.name && name) u.name = name;      // своє імʼя з профілю не затираємо
@@ -1357,6 +1364,24 @@ function statsPage(shopList, fromDay, toDay) {
     .sort((a, b) => b.at - a.at).slice(0, 15);
 
   const hitsSum = k => dayKeys.reduce((s, d) => s + (((db.hits || {})[d] || {})[k] || 0), 0);
+
+  /* Telegram-вхід. Замовлення з 30.09 памʼятають, чи був вхід (auth);
+     старіші рахуємо наближено: вхід був, якщо людина на той момент уже
+     входила через Telegram. */
+  const userOf = o => (db.users || {})[o.telKey] || {};
+  const tgSince = u => u.tgId ? (u.tgSince || u.createdAt || 0) : Infinity;
+  const withTg = o => o.auth !== undefined ? !!o.auth : tgSince(userOf(o)) <= (o.createdAt || 0);
+  const tgOrders = live.filter(withTg), guestOrders = live.filter(o => !withTg(o));
+  const sumOf = l => kop(l.reduce((x, o) => x + (o.total || 0), 0));
+  const logins = dayKeys.reduce((a, d) => { const x = (db.logins || {})[d] || {}; a.n += x.n || 0; a.fresh += x.fresh || 0; return a }, { n: 0, fresh: 0 });
+  const tg = {
+    logins: logins.n, loginsFresh: logins.fresh,
+    loginsSince: Object.keys(db.logins || {}).sort()[0] || '',
+    accounts: Object.values(db.users || {}).filter(u => u.tgId && tgSince(u) >= from && tgSince(u) < to).length,
+    orders: tgOrders.length, guest: guestOrders.length,
+    sum: sumOf(tgOrders), guestSum: sumOf(guestOrders),
+    approx: live.some(o => o.auth === undefined)
+  };
   return {
     ok: true, days: dayKeys.length, from: fromDay, to: toDay, today,
     /* з якого дня взагалі є замовлення — нижня межа календаря */
@@ -1371,6 +1396,7 @@ function statsPage(shopList, fromDay, toDay) {
       repeat: Object.values(perPerson).filter(n => n > 1).length },
     funnel: { visit: hitsSum('visit'), cart: hitsSum('cart'), checkout: hitsSum('checkout'), orders: inRange.length },
     hitsSince: Object.keys(db.hits || {}).sort()[0] || '',
+    tg,
     cancels,
     /* Один день — усі його замовлення, від ранніх до пізніх */
     orders: dayKeys.length === 1 ? inRange.sort((a, b) => a.createdAt - b.createdAt).map(o => ({
@@ -1973,6 +1999,8 @@ app.post('/api/order', async (req, res) => {
     nm,
     tel: '+380' + telKey,
     telKey,
+    /* Чи замовляли, увійшовши через Telegram, — для статистики (30.09) */
+    auth: !!who,
     note: String(b.note || '').slice(0, 400),
     when: String(b.when || '').slice(0, 80),
     slotAt,

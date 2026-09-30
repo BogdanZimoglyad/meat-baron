@@ -41,7 +41,11 @@ add(2 * DAY, { total: 400, telKey: '672222222', mode: 'delivery', pay: 'card' })
 add(3 * DAY, { total: 600, telKey: '673333333', lines: [line('Ошийок', 1500, 550), line('Лаваш тонкий', 2, 70)] });
 add(4 * DAY, { status: 'canceled', total: 900, telKey: '674444444',
   adjust: [{ kind: 'cancel', note: 'клієнт не відповідає', by: 'панель', at: now - 4 * DAY + HOUR }] });
-add(40 * DAY, { total: 999, telKey: '672222222' });                        // давнє — поза 30 днями, але робить 672… «поверненим»
+add(40 * DAY, { total: 999, telKey: '672222222' });
+/* 671… увійшов через Telegram 10 днів тому; 673… замовив із позначкою входу */
+db.users = { '671111111': { tgId: 1, tgSince: now - 10 * DAY }, '672222222': { tgId: 2, tgSince: now - 1 * HOUR } };
+db.orders[1003].auth = true;
+db.logins = { [kyivDate(now)]: { n: 3, fresh: 1 } };                        // давнє — поза 30 днями, але робить 672… «поверненим»
 db.hits[kyivDate(now)] = { visit: 50, cart: 12, checkout: 6 };
 db.hits[kyivDate(now - DAY)] = { visit: 30, cart: 5 };
 
@@ -69,6 +73,9 @@ ok('лічильник працює з першого дня з даними', s
 ok('скасування з причиною', s.cancels.length === 1 && s.cancels[0].why === 'клієнт не відповідає');
 ok('сьогоднішній день останній у ряду', s.perDay[29].day === kyivDate(now) && s.perDay[29].visit === 50);
 ok('7 днів — 7 стовпчиків', page(7).perDay.length === 7);
+ok('Telegram: з входом 2 (увійшов раніше + позначка), без входу 1', s.tg.orders === 2 && s.tg.guest === 1);
+ok('Telegram: 672… увійшов уже після замовлення — рахуємо як без входу', s.tg.guestSum === 400);
+ok('Telegram: входів 3, уперше 1; нових акаунтів 2', s.tg.logins === 3 && s.tg.loginsFresh === 1 && s.tg.accounts === 2);
 const one = api.statsPage([0], today, today);
 ok('один день — список його замовлень', one.days === 1 && one.orders.length === 1
   && one.orders[0].total === 800 && one.orders[0].label === 'Видано');
