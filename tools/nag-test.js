@@ -14,9 +14,10 @@ const code = [
   cut(/const count=[^\n]*/),
   cut(/const mins=[^\n]*/),
   cut(/function stuckOf\(o,now,L\)\{[\s\S]*?\n\}/),
-  cut(/function nagDue\(orders,now,told,L\)\{[\s\S]*?\n\}/)
+  cut(/function nagDue\(orders,now,told,L\)\{[\s\S]*?\n\}/),
+  cut(/function unlockDue\(orders,now,heard,L\)\{[\s\S]*?\n\}/)
 ].join('\n');
-const api = new Function(`${code}; return { stuckOf, nagDue, plural }`)();
+const api = new Function(`${code}; return { stuckOf, nagDue, unlockDue, plural }`)();
 
 const MIN = 60000, T = Date.parse('2026-09-29T12:00:00+03:00');
 const ord = o => ({ no: 57, status: 'accepted', mode: 'pickup', day: '', createdAt: T - 60 * MIN,
@@ -75,6 +76,21 @@ ok('російською: «пора начинать готовить»', /по
 ok('російською: «Передали курьеру?»', /курьеру/.test(say(ord({ status: 'ready', mode: 'delivery', readyAt: T }), T + 5 * MIN)));
 ok('мову не вказали — російською',
   /Новый заказ/.test((api.nagDue([ord({ status: 'new', createdAt: T })], T + 6 * MIN, {})[0] || {}).say || ''));
+
+// ---------- кнопка «Готується» ожила — одразу, один раз ----------
+{
+  const o = ord({ status: 'accepted', startAt: T });
+  const heard = {};
+  ok('до часу братися — мовчимо', api.unlockDue([o], T - MIN, heard, 'ru').length === 0);
+  const first = api.unlockDue([o], T + 10000, heard, 'ru');
+  ok('щойно ожила — «можно начинать готовить»', first.length === 1 && /можно начинать готовить/.test(first[0].say));
+  first.forEach(x => heard[x.no] = 1);
+  ok('вдруге не кажемо', api.unlockDue([o], T + 2 * MIN, heard, 'ru').length === 0);
+  ok('відкрили панель через 20 хв — не «можно», а звичайне нагадування',
+    api.unlockDue([o], T + 20 * MIN, {}, 'ru').length === 0 && api.nagDue([o], T + 20 * MIN, {}, 'ru').length === 1);
+  ok('на інший день — мовчимо', api.unlockDue([ord({ status: 'accepted', startAt: T, day: 'завтра' })], T + 10000, {}, 'ru').length === 0);
+  ok('українською — «можна починати готувати»', /можна починати/.test((api.unlockDue([o], T + 10000, {}, 'uk')[0] || {}).say || ''));
+}
 
 // ---------- слова ----------
 ok('1 хвилину, 3 хвилини, 5 хвилин, 11 хвилин, 22 хвилини',
