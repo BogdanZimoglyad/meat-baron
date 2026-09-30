@@ -11,6 +11,8 @@ const CAT = require(path.join(__dirname, '..', 'catalog.js'));
 const cut = re => { const m = src.match(re); if (!m) { console.error('не знайшли: ' + re); process.exit(1) } return m[0] };
 const code = [
   cut(/const kyivHour = [\s\S]*?\);\n/),
+  cut(/const TEST_RE = [^\n]*/),
+  cut(/const isTestOrder = [^\n]*/),
   cut(/function statsRange\([^)]*\) \{[\s\S]*?\n\}/),
   cut(/function kyivMs\(day, h, m\) \{[\s\S]*?\n\}/),
   cut(/const wdayOf = [^\n]*/),
@@ -93,13 +95,24 @@ ok('dayAdd через кінець місяця', api.dayAdd('2026-09-30', 1) ==
 
 // ---------- за днем видачі: видно замовлення наперед ----------
 const later = api.dayAdd(today, 3);
-add(30 * 60000, { slotAt: new Date(later + 'T14:00:00+03:00').getTime(), total: 700, note: 'тест, не готувати' });
+add(30 * 60000, { slotAt: new Date(later + 'T14:00:00+03:00').getTime(), total: 700, note: 'без цибулі' });
 const byCreated = api.statsPage([0], later, later);
 const bySlot = api.statsPage([0], later, later, 'slot');
 ok('за днем замовлення майбутній день порожній', byCreated.cur.n === 0);
 ok('за днем видачі — замовлення наперед на цей день', bySlot.cur.n === 1 && bySlot.cur.sum === 700 && bySlot.by === 'slot');
-ok('коментар клієнта в списку — видно «тест»', bySlot.orders[0].note === 'тест, не готувати');
-ok('сьогодні за днем видачі не бере того, що на післязавтра', api.statsPage([0], today, today, 'slot').orders.every(o => o.note !== 'тест, не готувати'));
+ok('коментар клієнта — у списку', bySlot.orders[0].note === 'без цибулі');
+ok('сьогодні за днем видачі не бере того, що на післязавтра', api.statsPage([0], today, today, 'slot').orders.every(o => o.note !== 'без цибулі'));
+
+// ---------- тестові не рахуємо ----------
+const before = page(30);
+add(20 * 60000, { total: 5000, note: 'Тест, не готувати' });
+add(15 * 60000, { total: 3000, adjust: [{ kind: 'note', note: 'тестове замовлення', by: 'панель', at: now }] });
+add(10 * 60000, { total: 200, note: 'протест проти цибулі' });
+const after = page(30);
+ok('тестові (коментар клієнта чи оператора) — не в цифрах', after.cur.sum === before.cur.sum + 200 && after.cur.n === before.cur.n + 1);
+ok('«протест» — не тест', after.orders.some(o => o.note === 'протест проти цибулі' && !o.test));
+ok('у списку тестові є, з позначкою, і пораховано скільки', after.tests === 2 && after.orders.filter(o => o.test).length === 2);
+ok('воронка «замовили» — без тестових', after.funnel.orders === before.funnel.orders + 1);
 
 let bad = 0;
 for (const [n, good] of t) { console.log((good ? '  ok  ' : 'ПАДАЄ') + ' · ' + n); if (!good) bad++ }

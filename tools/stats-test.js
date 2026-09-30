@@ -12,6 +12,8 @@ const code = [
   cut(/const kyivDate = \(ts = Date\.now\(\)\) =>[\s\S]*?const futureDay = o => [^\n]*/),
   cut(/function dayStats\(shop, day\) \{[\s\S]*?\n\}/),
   cut(/function dayText\(shop, day\) \{[\s\S]*?\n\}/),
+  cut(/const TEST_RE = [^\n]*/),
+  cut(/const isTestOrder = [^\n]*/),
   cut(/function statsRange\([^)]*\) \{[\s\S]*?\n\}/),
   cut(/const cmp = \(a, b\) => \{[\s\S]*?\n\};/),
   cut(/function statsText\(shopList, days, title\) \{[\s\S]*?\n\}/)
@@ -29,6 +31,7 @@ const env = {
   esc: s => String(s),
   money: n => CAT.kop(n).toFixed(2).replace(/\.00$/, '') + ' ₴',
   wLabel: g => (g >= 1000 ? (g / 1000).toFixed(g % 100 ? 2 : g % 1000 ? 1 : 0) + ' кг' : g + ' г'),
+  adjustmentsOf: o => (Array.isArray(o.adjust) ? o.adjust : []),
   db: null
 };
 const build = orders => {

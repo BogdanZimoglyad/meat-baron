@@ -245,6 +245,7 @@ function render(s){
     ${tile('Клієнтів',pp.total,`нових ${pp.fresh} · повернулись ${pp.again}`)}
     ${tile('Скасовано',c.canceled,c.n+c.canceled?`${pct(c.canceled,c.n+c.canceled)} замовлень`:'')}
   </div>
+  ${s.tests?`<p class="note" style="margin:8px 2px 0">Тестових замовлень не враховано: ${s.tests} — їх видно на вкладці «🧾 Замовлення» зі значком ТЕСТ.</p>`:''}
 
   ${s.by==='slot'?'':`<div class="card funnel">
     <h2>Від заходу до замовлення</h2>
@@ -306,7 +307,8 @@ function render(s){
    позначає тестові коментарем («тест») — їх видно одразу (30.09). */
 const OPEN=new Set();
 let OQ='';
-const isTest=o=>/тест|test/i.test([o.note,...(o.adj||[]).map(a=>a.note)].join(' '));
+/* Тестове чи ні — вирішує сервер (те саме правило, за яким не рахує в цифрах) */
+const isTest=o=>!!o.test;
 const dt=ms=>ms?new Date(ms).toLocaleString('uk-UA',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Kyiv'}):'—';
 const ADJ={note:'💬',add:'➕',sub:'➖',fact:'🧾',ship:'🚕',cancel:'✖️'};
 function orderDetail(o){

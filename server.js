@@ -1148,11 +1148,18 @@ const isOwner = msg => !!OWNER_ID && msg.from && msg.from.id === OWNER_ID;
 const kyivHour = ms => Number(new Date(ms)
   .toLocaleString('en-US', { timeZone: 'Europe/Kyiv', hour: 'numeric', hour12: false }));
 
+/* Тестові замовлення власник позначає коментарем «тест» — клієнтським чи
+   операторським (30.09). У підсумки вони не йдуть: ні в /week і /month,
+   ні на сторінку статистики; у списку замовлень там їх видно зі значком.
+   Слово — з початку: «тест», «тестове», «test», але не «протест». */
+const TEST_RE = /(^|[^a-zа-яіїєґ])(тест|test)/i;
+const isTestOrder = o => TEST_RE.test([o.note || '', ...adjustmentsOf(o).map(a => a.note || '')].join(' '));
+
 /* at — за яким часом відносимо замовлення до дня: за замовчуванням коли
    оформили (/week, /month); сторінка статистики вміє ще й за днем видачі. */
 function statsRange(shopList, from, to, at = o => o.createdAt || 0) {
   const list = Object.values(db.orders).filter(o =>
-    shopList.includes(o.shop) && at(o) >= from && at(o) < to);
+    shopList.includes(o.shop) && at(o) >= from && at(o) < to && !isTestOrder(o));
   const live = list.filter(o => o.status !== CANCELED);
   const sum = live.reduce((s, o) => s + (o.total || 0), 0);
   const items = {}, hours = {};
@@ -1317,8 +1324,10 @@ function statsPage(shopList, fromDay, toDay, by = 'created') {
   const cur = statsRange(shopList, from, to, at);
   const prev = statsRange(shopList, from - span, from, at);
 
-  const inRange = Object.values(db.orders).filter(o =>
+  /* Усі — для списку замовлень; без тестових — для цифр */
+  const inRangeAll = Object.values(db.orders).filter(o =>
     shopList.includes(o.shop) && at(o) >= from && at(o) < to);
+  const inRange = inRangeAll.filter(o => !isTestOrder(o));
   const live = inRange.filter(o => o.status !== CANCELED);
 
   /* по днях */
@@ -1352,7 +1361,7 @@ function statsPage(shopList, fromDay, toDay, by = 'created') {
   /* клієнти: новий — якщо перше його замовлення взагалі припало на ці дні */
   const firstOf = {};
   for (const o of Object.values(db.orders)) {
-    if (o.status === CANCELED || !o.telKey) continue;
+    if (o.status === CANCELED || !o.telKey || isTestOrder(o)) continue;
     if (!firstOf[o.telKey] || o.createdAt < firstOf[o.telKey]) firstOf[o.telKey] = o.createdAt;
   }
   const people = new Set(live.map(o => o.telKey).filter(Boolean));
@@ -1406,8 +1415,10 @@ function statsPage(shopList, fromDay, toDay, by = 'created') {
     cancels,
     /* Усі замовлення періоду — від ранніх до пізніх, не більше 500
        найсвіжіших. Повністю: власник переглядає кожне окремо. */
-    ordersMore: Math.max(0, inRange.length - 500),
-    orders: inRange.sort((a, b) => at(a) - at(b)).slice(-500).map(o => ({
+    tests: inRangeAll.length - inRange.length,
+    ordersMore: Math.max(0, inRangeAll.length - 500),
+    orders: inRangeAll.sort((a, b) => at(a) - at(b)).slice(-500).map(o => ({
+      test: isTestOrder(o),
       no: o.no, at: o.createdAt, slotAt: o.slotAt || 0, nm: o.nm || '', tel: o.tel || '',
       mode: o.mode, addr: o.addr || '', pay: o.pay || 'cash', auth: o.auth,
       total: o.total || 0, totalOrig: o.totalOrig, ship: o.ship || 0,
