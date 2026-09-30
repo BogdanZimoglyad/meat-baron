@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+# Панель точки — для операторів, не для пошуку
+Disallow: /op.html
+
+Sitemap: https://meat-baron.kh.ua/sitemap.xml

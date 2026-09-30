@@ -103,6 +103,44 @@ display:grid;place-items:center;min-height:100vh;text-align:center}a{color:#e04a
   }
 })();
 
+/* Картка бізнесу для Google (schema.org) і sitemap.xml. Магазини беремо з
+   того самого SHOPS_ALL, що й сайт, — копія адрес розійшлась би з ним.
+   Години знаємо лише для точки, що приймає замовлення з сайту; для
+   решти не вигадуємо (власник, 30.09). */
+(function stampSeo() {
+  const org = { '@type': 'Organization', '@id': SITE + '/#org', name: 'Мʼясний Барон', url: SITE + '/',
+    logo: SITE + '/logo-square.png', sameAs: ['https://www.instagram.com/meat.baron_/'] };
+  const hours = [
+    { '@type': 'OpeningHoursSpecification', dayOfWeek: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], opens: '08:00', closes: '20:00' },
+    { '@type': 'OpeningHoursSpecification', dayOfWeek: 'Sunday', opens: '08:00', closes: '19:00' }
+  ];
+  const shops = CAT.SHOPS_ALL.map((s, i) => ({
+    '@type': 'Store', '@id': SITE + '/#shop' + (i + 1),
+    name: 'Мʼясний Барон — ' + s[0],
+    parentOrganization: { '@id': SITE + '/#org' },
+    address: { '@type': 'PostalAddress', streetAddress: s[0], addressLocality: 'Харків', addressCountry: 'UA' },
+    ...(s[1] ? { telephone: s[1] } : {}),
+    url: SITE + '/',
+    image: SITE + '/logo-square.png',
+    ...(s[2] ? { openingHoursSpecification: hours, hasMenu: SITE + '/' } : {})
+  }));
+  const json = JSON.stringify({ '@context': 'https://schema.org', '@graph': [org, ...shops] });
+  const file = path.join(root, 'index.html');
+  const was = fs.readFileSync(file, 'utf8');
+  const now = was.replace(/<script type="application\/ld\+json" id="ld-shops">[\s\S]*?<\/script>/,
+    '<script type="application/ld+json" id="ld-shops">' + json.replace(/</g, '\\u003c') + '</script>');
+  if (now !== was) { fs.writeFileSync(file, now); console.log('Картку бізнесу в index.html оновлено: магазинів ' + shops.length) }
+
+  /* У sitemap — лише головна: сторінки t/ одразу переставляють людину
+     в каталог, окремого змісту в них немає. */
+  const today = new Date().toISOString().slice(0, 10);
+  fs.writeFileSync(path.join(root, 'sitemap.xml'),
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+    '  <url><loc>' + SITE + '/</loc><lastmod>' + today + '</lastmod><changefreq>daily</changefreq></url>\n' +
+    '</urlset>\n');
+})();
+
 fs.mkdirSync(OUT, { recursive: true });
 /* Прибираємо старі: позицію могли перейменувати або зняти з продажу,
    і її сторінка вела б у нікуди. */
