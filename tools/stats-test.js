@@ -107,6 +107,16 @@ t.push(['у підсумку обидва рядки й різними слов�
 s = build({ 1: ord({ createdAt: Date.now(), status: 'done', slotAt: Date.now() - HOUR }) });
 t.push(['коли чекати нічого — рядка немає', !has(s.dayText(0, today), 'Чекають свого дня')]);
 
+// 8. тестові (коментар «тест») — ні в підсумку дня, ні в /week
+s = build({
+  1: ord({ createdAt: Date.now(), status: 'done', total: 500 }),
+  2: ord({ createdAt: Date.now(), status: 'done', total: 9000, note: 'тест' }),
+  3: ord({ createdAt: Date.now(), status: 'done', total: 700, adjust: [{ kind: 'note', note: 'Тестове, не готувати' }] })
+});
+dd = s.dayStats(0, today);
+t.push(['тестові не в підсумку дня', dd.all === 1 && dd.sum === 500]);
+t.push(['тестові не в /week', s.statsRange([0], Date.now() - 7 * DAY, Date.now() + 1).n === 1]);
+
 let bad = 0;
 for (const [name, ok] of t) { console.log((ok ? '  ok  ' : 'ПАДАЄ') + ' · ' + name); if (!ok) bad++ }
 console.log(bad ? `\n${bad} з ${t.length} не пройшло` : `\nусі ${t.length} сценарії пройшли`);

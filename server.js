@@ -776,7 +776,8 @@ function dayShort(ms) {
 
 function dayStats(shop, day) {
   const list = Object.values(db.orders)
-    .filter(o => o.shop === shop && kyivDate(o.createdAt) === day);
+    /* тестові (коментар «тест») у підсумок дня не йдуть — як і в статистику */
+    .filter(o => o.shop === shop && kyivDate(o.createdAt) === day && !isTestOrder(o));
   const live = list.filter(o => o.status !== CANCELED);
   const sum = live.reduce((s, o) => s + (o.total || 0), 0);
   const fg = live.reduce((s, o) => s + (o.fry ? (o.fg || 0) : 0), 0);
