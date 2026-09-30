@@ -3157,7 +3157,8 @@ function openCheckout(){
           return;
         }
       }
-      const payload={shop,shopName:SHOPS[shop][0],mode,addr,addrParts:mode==='delivery'?addrP:null,fry,fg,pay,total,nm,tel,note:orderNote,when:whenLabel(mode),slotAt:chosenSlot(mode),lines:cart.map(l=>({...l,sum:lineSum(l)}))};
+      /* app — сайт відкрито з іконки на екрані, як застосунок (для статистики) */
+      const payload={app:onScreen(),shop,shopName:SHOPS[shop][0],mode,addr,addrParts:mode==='delivery'?addrP:null,fry,fg,pay,total,nm,tel,note:orderNote,when:whenLabel(mode),slotAt:chosenSlot(mode),lines:cart.map(l=>({...l,sum:lineSum(l)}))};
       btn.disabled=true;btn.textContent='Відправляємо…';
       /* Замовлення не пішло — кошик лишається, людина бачить чому.
          Раніше будь-яка помилка показувала «Замовлення прийнято» з

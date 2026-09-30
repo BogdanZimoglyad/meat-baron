@@ -9,6 +9,7 @@ const src = fs.readFileSync(path.join(__dirname, '..', 'op.html'), 'utf8');
 const cut = re => { const m = src.match(re); if (!m) { console.error('не знайшли: ' + re); process.exit(1) } return m[0] };
 const code = [
   cut(/const NEXT=\{[\s\S]*?\n  : NEXT\[o\.status\]\|\|null;/),
+  cut(/function dayWord\(ms\)\{[\s\S]*?\n\}/),
   cut(/function card\(o,now\)\{[\s\S]*?\n\}/),
   cut(/function more\(o\)\{[\s\S]*?\n\}/),
   cut(/const FORM=\{[\s\S]*?\n\};/),
@@ -98,6 +99,12 @@ t.push(['коли готують — кнопки «Час» немає', !has(h
   t.push(['обрали годину — кнопка «Перенести на 11:00»', has(h, 'Перенести на 11:00') && !/data-settime="101" +disabled/.test(h)]);
 }
 
+// 3в. коли видавати — крупно, з днем: «сьогодні», «завтра», «Пт, 3.10»
+h = draw(ord({ slotAt: NOW + 5 * MIN }), NOW);
+t.push(['видача сьогодні — під часом «сьогодні»', /class="dw">сьогодні</.test(h) || /class="dw">завтра</.test(h)]);
+h = draw(ord({ slotAt: NOW + 3 * 24 * 60 * MIN }), NOW);
+t.push(['видача через 3 дні — день тижня й дата, виділено', /class="dw fut">(Нд|Пн|Вт|Ср|Чт|Пт|Сб), \d+\.\d{2}</.test(h)]);
+
 // 3б. імʼя й телефон — великим, телефон групами цифр
 h = draw(ord({ tel: '+380979705744', nm: 'Надія' }), NOW);
 t.push(['телефон групами: 097 970 57 44', has(h, '<span class="ph">097 970 57 44</span>')]);
@@ -124,8 +131,8 @@ h = draw(Object.assign(ord(), { can: undefined }), NOW);
 t.push(['без can картка малюється, просто без дрібних дій', has(h, '№ 101') && !has(h, 'class="more"')]);
 
 // 6. замовлення на інший день видно з першого погляду
-h = draw(ord({ day: 'завтра' }), NOW);
-t.push(['«завтра» стоїть біля часу', has(h, '<em>завтра</em>')]);
+h = draw(ord({ day: 'завтра', slotAt: NOW + 24 * 60 * MIN }), NOW);
+t.push(['«завтра» стоїть під часом, виділено', has(h, '<span class="dw fut">завтра</span>')]);
 h = draw(ord(), NOW);
 t.push(['на сьогоднішньому дати немає', !has(h, '<em>')]);
 

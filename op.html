@@ -121,7 +121,11 @@ button{font:inherit;cursor:pointer;border:none}
 .hd .st{font-size:13px;padding:3px 10px;border-radius:999px;background:var(--line);color:var(--bone)}
 .card.new .hd .st{background:var(--ember);color:#fff}
 .card.ready .hd .st{background:rgba(123,168,79,.25);color:var(--ok)}
-.hd .time{margin-left:auto;font-size:17px;font-weight:600}
+/* Коли видавати — крупно: час і під ним день. Раніше стояло дрібне «16:00»,
+   а день для сьогоднішніх не писався зовсім (власник, 30.09). */
+.hd .time{margin-left:auto;font-size:26px;font-weight:700;text-align:right;line-height:1.05}
+.hd .time .dw{display:block;font-size:15px;font-weight:600;color:var(--smoke);margin-top:2px}
+.hd .time .dw.fut{color:var(--warn)}
 .hd .time small{display:block;font-size:12px;font-weight:400;color:var(--smoke);text-align:right}
 /* «завтра» чи «26.09» біля часу — щоб замовлення на інший день
    не читалось як сьогоднішнє */
@@ -270,7 +274,8 @@ button{font:inherit;cursor:pointer;border:none}
 .grid:not(.one) .card{cursor:pointer}
 .grid.one{grid-template-columns:minmax(0,820px)}
 .grid.one .hd .no{font-size:30px}
-.grid.one .hd .time{font-size:24px}
+.grid.one .hd .time{font-size:34px}
+.grid.one .hd .time .dw{font-size:18px}
 .grid.one .ln{font-size:19px;padding:3px 0}
 .grid.one .meta{font-size:17px}
 .grid.one .sum b{font-size:32px}
@@ -593,6 +598,18 @@ function focusForm(){
   if(el){ el.focus(); try{ el.select() }catch(e){} el.scrollIntoView({block:'nearest'}) }
 }
 
+/* «сьогодні», «завтра», «Пт, 3.10» — день видачі за київським часом */
+function dayWord(ms){
+  const k=t=>new Date(t).toLocaleDateString('sv-SE',{timeZone:'Europe/Kyiv'});
+  const d=k(ms), t=k(Date.now());
+  if(d===t) return 'сьогодні';
+  const [y,m,dd]=t.split('-').map(Number);
+  const tm=new Date(Date.UTC(y,m-1,dd+1)).toISOString().slice(0,10), ys=new Date(Date.UTC(y,m-1,dd-1)).toISOString().slice(0,10);
+  if(d===tm) return 'завтра';
+  if(d===ys) return 'вчора';
+  const [,mo,da]=d.split('-');
+  return ['Нд','Пн','Вт','Ср','Чт','Пт','Сб'][new Date(d+'T12:00:00Z').getUTCDay()]+', '+(+da)+'.'+mo;
+}
 function card(o,now){
   const nx=nextOf(o);
   /* «Прийняти в роботу» дозволено завжди — і на завтра, і задовго до
@@ -613,7 +630,7 @@ function card(o,now){
     <div class="hd">
       <span class="no">№ ${o.no}</span>
       <span class="st">${esc(o.label)}</span>
-      <span class="time">${o.day?`<em>${esc(o.day)}</em> `:''}${esc(when)}<small>${o.mode==='delivery'?'доставка':'самовивіз'}</small></span>
+      <span class="time">${esc(when)}${o.slotAt?`<span class="dw${dayWord(o.slotAt)==='сьогодні'?'':' fut'}">${dayWord(o.slotAt)}</span>`:''}<small>${o.mode==='delivery'?'доставка':'самовивіз'}</small></span>
     </div>
     <div class="meta">
       <div class="who"><span class="nm">${esc(o.nm)}</span><span class="ph">${esc(telGroups(o.tel))}</span></div>

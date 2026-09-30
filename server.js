@@ -1282,6 +1282,14 @@ const statsKeyOf = req => {
    на диску лише числа за день. Роботи JS не виконують, тож їх тут
    майже немає — на відміну від лічильника Cloudflare. */
 const HIT_EVENTS = ['visit', 'cart', 'checkout'];
+/* З чого зайшли й замовили — за User-Agent, який шле сам браузер
+   (власник, 30.09). Новий iPad називає себе Mac, тож він тут «ПК». */
+const DEVICES = ['ios', 'android', 'pc', 'other'];
+const deviceOf = req => {
+  const ua = String(req.headers['user-agent'] || '');
+  return /iPhone|iPad|iPod/i.test(ua) ? 'ios' : /Android/i.test(ua) ? 'android'
+    : /Windows|Macintosh|Mac OS X|Linux|CrOS/i.test(ua) ? 'pc' : 'other';
+};
 let hitDay = '', hitSeen = new Set();
 app.post('/api/hit', (req, res) => {
   if (tooOften('hit', ipOf(req), RATE.hit)) return res.status(429).json({ ok: false });
@@ -1300,6 +1308,7 @@ app.post('/api/hit', (req, res) => {
     db.hits = db.hits || {};
     const d = db.hits[day] || (db.hits[day] = {});
     d[e] = (d[e] || 0) + 1;
+    if (e === 'visit') { const k = 'visit_' + deviceOf(req); d[k] = (d[k] || 0) + 1 }   // заходи по пристроях
     save();
   }
   res.json({ ok: true });
@@ -1417,9 +1426,18 @@ function statsPage(shopList, fromDay, toDay, by = 'created') {
     /* Усі замовлення періоду — від ранніх до пізніх, не більше 500
        найсвіжіших. Повністю: власник переглядає кожне окремо. */
     tests: inRangeAll.length - inRange.length,
+    /* Пристрої: заходи, замовлення, сума. Старі замовлення без позначки — «unknown» */
+    devices: (() => {
+      const out = {};
+      for (const k of [...DEVICES, 'unknown']) out[k] = { visits: 0, orders: 0, sum: 0 };
+      for (const d of dayKeys) for (const k of DEVICES) out[k].visits += (((db.hits || {})[d] || {})['visit_' + k] || 0);
+      for (const o of live) { const x = out[o.dev] || out.unknown; x.orders++; x.sum = kop(x.sum + (o.total || 0)) }
+      return out;
+    })(),
+    appOrders: live.filter(o => o.app).length,
     ordersMore: Math.max(0, inRangeAll.length - 500),
     orders: inRangeAll.sort((a, b) => at(a) - at(b)).slice(-500).map(o => ({
-      test: isTestOrder(o),
+      test: isTestOrder(o), dev: o.dev || '', app: !!o.app,
       no: o.no, at: o.createdAt, slotAt: o.slotAt || 0, nm: o.nm || '', tel: o.tel || '',
       mode: o.mode, addr: o.addr || '', pay: o.pay || 'cash', auth: o.auth,
       total: o.total || 0, totalOrig: o.totalOrig, ship: o.ship || 0,
@@ -2029,6 +2047,9 @@ app.post('/api/order', async (req, res) => {
     telKey,
     /* Чи замовляли, увійшовши через Telegram, — для статистики (30.09) */
     auth: !!who,
+    /* З чого замовили: телефон чи компʼютер, і чи з іконки на екрані */
+    dev: deviceOf(req),
+    app: !!b.app,
     note: String(b.note || '').slice(0, 400),
     when: String(b.when || '').slice(0, 80),
     slotAt,

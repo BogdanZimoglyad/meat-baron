@@ -11,6 +11,7 @@ const CAT = require(path.join(__dirname, '..', 'catalog.js'));
 const cut = re => { const m = src.match(re); if (!m) { console.error('не знайшли: ' + re); process.exit(1) } return m[0] };
 const code = [
   cut(/const kyivHour = [\s\S]*?\);\n/),
+  cut(/const DEVICES = [^\n]*/),
   cut(/const TEST_RE = [^\n]*/),
   cut(/const isTestOrder = [^\n]*/),
   cut(/function statsRange\([^)]*\) \{[\s\S]*?\n\}/),
@@ -113,6 +114,16 @@ ok('тестові (коментар клієнта чи оператора) —
 ok('«протест» — не тест', after.orders.some(o => o.note === 'протест проти цибулі' && !o.test));
 ok('у списку тестові є, з позначкою, і пораховано скільки', after.tests === 2 && after.orders.filter(o => o.test).length === 2);
 ok('воронка «замовили» — без тестових', after.funnel.orders === before.funnel.orders + 1);
+
+// ---------- пристрої ----------
+add(5 * 60000, { total: 300, dev: 'android' });
+add(4 * 60000, { total: 900, dev: 'ios', app: true });
+db.hits[kyivDate(now)].visit_ios = 10; db.hits[kyivDate(now)].visit_android = 4;
+const dv = page(30);
+ok('пристрої: iPhone 1 зам. із 10 заходів, Android 1 із 4', dv.devices.ios.orders === 1 && dv.devices.ios.visits === 10
+  && dv.devices.android.orders === 1 && dv.devices.android.visits === 4 && dv.devices.ios.sum === 900);
+ok('старі замовлення без позначки — «невідомо»', dv.devices.unknown.orders === dv.cur.n - 2);
+ok('з іконки на екрані — пораховано', dv.appOrders === 1 && dv.orders.some(o => o.dev === 'ios' && o.app));
 
 let bad = 0;
 for (const [n, good] of t) { console.log((good ? '  ok  ' : 'ПАДАЄ') + ' · ' + n); if (!good) bad++ }
