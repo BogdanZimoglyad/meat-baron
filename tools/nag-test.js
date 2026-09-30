@@ -56,17 +56,17 @@ ok('видане й скасоване не чіпаємо', due(ord({ status: '
 o = ord({ status: 'cooking', slotAt: T });
 const told = {};
 let said = [];
-for (let m = 0; m <= 12; m++) {
+for (let m = 0; m <= 20; m++) {
   const now = T + m * MIN;
   const d = api.nagDue([o], now, told, 'uk');
   d.forEach(x => { told[x.no] = now; said.push(m) });
 }
-ok('перше через 5 хв, далі кожні 2', JSON.stringify(said) === JSON.stringify([5, 7, 9, 11]));
+ok('перше через 5 хв, далі кожні 5', JSON.stringify(said) === JSON.stringify([5, 10, 15, 20]));
 
-/* Зрушили замовлення — наступний крок рахується з нуля, а не «ще 2 хв» */
-o = ord({ status: 'ready', readyAt: T + 12 * MIN, slotAt: T });
-ok('новий крок — знову 5 хв спокою', api.nagDue([o], T + 14 * MIN, told, 'uk').length === 0
-  && api.nagDue([o], T + 17 * MIN, told, 'uk').length === 1);
+/* Зрушили замовлення — наступний крок рахується з нуля, а не «ще 5 хв» */
+o = ord({ status: 'ready', readyAt: T + 21 * MIN, slotAt: T });
+ok('новий крок — знову 5 хв спокою', api.nagDue([o], T + 23 * MIN, told, 'uk').length === 0
+  && api.nagDue([o], T + 26 * MIN, told, 'uk').length === 1);
 
 // ---------- російською: у Chrome на планшеті точки є лише російський голос ----------
 const say = (o, now) => (due(o, now, {}, 'ru')[0] || {}).say || '';
