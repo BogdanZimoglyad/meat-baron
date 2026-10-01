@@ -9,6 +9,7 @@ on:
 
 jobs:
   test:
+    name: Правила й сервер (vitest)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -18,5 +19,26 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Unit і перевірка сервера (vitest, з покриттям)
+      - name: Unit і перевірка сервера, з покриттям
         run: npm run cover
+
+  ui:
+    name: Сайт, панель, статистика в браузері (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run ui
+      # Упало — звіт зі знімками екрана й записом кроків: Actions → цей запуск → Artifacts
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14

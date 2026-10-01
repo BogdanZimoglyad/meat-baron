@@ -12,3 +12,7 @@ print/
 
 # Звіт покриття тестами (npm run cover)
 coverage/
+
+# Звіти Playwright (npm run ui)
+test-results/
+playwright-report/
