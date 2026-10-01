@@ -188,11 +188,17 @@ const nextBtns = o =>
   : [];
 
 const money = n => kop(n).toFixed(2).replace(/\.00$/, '') + ' ₴';
+/* Код країни й нуль знімаємо стільки разів, скільки трапляються:
+   «+380 0501112233» — це вставлений номер після «+380 », який поле
+   ставить саме. Те саме правило — normPhone в index.html. */
 const normTel = t => {
   let d = String(t || '').replace(/\D/g, '');
-  if (d.startsWith('380')) d = d.slice(3);
-  else if (d.startsWith('80')) d = d.slice(2);
-  else if (d.startsWith('0')) d = d.slice(1);
+  for (let k = 0; k < 3; k++) {
+    if (d.startsWith('380')) d = d.slice(3);
+    else if (d.startsWith('80')) d = d.slice(2);
+    else if (d.startsWith('0')) d = d.slice(1);
+    else break;
+  }
   return d.slice(0, 9);
 };
 /* У логи Railway телефон повністю не пишемо: доступ до логів має

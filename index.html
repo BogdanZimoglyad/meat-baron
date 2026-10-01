@@ -2657,11 +2657,21 @@ function paintLines(){
 
 /* ---------- checkout ---------- */
 /* ---------- телефон ---------- */
+/* Поле саме ставить «+380 », і вставлений з буфера чи з підказки
+   клавіатури повний номер дописувався після нього: «+380 +380501112233»
+   ставало «+380 38 050 11 12», а «0501112233» — «+380 05 011 12 23».
+   Оператор отримував чужий номер (знайшов тест, 01.10). Тож знімаємо код
+   країни й нуль стільки разів, скільки трапляються: номер мобільного
+   після +380 не починається ні з 0, ні з 38, ні з 80. Те саме — normTel
+   у server.js. */
 function normPhone(v){
   let d=String(v).replace(/\D/g,'');
-  if(d.startsWith('380')) d=d.slice(3);
-  else if(d.startsWith('80')) d=d.slice(2);
-  else if(d.startsWith('0')) d=d.slice(1);
+  for(let k=0;k<3;k++){
+    if(d.startsWith('380')) d=d.slice(3);
+    else if(d.startsWith('80')) d=d.slice(2);
+    else if(d.startsWith('0')) d=d.slice(1);
+    else break;
+  }
   return d.slice(0,9);
 }
 function fmtPhone(v){
