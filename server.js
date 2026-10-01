@@ -1290,6 +1290,13 @@ const deviceOf = req => {
   return /iPhone|iPad|iPod/i.test(ua) ? 'ios' : /Android/i.test(ua) ? 'android'
     : /Windows|Macintosh|Mac OS X|Linux|CrOS/i.test(ua) ? 'pc' : 'other';
 };
+/* Звідки прийшли (власник, 01.10): мітка з посилання (?from=) або сайт,
+   з якого перейшли. ig/igs/tt — посилання для SMM (шапка Instagram,
+   сторіс, TikTok), qr0…qr7 — табличка на касі, номер точки в SHOPS_ALL.
+   Решту сайт визначає сам: google, tg, fb, site — інший сайт, app — з
+   іконки на екрані, direct — набрали адресу чи закладка. */
+const SOURCES = ['ig', 'igs', 'tt', 'google', 'tg', 'fb', 'site', 'app', 'direct', 'qr0', 'qr1', 'qr2', 'qr3', 'qr4', 'qr5', 'qr6', 'qr7'];
+const srcOf = v => SOURCES.includes(v) ? v : '';
 let hitDay = '', hitSeen = new Set();
 app.post('/api/hit', (req, res) => {
   if (tooOften('hit', ipOf(req), RATE.hit)) return res.status(429).json({ ok: false });
@@ -1309,6 +1316,8 @@ app.post('/api/hit', (req, res) => {
     const d = db.hits[day] || (db.hits[day] = {});
     d[e] = (d[e] || 0) + 1;
     if (e === 'visit') { const k = 'visit_' + deviceOf(req); d[k] = (d[k] || 0) + 1 }   // заходи по пристроях
+    const src = e === 'visit' && srcOf(b.src);
+    if (src) d['src_' + src] = (d['src_' + src] || 0) + 1;                              // і звідки прийшли
     save();
   }
   res.json({ ok: true });
@@ -1438,9 +1447,17 @@ function statsPage(shopList, fromDay, toDay, by = 'created') {
       return out;
     })(),
     appOrders: live.filter(o => o.app).length,
+    /* Звідки прийшли: заходи, замовлення, сума. Без мітки (до 01.10) — «unknown» */
+    sources: (() => {
+      const out = {};
+      const row = k => out[k] || (out[k] = { visits: 0, orders: 0, sum: 0 });
+      for (const d of dayKeys) for (const k of SOURCES) { const v = ((db.hits || {})[d] || {})['src_' + k]; if (v) row(k).visits += v }
+      for (const o of live) { const x = row(o.src || 'unknown'); x.orders++; x.sum = kop(x.sum + (o.total || 0)) }
+      return out;
+    })(),
     ordersMore: Math.max(0, inRangeAll.length - 500),
     orders: inRangeAll.sort((a, b) => at(a) - at(b)).slice(-500).map(o => ({
-      test: isTestOrder(o), dev: o.dev || '', app: !!o.app,
+      test: isTestOrder(o), dev: o.dev || '', app: !!o.app, src: o.src || '',
       no: o.no, at: o.createdAt, slotAt: o.slotAt || 0, nm: o.nm || '', tel: o.tel || '',
       mode: o.mode, addr: o.addr || '', pay: o.pay || 'cash', auth: o.auth,
       total: o.total || 0, totalOrig: o.totalOrig, ship: o.ship || 0,
@@ -1468,7 +1485,8 @@ app.get('/api/stats', (req, res) => {
   if (!from) from = dayAdd(to, 1 - Math.min(366, Math.max(1, Math.floor(Number(req.query.days) || 30))));
   if (from > to) [from, to] = [to, from];
   if (dayAdd(from, 366) < to) from = dayAdd(to, -365);             // не більше року за раз
-  res.json(statsPage(SHOPS.map((_, i) => i), from, to, by));
+  /* shopsAll — підписи QR-міток: qr2 — це SHOPS_ALL[2] */
+  res.json({ ...statsPage(SHOPS.map((_, i) => i), from, to, by), shopsAll: CATALOG.SHOPS_ALL.map(s => s[0]) });
 });
 
 /* ---------- щоденна копія бази ----------
@@ -2053,6 +2071,8 @@ app.post('/api/order', async (req, res) => {
     /* З чого замовили: телефон чи компʼютер, і чи з іконки на екрані */
     dev: deviceOf(req),
     app: !!b.app,
+    /* Звідки прийшла людина: остання мітка за 7 днів (01.10) */
+    src: srcOf(b.src),
     note: String(b.note || '').slice(0, 400),
     when: String(b.when || '').slice(0, 80),
     slotAt,

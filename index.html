@@ -1304,6 +1304,37 @@ const API='https://api.meat-baron.kh.ua'; // сервер прийому зам�
    Візит — випадковий номер, що живе до закриття вкладки; ні cookie, ні
    Google, ні хто це. Помилка мережі нічого не ламає — просто не
    порахуємо. */
+/* Звідки прийшли (01.10): мітка ?from= з посилань SMM і QR на касі або
+   сайт, з якого перейшли. Мітку прибираємо з адреси, щоб вона не
+   поїхала далі, коли людина поділиться посиланням. Для замовлення
+   беремо останню мітку за 7 днів: побачив у Instagram, а замовив
+   завтра з закладки — це все одно Instagram. */
+const SRC_TAGS=/^(ig|igs|tt|qr[0-7])$/;
+const visitSrc=()=>{
+  let s='';
+  try{ s=sessionStorage.getItem('mb-src')||'' }catch(e){}
+  if(s) return s;
+  const p=new URLSearchParams(location.search), f=(p.get('from')||'').toLowerCase();
+  if(SRC_TAGS.test(f)) s=f;
+  else{
+    let r=document.referrer, h='';
+    try{ if(new URL(r).hostname===location.hostname) r=sessionStorage.getItem('mb-ref')||'' }catch(e){}   // зайшли через сторінку товару t/
+    try{ h=new URL(r).hostname }catch(e){}
+    s=!h||h===location.hostname?(onScreen()?'app':'direct')
+      :/(^|\.)google\./.test(h)?'google':/(^|\.)instagram\.com$/.test(h)?'ig':/(^|\.)tiktok\.com$/.test(h)?'tt'
+      :/(^|\.)(t\.me|telegram\.org)$/.test(h)?'tg':/(^|\.)facebook\.com$/.test(h)?'fb':'site';
+  }
+  if(p.has('from')){ p.delete('from'); try{ history.replaceState(history.state,'',location.pathname+(p.toString()?'?'+p:'')+location.hash) }catch(e){} }
+  try{
+    sessionStorage.setItem('mb-src',s);
+    if(s!=='direct'&&s!=='app') localStorage.setItem('mb-src-last',JSON.stringify({s,at:Date.now()}));
+  }catch(e){}
+  return s;
+};
+const orderSrc=()=>{
+  try{ const l=JSON.parse(localStorage.getItem('mb-src-last')||'null'); if(l&&Date.now()-l.at<7*864e5) return l.s }catch(e){}
+  return visitSrc();
+};
 const hit=(()=>{
   let sid='', sent={};
   try{ sid=sessionStorage.getItem('mb-sid')||''; sent=JSON.parse(sessionStorage.getItem('mb-hits')||'{}') }catch(e){}
@@ -1311,7 +1342,7 @@ const hit=(()=>{
   return e=>{
     if(sent[e]) return;
     sent[e]=1; try{ sessionStorage.setItem('mb-hits',JSON.stringify(sent)) }catch(x){}
-    try{ fetch(API+'/api/hit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({e,s:sid}),keepalive:true}).catch(()=>{}) }catch(x){}
+    try{ fetch(API+'/api/hit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(e==='visit'?{e,s:sid,src:visitSrc()}:{e,s:sid}),keepalive:true}).catch(()=>{}) }catch(x){}
   };
 })();
 /* запит із таймаутом — щоб на поганому звʼязку не висло назавжди */
@@ -3159,7 +3190,7 @@ function openCheckout(){
         }
       }
       /* app — сайт відкрито з іконки на екрані, як застосунок (для статистики) */
-      const payload={app:onScreen(),shop,shopName:SHOPS[shop][0],mode,addr,addrParts:mode==='delivery'?addrP:null,fry,fg,pay,total,nm,tel,note:orderNote,when:whenLabel(mode),slotAt:chosenSlot(mode),lines:cart.map(l=>({...l,sum:lineSum(l)}))};
+      const payload={app:onScreen(),src:orderSrc(),shop,shopName:SHOPS[shop][0],mode,addr,addrParts:mode==='delivery'?addrP:null,fry,fg,pay,total,nm,tel,note:orderNote,when:whenLabel(mode),slotAt:chosenSlot(mode),lines:cart.map(l=>({...l,sum:lineSum(l)}))};
       btn.disabled=true;btn.textContent='Відправляємо…';
       /* Замовлення не пішло — кошик лишається, людина бачить чому.
          Раніше будь-яка помилка показувала «Замовлення прийнято» з

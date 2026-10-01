@@ -12,6 +12,7 @@ const cut = re => { const m = src.match(re); if (!m) { console.error('не зн�
 const code = [
   cut(/const kyivHour = [\s\S]*?\);\n/),
   cut(/const DEVICES = [^\n]*/),
+  cut(/const SOURCES = [^\n]*/),
   cut(/const TEST_RE = [^\n]*/),
   cut(/const isTestOrder = [^\n]*/),
   cut(/function statsRange\([^)]*\) \{[\s\S]*?\n\}/),
@@ -124,6 +125,16 @@ ok('пристрої: iPhone 1 зам. із 10 заходів, Android 1 із 4'
   && dv.devices.android.orders === 1 && dv.devices.android.visits === 4 && dv.devices.ios.sum === 900);
 ok('старі замовлення без позначки — «невідомо»', dv.devices.unknown.orders === dv.cur.n - 2);
 ok('з іконки на екрані — пораховано', dv.appOrders === 1 && dv.orders.some(o => o.dev === 'ios' && o.app));
+
+// ---------- звідки прийшли ----------
+add(3 * 60000, { total: 500, src: 'ig' });
+add(2 * 60000, { total: 700, src: 'qr3' });
+db.hits[kyivDate(now)].src_ig = 7; db.hits[kyivDate(now)].src_tt = 2; db.hits[kyivDate(now)].src_hack = 99;
+const sr = page(30);
+ok('джерела: Instagram 1 зам. із 7 заходів, QR точки 3 — 1 зам., TikTok — лише заходи', sr.sources.ig.orders === 1 && sr.sources.ig.visits === 7
+  && sr.sources.ig.sum === 500 && sr.sources.qr3.orders === 1 && sr.sources.tt.visits === 2 && !sr.sources.tt.orders);
+ok('старі замовлення без мітки — «невідомо», чужі ключі не рахуються', sr.sources.unknown.orders === sr.cur.n - 2 && !sr.sources.hack);
+ok('мітка є і в списку замовлень', sr.orders.some(o => o.src === 'qr3'));
 
 let bad = 0;
 for (const [n, good] of t) { console.log((good ? '  ok  ' : 'ПАДАЄ') + ' · ' + n); if (!good) bad++ }

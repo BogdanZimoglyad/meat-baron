@@ -71,8 +71,11 @@ ${/* canonical — на саму себе. Коли він вів на «?item=�
 ${/* Переставляємо лише скриптом. З <meta http-equiv="refresh"> Telegram
      ішов за перенаправленням на головну, читав теги вже там — і показував
      голе посилання замість картки (перевірено в бою 22.09). Скрипт
-     краулери не виконують, тож теги вище дістаються саме їм. */''}
-<script>location.replace('${to}')</script>
+     краулери не виконують, тож теги вище дістаються саме їм.
+     Звідки прийшли (01.10): мітку ?from= несемо далі, а справжній
+     referrer кладемо в sessionStorage — після переходу головна бачить
+     уже саму себе. */''}
+<script>try{sessionStorage.setItem('mb-ref',document.referrer)}catch(e){}var f=/[?&]from=([\\w]+)/.exec(location.search);location.replace('${to}'+(f?'&from='+f[1]:''))</script>
 <style>body{margin:0;background:#141010;color:#f0e9de;font:16px/1.5 system-ui,sans-serif;
 display:grid;place-items:center;min-height:100vh;text-align:center}a{color:#e04a3c}</style>
 </head>
