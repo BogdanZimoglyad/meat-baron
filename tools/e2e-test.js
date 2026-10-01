@@ -57,9 +57,9 @@ const osh = CAT.ITEMS.find(i => i.name === 'Лаваш тонкий') || CAT.ITE
   const WIN = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130' };
 
   /* 1. Лічильник відвідувань */
-  let r = await call('POST', '/api/hit', { e: 'visit', s: 'abcdefgh1' }, IOS);
+  let r = await call('POST', '/api/hit', { e: 'visit', s: 'abcdefgh1', src: 'ig' }, IOS);
   await call('POST', '/api/hit', { e: 'visit', s: 'abcdefgh1' }, IOS);            // той самий візит — не вдруге
-  await call('POST', '/api/hit', { e: 'visit', s: 'zzzzzzzz2' }, WIN);
+  await call('POST', '/api/hit', { e: 'visit', s: 'zzzzzzzz2', src: 'nonsense' }, WIN);
   await call('POST', '/api/hit', { e: 'cart', s: 'abcdefgh1' }, IOS);
   ok('лічильник приймає подію', r.status === 200);
   ok('лічильник відкидає сміття', (await call('POST', '/api/hit', { e: 'hack', s: 'abcdefgh1' })).status === 400);
@@ -68,7 +68,7 @@ const osh = CAT.ITEMS.find(i => i.name === 'Лаваш тонкий') || CAT.ITE
   const slotAt = Date.now() + 3 * 3600e3;
   const order = (extra = {}) => ({ shop: 0, shopName: CAT.SHOPS[0][0], mode: 'pickup', fry: false, fg: 0, pay: 'cash', nm: 'Тест', tel: '+380671234567',
     note: '', when: 'Сьогодні', slotAt, lines: [{ id: osh.id, name: osh.name, grp: osh.grp, unit: osh.unit, g: 1, sum: osh.price }], total: osh.price, ...extra });
-  r = await call('POST', '/api/order', order({ app: true }), IOS);
+  r = await call('POST', '/api/order', order({ app: true, src: 'ig' }), IOS);
   ok('замовлення прийнято', r.status === 200 && r.d.no > 0);
   const no1 = r.d.no;
   r = await call('POST', '/api/order', order({ note: 'тест, не готувати', tel: '+380671234568' }), WIN);
@@ -99,6 +99,8 @@ const osh = CAT.ITEMS.find(i => i.name === 'Лаваш тонкий') || CAT.ITE
   ok('тестове не в цифрах, але в списку', s.cur.n === 1 && s.tests === 1 && s.orders.length === 2 && s.orders.find(o => o.no === noTest).test);
   ok('пристрій і «з іконки» записані', s.orders.find(o => o.no === no1).dev === 'ios' && s.orders.find(o => o.no === no1).app === true);
   ok('заходи по пристроях: iPhone 1, ПК 1', s.devices.ios.visits === 1 && s.devices.pc.visits === 1 && s.funnel.visit === 2 && s.funnel.cart === 1);
+  ok('звідки прийшли: Instagram — 1 захід і 1 замовлення, сміттєва мітка не рахується', s.sources.ig && s.sources.ig.visits === 1 && s.sources.ig.orders === 1
+    && !s.sources.nonsense && s.shopsAll.length === CAT.SHOPS_ALL.length);
   ok('замовлення без входу — «без входу»', s.orders.find(o => o.no === no1).auth === false && s.tg.guest === 1);
   ok('за днем видачі — те саме замовлення', (await call('GET', '/api/stats?days=1&by=slot', null, H)).d.cur.n === 1);
 

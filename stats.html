@@ -289,6 +289,19 @@ function render(s){
       <td>${x.orders} <small style="color:var(--smoke)">${all?pct(x.orders,all):''}</small></td>
       <td>${x.visits?pct(x.orders,x.visits):'—'}</td><td>${x.orders?money(x.sum/x.orders):'—'}</td></tr>` }).join('')}
     </table></div>` })()}
+  ${(()=>{ const S=s.sources; if(!S) return '';
+    const rows=Object.keys(S).sort((a,b)=>(a==='unknown')-(b==='unknown')||S[b].orders-S[a].orders||S[b].visits-S[a].visits);
+    const all=rows.reduce((x,k)=>x+S[k].orders,0);
+    if(!rows.length) return '';
+    return `<div class="card"><h2>Звідки прийшли</h2>
+    <p class="note">Instagram, TikTok і QR — за нашими посиланнями з міткою, решта — за сайтом, з якого перейшли.
+    Замовлення пишемо на останнє джерело за 7 днів: побачив у Instagram, замовив завтра з закладки — це Instagram.
+    Рахуємо з 01.10 — старіші замовлення в рядку «невідомо».</p>
+    <table class="devt"><tr><th>Звідки</th><th>Заходи</th><th>Замовлень</th><th>Конверсія</th><th>Сер. чек</th></tr>
+    ${rows.map(k=>{ const x=S[k]; return `<tr><td>${srcName(k,s.shopsAll)}</td><td>${x.visits||'—'}</td>
+      <td>${x.orders} <small style="color:var(--smoke)">${all?pct(x.orders,all):''}</small></td>
+      <td>${x.visits?pct(x.orders,x.visits):'—'}</td><td>${x.orders?money(x.sum/x.orders):'—'}</td></tr>` }).join('')}
+    </table></div>` })()}
   <div class="two">
     <div class="card"><h2>Самовивіз і доставка</h2>${split(c.pickup,c.delivery,'Самовивіз','Доставка')}</div>
     <div class="card"><h2>Оплата</h2>${split(s.pay.cash,s.pay.card,'Готівка','Картка')}</div>
@@ -334,6 +347,7 @@ function orderDetail(o){
     <div class="dg"><span>Отримання</span><b>${o.mode==='delivery'?'🚕 доставка'+(o.addr?' · '+esc(o.addr):''):'🏪 самовивіз'}</b></div>
     <div class="dg"><span>Оплата</span><b>${o.pay==='card'?'картка на місці':'готівка'}</b></div>
     <div class="dg"><span>З чого замовили</span><b>${o.dev?DEV[o.dev]:'—'}${o.app?' · з іконки на екрані':''}</b></div>
+    <div class="dg"><span>Звідки прийшли</span><b>${o.src?srcName(o.src,(LAST||{}).shopsAll):'—'}</b></div>
     <div class="dg"><span>Вхід через Telegram</span><b>${o.auth===true?'так':o.auth===false?'ні':'—'}</b></div>
     ${o.note?`<div class="cm">💬 Коментар клієнта: ${esc(o.note)}</div>`:''}
     <div class="dh">Склад</div>
@@ -353,6 +367,9 @@ function whenOf(o){
   return `на <b>${day} о ${hm(o.slotAt)}</b>`;
 }
 const DEV={ios:'📱 iPhone',android:'🤖 Android',pc:'💻 ПК',other:'❔ інше',unknown:'— невідомо'};
+const SRC={ig:'📸 Instagram',igs:'📸 Instagram · сторіс',tt:'🎵 TikTok',google:'🔎 Google',tg:'✈️ Telegram',fb:'📘 Facebook',
+  site:'🔗 інший сайт',app:'📲 з іконки на екрані',direct:'⌨️ напряму, закладка',unknown:'— невідомо'};
+const srcName=(k,shops)=>/^qr\d$/.test(k)?'🔳 QR на касі · '+esc((shops||[])[+k.slice(2)]||'точка '+k.slice(2)):SRC[k]||esc(k);
 const devIc=o=>o.dev?(DEV[o.dev]||'').split(' ')[0]+' ':'';
 function renderOrders(s){
   const q=OQ.trim().toLowerCase();
