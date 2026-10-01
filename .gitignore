@@ -6,3 +6,6 @@ data.json
 
 .env
 .DS_Store
+
+# Таблички на друк (tools/qr-card.js) — не сайт
+print/
