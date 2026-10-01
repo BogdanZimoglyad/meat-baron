@@ -554,13 +554,14 @@ function draw(d){
   w.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{ form=null; draw(d) });
   w.querySelectorAll('[data-send]').forEach(b=>b.onclick=()=>send(b));
   /* ---- склад замовлення ---- */
-  w.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{
+  const bindPick=root=>root.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{
     const it=priceList().find(i=>i.id===b.dataset.pick);
     form.pick=b.dataset.pick;
     form.q=it&&it.unit!=='вага'?1:(it?it.minG:0);
     form.fry=false; form.v='';
     draw(d);
   });
+  bindPick(w);
   w.querySelectorAll('[data-var]').forEach(b=>b.onclick=()=>{ form.v=b.dataset.var; draw(d) });
   /* Обрали кнопкою — чистимо поле «своєї» кількості, інакше воно
      перебиватиме вибір при відправці. */
@@ -572,7 +573,10 @@ function draw(d){
   /* Пошук позиції: перемальовуємо список на кожну літеру, але поле
      створене тим самим draw — значення повертаємо самі, як і у формах. */
   const sq=form&&form.kind==='plus'&&!form.pick?$('fv'):null;
-  if(sq) sq.oninput=()=>{ form.search=sq.value; draw(d); focusEnd() };
+  if(sq){
+    if(form.search&&!sq.value) sq.value=form.search;   // після перемальовки — набране на місці
+    sq.oninput=()=>{ form.search=sq.value; const box=$('srch'); if(box){ box.innerHTML=searchHits(); bindPick(box) } };
+  }
   w.querySelectorAll('.form input').forEach(i=>i.onkeydown=e=>{
     if(e.key!=='Enter') return;
     e.preventDefault();
@@ -707,15 +711,25 @@ function delForm(o){
   </div>`;
 }
 
+/* Пошук позиції. Поле створюємо один раз, а на кожну літеру міняємо лише
+   список під ним. Раніше перемальовувалась уся картка разом із полем: на
+   моніторі з клавіатурою це було непомітно, а на сенсорному екрані точки
+   нове поле губило фокус, і екранна клавіатура збивалась після першої ж
+   літери (власник, 01.10). Так само, як пошук у стоп-листі. */
 function searchForm(){
+  return `<div class="form">
+    <label>Що додати</label>
+    <input type="text" id="fv" autocomplete="off" placeholder="Назва: ошийок, сулугуні, лаваш…" autofocus>
+    <div id="srch">${searchHits()}</div>
+    <div class="row"><button class="no" data-close="1">Назад</button></div>
+  </div>`;
+}
+function searchHits(){
   const q=fold(form.search||'').trim();
   const hits=q.length>=2
     ? priceList().filter(i=>fold(i.grp+' '+i.name).includes(q)).slice(0,12)
     : [];
-  return `<div class="form">
-    <label>Що додати</label>
-    <input type="text" id="fv" autocomplete="off" placeholder="Назва: ошийок, сулугуні, лаваш…" autofocus>
-    ${q.length<2?'<div class="hint">Наберіть хоча б дві літери.</div>'
+  return `${q.length<2?'<div class="hint">Наберіть хоча б дві літери.</div>'
       : hits.length?hits.map(i=>{
           /* Позначаємо те, що оператор сам зранку відправив у стоп-лист:
              інакше легко пообіцяти клієнтові те, чого сьогодні немає.
@@ -725,9 +739,7 @@ function searchForm(){
             <span>${esc(i.grp)} · ${esc(itemName(i))}${off?' <em class="gone">сьогодні немає</em>':''}</span>
             <button data-pick="${esc(i.id)}">Обрати</button></div>`;
         }).join('')
-      : '<div class="hint">Нічого схожого не знайшли.</div>'}
-    <div class="row"><button class="no" data-close="1">Назад</button></div>
-  </div>`;
+      : '<div class="hint">Нічого схожого не знайшли.</div>'}`;
 }
 
 function pickForm(){
