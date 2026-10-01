@@ -2,12 +2,13 @@
    server.js роботу зі списком підписок і тексти, і ганяємо на
    підставленій базі. Головне тут — щоб на один номер не копичились
    підписки й щоб протухлі зникали.
-   Запуск: node tools/push-test.js */
+   Запуск: npm test */
 const fs = require('fs');
+const report = require('../report.js');
 const path = require('path');
-const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', '..', 'server.js'), 'utf8');
 
-const cut = re => { const m = src.match(re); if (!m) { console.error('не знайшли: ' + re); process.exit(1) } return m[0] };
+const cut = re => { const m = src.match(re); if (!m) { throw new Error('не знайшли: ' + re) } return m[0] };
 const code = [
   cut(/const PUSH_MAX_DEVICES = 5;[\s\S]*?\n\}/),
   cut(/const NOTE_TITLE = \{[\s\S]*?\n\};/),
@@ -66,7 +67,7 @@ ok('чужий номер має свій список', db.push['+380509999999'
   && db.push['+380670000000'].length === 5);
 
 // ---------- відправка ----------
-(async () => {
+{
   db = { push: { '+380670000000': [sub(1), sub(2)] } };
   s = build(db);
   let sent = await s.pushTo('+380670000000', 'Готове', '№ 5', 'https://site/?order=5');
@@ -111,8 +112,5 @@ ok('чужий номер має свій список', db.push['+380509999999'
   ok('вартість доставки названа',
     s.pushAdjust(ord, { kind: 'ship', amount: 150 }).b.includes('150'));
 
-  let bad = 0;
-  for (const [name, good] of t) { console.log((good ? '  ok  ' : 'ПАДАЄ') + ' · ' + name); if (!good) bad++ }
-  console.log(bad ? `\n${bad} з ${t.length} не пройшло` : `\nусі ${t.length} сценарії пройшли`);
-  process.exit(bad ? 1 : 0);
-})();
+  report(t);
+}

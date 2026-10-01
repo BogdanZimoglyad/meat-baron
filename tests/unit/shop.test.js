@@ -2,13 +2,14 @@
    server.js applyStock, applyGrill і те, з чого вони рахують стан, і
    ганяємо на підставленій базі. Ці ж функції кличуть і бот, і панель —
    тож тест накриває обидва входи одразу.
-   Запуск: node tools/shop-test.js */
+   Запуск: npm test */
 const fs = require('fs');
+const report = require('../report.js');
 const path = require('path');
-const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-const CAT = require(path.join(__dirname, '..', 'catalog.js'));
+const src = fs.readFileSync(path.join(__dirname, '..', '..', 'server.js'), 'utf8');
+const CAT = require(path.join(__dirname, '..', '..', 'catalog.js'));
 
-const cut = re => { const m = src.match(re); if (!m) { console.error('не знайшли: ' + re); process.exit(1) } return m[0] };
+const cut = re => { const m = src.match(re); if (!m) { throw new Error('не знайшли: ' + re) } return m[0] };
 const code = [
   cut(/const HOUR = 3600e3;[\s\S]*?const hourFloor = ms => Math\.floor\(ms \/ HOUR\) \* HOUR;/),
   cut(/const kyivNow = \(\) =>[\s\S]*?\n\}/),            // kyivNow + tillCloseMs
@@ -141,7 +142,4 @@ db = freshDb({
 s = build(db);
 ok('лічимо лише свою точку й лише незскасоване', s.grillLoad(0)[slot] === 3 * KG);
 
-let bad = 0;
-for (const [name, good] of t) { console.log((good ? '  ok  ' : 'ПАДАЄ') + ' · ' + name); if (!good) bad++ }
-console.log(bad ? `\n${bad} з ${t.length} не пройшло` : `\nусі ${t.length} сценарії пройшли`);
-process.exit(bad ? 1 : 0);
+report(t);

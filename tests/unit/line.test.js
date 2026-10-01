@@ -2,13 +2,14 @@
    server.js retotal і applyLine і додаємо-прибираємо позиції в
    підставленому замовленні. Тут рахуються гроші клієнта, тож перевіряємо
    не лише «спрацювало», а й що саме вийшло в сумі.
-   Запуск: node tools/line-test.js */
+   Запуск: npm test */
 const fs = require('fs');
+const report = require('../report.js');
 const path = require('path');
-const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-const CAT = require(path.join(__dirname, '..', 'catalog.js'));
+const src = fs.readFileSync(path.join(__dirname, '..', '..', 'server.js'), 'utf8');
+const CAT = require(path.join(__dirname, '..', '..', 'catalog.js'));
 
-const cut = re => { const m = src.match(re); if (!m) { console.error('не знайшли: ' + re); process.exit(1) } return m[0] };
+const cut = re => { const m = src.match(re); if (!m) { throw new Error('не знайшли: ' + re) } return m[0] };
 const code = [
   cut(/function qtyText\(l\) \{[\s\S]*?\n\}/),
   cut(/function fryOf\(lines\) \{[\s\S]*?\n\}/),
@@ -58,7 +59,7 @@ const t = [];
 const ok = (name, cond) => t.push([name, cond]);
 const round = n => Math.round(n * 100) / 100;
 
-(async () => {
+{
   // ---------- додавання ----------
   let o = order();
   const was = o.total;
@@ -162,8 +163,5 @@ const round = n => Math.round(n * 100) / 100;
   await api.applyLine(o, 'add', { id: id('Сулугуні'), g: 500 }, 'п');
   ok('після правки складу доставка лишилась', round(o.total - withShip) === round(o.lines[1].sum));
 
-  let bad = 0;
-  for (const [name, good] of t) { console.log((good ? '  ok  ' : 'ПАДАЄ') + ' · ' + name); if (!good) bad++ }
-  console.log(bad ? `\n${bad} з ${t.length} не пройшло` : `\nусі ${t.length} сценарії пройшли`);
-  process.exit(bad ? 1 : 0);
-})();
+  report(t);
+}

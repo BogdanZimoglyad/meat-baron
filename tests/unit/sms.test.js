@@ -1,11 +1,12 @@
 /* Перевірка відправки SMS на справжньому коді: вирізаємо smsSend із
    server.js і підставляємо fetch. Нікуди не дзвонимо й не шлемо.
-   Запуск: node tools/sms-test.js */
+   Запуск: npm test */
 const fs = require('fs');
+const report = require('../report.js');
 const path = require('path');
-const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', '..', 'server.js'), 'utf8');
 const m = src.match(/async function smsSend\(tel, text, why\) \{[\s\S]*?\n\}/);
-if (!m) { console.error('smsSend не знайдено'); process.exit(1) }
+if (!m) { throw new Error('smsSend не знайдено') }
 
 const mk = ({ on = true, reply = { response_result: [{ response_code: 0, message_id: 'abc' }] }, status = 200, boom = null }) => {
   const calls = [], logs = [], warns = [], toOwner = [];
@@ -28,7 +29,7 @@ const mk = ({ on = true, reply = { response_result: [{ response_code: 0, message
   return { send: fn(...Object.values(env)), calls, logs, warns, toOwner };
 };
 
-(async () => {
+{
   const t = [];
 
   // 1. нормальна відправка
@@ -69,8 +70,5 @@ const mk = ({ on = true, reply = { response_result: [{ response_code: 0, message
   ok = await e.send('+380661234567', 'Готове');
   t.push(['таймаут не валить сервер', ok === false && e.warns.join(' ').includes('таймаут')]);
 
-  let bad = 0;
-  for (const [name, good] of t) { console.log((good ? '  ok  ' : 'ПАДАЄ') + ' · ' + name); if (!good) bad++ }
-  console.log(bad ? `\n${bad} з ${t.length} не пройшло` : `\nусі ${t.length} сценарії пройшли`);
-  process.exit(bad ? 1 : 0);
-})();
+  report(t);
+}

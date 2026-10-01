@@ -2,65 +2,16 @@
    підставним Telegram-ботом і тимчасовою базою та ходимо по його
    адресах так, як ходять сайт, панель і сторінка статистики. Ловить те,
    чого не видно з окремих функцій: маршрути, доступи, поля замовлення.
-   Запуск: node tools/e2e-test.js   (нічого в інтернет не шле) */
+   Запуск: npm test   (нічого в інтернет не шле) */
 const path = require('path');
-const fs = require('fs');
-const os = require('os');
-const Module = require('module');
-
-/* ---- підставний бот: записує, що бот «надіслав», і дає «натискати» команди ---- */
-const sent = [];
-const handlers = [];
-const onMessage = [];
-class FakeBot {
-  constructor() { this._msgId = 100 }
-  onText(re, fn) { handlers.push([re, fn]) }
-  on(ev, fn) { if (ev === 'message') onMessage.push(fn) }
-  async sendMessage(chatId, text, opt) { sent.push({ chatId, text }); return { message_id: ++this._msgId, chat: { id: chatId } } }
-  async editMessageText() { return true }
-  async answerCallbackQuery() { return true }
-  async deleteMessage() { return true }
-  async sendDocument() { return true }
-  async getMe() { return { username: 'test_bot' } }
-  async setMyCommands() { return true }
-  stopPolling() {}
-}
-const origLoad = Module._load;
-Module._load = function (req, ...rest) {
-  if (req === 'node-telegram-bot-api') return FakeBot;
-  if (req === 'web-push') return { setVapidDetails() {}, generateVAPIDKeys: () => ({ publicKey: 'p', privateKey: 'k' }), sendNotification: async () => ({}) };
-  return origLoad.call(this, req, ...rest);
-};
-const say = (chatId, fromId, text, type = 'private') => {
-  const msg = { chat: { id: chatId, type }, from: { id: fromId }, text };
-  for (const [re, fn] of handlers) { const m = text.match(re); if (m) fn(msg, m) }
-};
-
-/* відповідь на повідомлення бота (force_reply): Telegram віддає його текст уже без розмітки */
-const reply = async (chatId, to, text) => {
-  const msg = { chat: { id: chatId, type: 'group' }, from: { id: 5, first_name: 'Оля' }, text,
-    reply_to_message: { message_id: 1, text: to.text.replace(/<[^>]+>/g, ''), from: { is_bot: true } } };
-  for (const fn of onMessage) await fn(msg);
-};
-
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mb-e2e-'));
-Object.assign(process.env, { BOT_TOKEN: 'x', PORT: '38777', DATA_DIR: tmp, OWNER_ID: '777', CHAT_1: '-100', TURBOSMS_TOKEN: '', TURBOSMS_SENDER: '' });
-const log = console.log; console.log = () => {}; console.warn = () => {};
-require(path.join(__dirname, '..', 'server.js'));
-
-const API = 'http://127.0.0.1:38777';
-const call = async (method, p, body, headers = {}) => {
-  const r = await fetch(API + p, { method, headers: { 'Content-Type': 'application/json', ...headers }, body: body ? JSON.stringify(body) : undefined });
-  let d = {}; try { d = await r.json() } catch (e) {}
-  return { status: r.status, d };
-};
+const report = require('../report.js');
+const { call, say, reply, sent, cleanup } = await require('./harness.js')({ port: 38777 });
 const t = [];
 const ok = (n, c) => t.push([n, !!c]);
-const CAT = require(path.join(__dirname, '..', 'catalog.js'));
+const CAT = require(path.join(__dirname, '..', '..', 'catalog.js'));
 const osh = CAT.ITEMS.find(i => i.name === 'Лаваш тонкий') || CAT.ITEMS[0];
 
-(async () => {
-  await new Promise(r => setTimeout(r, 300));
+{
   const IOS = { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)' };
   const WIN = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130' };
 
@@ -147,9 +98,6 @@ const osh = CAT.ITEMS.find(i => i.name === 'Лаваш тонкий') || CAT.ITE
   const day = (sent.find(x => /Підсумок дня|не було/.test(x.text)) || {}).text || '';
   ok('/day — тестове не враховано', /Замовлень: <b>1<\/b>/.test(day));
 
-  let bad = 0;
-  for (const [n, good] of t) { log((good ? '  ok  ' : 'ПАДАЄ') + ' · ' + n); if (!good) bad++ }
-  log(bad ? `\n${bad} з ${t.length} не пройшло` : `\nусі ${t.length} сценарії пройшли`);
-  try { fs.rmSync(tmp, { recursive: true, force: true }) } catch (e) {}
-  process.exit(bad ? 1 : 0);
-})().catch(e => { log('ЗЛАМАЛОСЬ:', e.stack); process.exit(1) });
+  cleanup();
+  report(t);
+}

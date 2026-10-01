@@ -1,10 +1,11 @@
 /* Цифри каси (01.10): як бот розбирає відповідь оператора «кількість сума».
-   Функцію вирізаємо з server.js. Запуск: node tools/kassa-test.js */
+   Функцію вирізаємо з server.js. Запуск: npm test */
 const fs = require('fs');
+const report = require('../report.js');
 const path = require('path');
-const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8').replace(/\r\n/g, '\n');
-const cut = re => { const m = src.match(re); if (!m) { console.error('не знайшли: ' + re); process.exit(1) } return m[0] };
-const { kop } = require(path.join(__dirname, '..', 'catalog.js'));
+const src = fs.readFileSync(path.join(__dirname, '..', '..', 'server.js'), 'utf8').replace(/\r\n/g, '\n');
+const cut = re => { const m = src.match(re); if (!m) { throw new Error('не знайшли: ' + re) } return m[0] };
+const { kop } = require(path.join(__dirname, '..', '..', 'catalog.js'));
 const parseKassa = new Function('kop', cut(/const KASSA_MAX_N = [^\n]*/) + '\n' + cut(/function parseKassa\(text\) \{[\s\S]*?\n\}/) + '; return parseKassa')(kop);
 
 const t = [];
@@ -22,7 +23,4 @@ is('слова', 'сьогодні 54', null);
 is('сума з пробілом-тисячами не вгадується', '54 48 210', null);
 is('забагато замовлень', '5000 100000', null);
 
-let bad = 0;
-for (const [n, good] of t) { console.log((good ? '  ok  ' : 'ПАДАЄ') + ' · ' + n); if (!good) bad++ }
-console.log(bad ? `\n${bad} з ${t.length} не пройшло` : `\nусі ${t.length} сценарії пройшли`);
-process.exit(bad ? 1 : 0);
+report(t);
