@@ -110,7 +110,9 @@ const osh = CAT.ITEMS.find(i => i.name === 'Лаваш тонкий') || CAT.ITE
   ok('звідки прийшли: Instagram — 1 захід і 1 замовлення, сміттєва мітка не рахується', s.sources.ig && s.sources.ig.visits === 1 && s.sources.ig.orders === 1
     && !s.sources.nonsense && s.shopsAll.length === CAT.SHOPS_ALL.length);
   ok('замовлення без входу — «без входу»', s.orders.find(o => o.no === no1).auth === false && s.tg.guest === 1);
-  ok('за днем видачі — те саме замовлення', (await call('GET', '/api/stats?days=1&by=slot', null, H)).d.cur.n === 1);
+  /* день видачі беремо з самого замовлення: увечері slotAt + 3 год — це вже завтра */
+  const slotDay = new Date(s.orders.find(o => o.no === no1).slotAt).toLocaleDateString('sv-SE', { timeZone: 'Europe/Kyiv' });
+  ok('за днем видачі — те саме замовлення', (await call('GET', `/api/stats?from=${slotDay}&to=${slotDay}&by=slot`, null, H)).d.cur.n === 1);
 
   /* 3б. Цифри каси: /kassa питає в чаті точки, відповідь іде в статистику */
   sent.length = 0;

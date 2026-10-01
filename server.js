@@ -1705,7 +1705,7 @@ function daySweep() {
     db.daySent[i] = day;
     save();
     bot.sendMessage(db.shops[i], dayText(Number(i), day), { parse_mode: 'HTML' })
-      .then(() => kassaAsk(Number(i), day))
+      .then(() => day >= KASSA_FROM && kassaAsk(Number(i), day))
       .catch(e => console.warn('Підсумок дня точці ' + i + ':', e.message));
   }
 }
@@ -1720,6 +1720,8 @@ setInterval(daySweep, 5 * 60 * 1000).unref();
    Точку тримаємо за назвою, а не за номером: номер — це місце серед
    увімкнених, і він зсувається, коли вмикають нову точку. */
 const KASSA_NAG_HOUR = 9;
+/* Перше питання — 02.10: власник хотів спершу попередити операторів */
+const KASSA_FROM = '2026-10-02';
 const KASSA_MAX_N = 2000, KASSA_MAX_SUM = 5000000;
 const kassaDayText = day => { const [y, m, d] = day.split('-'); return `${d}.${m}.${y}` };
 async function kassaAsk(shop, day, again = false) {
