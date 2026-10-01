@@ -1,12 +1,13 @@
 /* Перевірка голосових нагадувань панелі на справжньому коді: вирізаємо з
    op.html stuckOf і nagDue і ганяємо підставлені замовлення по часу —
    коли панель заговорить, коли змовкне і що скаже.
-   Запуск: node tools/nag-test.js */
+   Запуск: npm test */
 const fs = require('fs');
+const report = require('../report.js');
 const path = require('path');
-const src = fs.readFileSync(path.join(__dirname, '..', 'op.html'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', '..', 'op.html'), 'utf8');
 
-const cut = re => { const m = src.match(re); if (!m) { console.error('не знайшли: ' + re); process.exit(1) } return m[0] };
+const cut = re => { const m = src.match(re); if (!m) { throw new Error('не знайшли: ' + re) } return m[0] };
 const code = [
   cut(/const NAG_FIRST=[^\n]*/),
   cut(/const plural=[^\n]*/),
@@ -97,7 +98,4 @@ ok('1 хвилину, 3 хвилини, 5 хвилин, 11 хвилин, 22 хв
   ['хвилину', 'хвилини', 'хвилин', 'хвилин', 'хвилини'].join() ===
   [1, 3, 5, 11, 22].map(n => api.plural(n, 'хвилину', 'хвилини', 'хвилин')).join());
 
-let bad = 0;
-for (const [name, good] of t) { console.log((good ? '  ok  ' : 'ПАДАЄ') + ' · ' + name); if (!good) bad++ }
-console.log(bad ? `\n${bad} з ${t.length} не пройшло` : `\nусі ${t.length} сценарії пройшли`);
-process.exit(bad ? 1 : 0);
+report(t);

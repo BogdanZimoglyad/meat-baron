@@ -1,9 +1,10 @@
 /* Тест справжнього коду: вирізаємо pickupSweep із server.js і запускаємо
    з підставленими db, bot і годинником. */
 const fs=require('fs');
+const report = require('../report.js');
 const src=fs.readFileSync('server.js','utf8');
 const m=src.match(/function pickupSweep\(\) \{[\s\S]*?\n\}/);
-if(!m) { console.error('pickupSweep не знайдено'); process.exit(1) }
+if(!m) { throw new Error('pickupSweep не знайдено') }
 
 const MIN=60000;
 let sent=[];
@@ -40,7 +41,4 @@ t.push(['уже видано → не чіпаємо', run({1:base({status:'done
 t.push(['після закриття (21:30) → мовчимо', run({1:base()},21).length===0]);
 t.push(['без Telegram → одразу кажемо точці', run({1:base({telKey:'999999999'})}).map(s=>s.chat)[0]===-100]);
 
-let bad=0;
-for(const [name,ok] of t){ console.log((ok?'  ok  ':'ПАДАЄ') + ' · ' + name); if(!ok) bad++ }
-console.log(bad? `\n${bad} з ${t.length} не пройшло` : `\nусі ${t.length} сценарії пройшли`);
-process.exit(bad?1:0);
+report(t);

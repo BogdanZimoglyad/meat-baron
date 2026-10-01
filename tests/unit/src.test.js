@@ -1,9 +1,10 @@
 /* Звідки прийшли (01.10): як головна визначає джерело — мітка ?from=,
    сайт-попередник, сторінка товару t/, «з іконки», остання мітка за 7 днів.
    Функції вирізаємо з index.html і ганяємо на підставлених адресах.
-   Запуск: node tools/src-test.js */
+   Запуск: npm test */
 const fs=require('fs');
-const html=fs.readFileSync(require('path').join(__dirname,'..','index.html'),'utf8').replace(/\r\n/g,'\n');
+const report = require('../report.js');
+const html=fs.readFileSync(require('path').join(__dirname,'..', '..','index.html'),'utf8').replace(/\r\n/g,'\n');
 const code=html.match(/const SRC_TAGS=[\s\S]*?\nconst hit=/)[0].replace(/\nconst hit=$/,'');
 function run({url,ref,store={},local={},screen=false}){
   const u=new URL(url); let replaced=null;
@@ -30,5 +31,4 @@ const cases=[
  ['мітка старша 7 днів не діє', run({url:H+'/',local:{'mb-src-last':JSON.stringify({s:'ig',at:Date.now()-8*864e5})}}), r=>r.o==='direct'],
  ['напряму не перетирає останню мітку', run({url:H+'/',local:{'mb-src-last':'{"s":"tt","at":1}'}}), r=>r.local['mb-src-last']==='{"s":"tt","at":1}'],
 ];
-let bad=0; for(const [n,r,ok] of cases){ const g=ok(r); if(!g)bad++; console.log((g?'  ok  ':'ПАДАЄ')+' · '+n+(g?'':' '+JSON.stringify(r))) }
-console.log(bad?bad+' не пройшло':'усі пройшли');
+report(cases.map(([n,r,ok])=>[n,ok(r)]));

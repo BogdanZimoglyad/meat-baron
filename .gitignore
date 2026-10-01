@@ -9,3 +9,6 @@ data.json
 
 # Таблички на друк (tools/qr-card.js) — не сайт
 print/
+
+# Звіт покриття тестами (npm run cover)
+coverage/

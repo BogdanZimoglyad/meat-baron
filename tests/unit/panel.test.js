@@ -1,12 +1,13 @@
 /* Перевірка розмітки панелі точки на справжньому коді: вирізаємо з op.html
    card, more, formHtml і NEXT/FORM і малюємо картки на підставлених
    замовленнях. Так видно, які кнопки побачить оператор.
-   Запуск: node tools/panel-test.js */
+   Запуск: npm test */
 const fs = require('fs');
+const report = require('../report.js');
 const path = require('path');
-const src = fs.readFileSync(path.join(__dirname, '..', 'op.html'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', '..', 'op.html'), 'utf8');
 
-const cut = re => { const m = src.match(re); if (!m) { console.error('не знайшли: ' + re); process.exit(1) } return m[0] };
+const cut = re => { const m = src.match(re); if (!m) { throw new Error('не знайшли: ' + re) } return m[0] };
 const code = [
   cut(/const NEXT=\{[\s\S]*?\n  : NEXT\[o\.status\]\|\|null;/),
   cut(/function dayWord\(ms\)\{[\s\S]*?\n\}/),
@@ -171,7 +172,4 @@ t.push(['скасовані показані окремо', has(s, 'скасов
 t.push(['порожній день — так і кажемо', has(dayStrip({ all: 0 }), 'ще не було')]);
 t.push(['сервер нічого не прислав — не падаємо', has(dayStrip(null), 'ще не було')]);
 
-let bad = 0;
-for (const [name, ok] of t) { console.log((ok ? '  ok  ' : 'ПАДАЄ') + ' · ' + name); if (!ok) bad++ }
-console.log(bad ? `\n${bad} з ${t.length} не пройшло` : `\nусі ${t.length} сценарії пройшли`);
-process.exit(bad ? 1 : 0);
+report(t);

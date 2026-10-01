@@ -1,12 +1,13 @@
 /* Перевірка підсумків /week і /month на справжньому коді: вирізаємо
    statsRange, cmp і statsText із server.js і рахуємо на підставлених
-   замовленнях. Запуск: node tools/stats-test.js */
+   замовленнях. Запуск: npm test */
 const fs = require('fs');
+const report = require('../report.js');
 const path = require('path');
-const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-const CAT = require(path.join(__dirname, '..', 'catalog.js'));
+const src = fs.readFileSync(path.join(__dirname, '..', '..', 'server.js'), 'utf8');
+const CAT = require(path.join(__dirname, '..', '..', 'catalog.js'));
 
-const cut = re => { const m = src.match(re); if (!m) { console.error('не знайшли: ' + re); process.exit(1) } return m[0] };
+const cut = re => { const m = src.match(re); if (!m) { throw new Error('не знайшли: ' + re) } return m[0] };
 const code = [
   cut(/const kyivHour = ms =>[\s\S]*?hour12: false \}\)\);/),
   cut(/const kyivDate = \(ts = Date\.now\(\)\) =>[\s\S]*?const futureDay = o => [^\n]*/),
@@ -84,7 +85,9 @@ s = build({
 });
 w = s.statsText([0], 7);
 t.push(['топ очолює найчастіше замовлюване', has(w, '1. Ошийок — 2')]);
-t.push(['години видачі рахуються', /1[78]:00 — 2/.test(w)]);
+/* година видачі — за Києвом, хоч би де стояв сервер (на GitHub і Railway — UTC) */
+const kyivH = new Date(slot(18)).toLocaleString('en-GB', { timeZone: 'Europe/Kyiv', hour: '2-digit', hour12: false });
+t.push(['години видачі рахуються', w.includes(kyivH + ':00 — 2')]);
 
 // 6. старі номери позицій не ламають топ
 s = build({ 1: ord({ lines: [{ id: 'p0' }, { id: id('Ошийок') }] }) });
@@ -117,7 +120,4 @@ dd = s.dayStats(0, today);
 t.push(['тестові не в підсумку дня', dd.all === 1 && dd.sum === 500]);
 t.push(['тестові не в /week', s.statsRange([0], Date.now() - 7 * DAY, Date.now() + 1).n === 1]);
 
-let bad = 0;
-for (const [name, ok] of t) { console.log((ok ? '  ok  ' : 'ПАДАЄ') + ' · ' + name); if (!ok) bad++ }
-console.log(bad ? `\n${bad} з ${t.length} не пройшло` : `\nусі ${t.length} сценарії пройшли`);
-process.exit(bad ? 1 : 0);
+report(t);

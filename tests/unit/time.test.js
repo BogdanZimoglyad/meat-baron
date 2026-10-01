@@ -2,12 +2,13 @@
    з server.js увесь блок від TIME_STATUSES до applyTime і переносимо
    підставлене замовлення. Київський час рахуємо самі, тож перевіряємо
    й сам перерахунок — сервер живе за UTC.
-   Запуск: node tools/time-test.js */
+   Запуск: npm test */
 const fs = require('fs');
+const report = require('../report.js');
 const path = require('path');
-const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', '..', 'server.js'), 'utf8');
 
-const cut = re => { const m = src.match(re); if (!m) { console.error('не знайшли: ' + re); process.exit(1) } return m[0] };
+const cut = re => { const m = src.match(re); if (!m) { throw new Error('не знайшли: ' + re) } return m[0] };
 const code = cut(/const TIME_STATUSES[\s\S]*?async function applyTime\(o, raw, by\) \{[\s\S]*?\n\}/);
 
 const HOUR = 3600e3;
@@ -40,7 +41,7 @@ const order = (over = {}) => ({ no: 7, shop: 0, status: 'accepted', mode: 'picku
 const t = [];
 const ok = (name, cond) => t.push([name, cond]);
 
-(async () => {
+{
   // ---------- київський час ----------
   ok('влітку 14:00 Києва — це 11:00 UTC', new Date(api.kyivMs('2026-07-01', 14, 0)).getUTCHours() === 11);
   ok('узимку 14:00 Києва — це 12:00 UTC', new Date(api.kyivMs('2026-12-01', 14, 0)).getUTCHours() === 12);
@@ -120,8 +121,5 @@ const ok = (name, cond) => t.push([name, cond]);
   ok('сире мангал не чіпає', r.ok);
   busyUntil = 0;
 
-  let bad = 0;
-  for (const [name, good] of t) { console.log((good ? '  ok  ' : 'ПАДАЄ') + ' · ' + name); if (!good) bad++ }
-  console.log(bad ? `\n${bad} з ${t.length} не пройшло` : `\nусі ${t.length} сценарії пройшли`);
-  process.exit(bad ? 1 : 0);
-})();
+  report(t);
+}

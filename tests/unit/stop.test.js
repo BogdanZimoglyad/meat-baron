@@ -1,12 +1,13 @@
 /* Перевірка стоп-листа на справжньому коді: вирізаємо nextOpenMs,
-   stopOf, isStopped і findItems із server.js. Запуск: node tools/stop-test.js */
+   stopOf, isStopped і findItems із server.js. Запуск: npm test */
 const fs = require('fs');
+const report = require('../report.js');
 const path = require('path');
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '..', '..');
 const src = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 const CAT = require(path.join(root, 'catalog.js'));
 
-const cut = re => { const m = src.match(re); if (!m) { console.error('не знайшли ' + re); process.exit(1) } return m[0] };
+const cut = re => { const m = src.match(re); if (!m) { throw new Error('не знайшли ' + re) } return m[0] };
 const code = [
   cut(/function nextOpenMs\(\) \{[\s\S]*?\n\}/),
   cut(/function stopOf\(shop\) \{[\s\S]*?\n\}/),
@@ -60,7 +61,4 @@ t.push(['одна літера — нічого', s.findItems('о').length === 0
 t.push(['дурниця — нічого', s.findItems('зззз').length === 0]);
 t.push(['не більше восьми', s.findItems('а').length <= 8]);
 
-let bad = 0;
-for (const [name, ok] of t) { console.log((ok ? '  ok  ' : 'ПАДАЄ') + ' · ' + name); if (!ok) bad++ }
-console.log(bad ? `\n${bad} з ${t.length} не пройшло` : `\nусі ${t.length} сценарії пройшли`);
-process.exit(bad ? 1 : 0);
+report(t);

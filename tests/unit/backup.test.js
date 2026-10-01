@@ -1,9 +1,10 @@
 /* Перевірка щоденної копії бази: вирізаємо backupSweep із server.js і
-   ганяємо з підставленим годинником. Запуск: node tools/backup-test.js */
+   ганяємо з підставленим годинником. Запуск: npm test */
 const fs = require('fs');
+const report = require('../report.js');
 const path = require('path');
-const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-const cut = re => { const m = src.match(re); if (!m) { console.error('не знайшли ' + re); process.exit(1) } return m[0] };
+const src = fs.readFileSync(path.join(__dirname, '..', '..', 'server.js'), 'utf8');
+const cut = re => { const m = src.match(re); if (!m) { throw new Error('не знайшли ' + re) } return m[0] };
 const code = cut(/function backupSweep\(\) \{[\s\S]*?\n\}/);
 
 const run = ({ owner = 777, hour = 22, sentDay = '', failSend = false }) => {
@@ -34,10 +35,6 @@ t.push(['після відправки день записано', run({}).db.ba
 
 /* якщо не надіслалось — прапорець скидається, щоб спробувати ще */
 const bad = run({ failSend: true });
-setTimeout(() => {
-  t.push(['невдала відправка — спробуємо ще раз', bad.db.backupSent === '']);
-  let n = 0;
-  for (const [name, ok] of t) { console.log((ok ? '  ok  ' : 'ПАДАЄ') + ' · ' + name); if (!ok) n++ }
-  console.log(n ? `\n${n} з ${t.length} не пройшло` : `\nусі ${t.length} сценарії пройшли`);
-  process.exit(n ? 1 : 0);
-}, 30);
+await new Promise(r => setTimeout(r, 30));
+t.push(['невдала відправка — спробуємо ще раз', bad.db.backupSent === '']);
+report(t);

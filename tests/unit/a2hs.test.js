@@ -2,13 +2,14 @@
    Вигляд видно в браузері, а от правила показу — ні: на столі немає ні
    айфона, ні standalone, ні другого заходу. Тож вирізаємо блок із
    index.html і ганяємо на підставленому оточенні.
-   Запуск: node tools/a2hs-test.js */
+   Запуск: npm test */
 const fs = require('fs');
+const report = require('../report.js');
 const path = require('path');
-const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '..', '..', 'index.html'), 'utf8');
 
 const m = html.match(/\/\* ---------- «Додайте на екран» для айфонів[\s\S]*?\n\}\)\(\);/);
-if (!m) { console.error('не знайшли блок підказки в index.html'); process.exit(1) }
+if (!m) { throw new Error('не знайшли блок підказки в index.html') }
 const code = m[0];
 
 const UA = {
@@ -80,7 +81,4 @@ ok('лічильник росте й на андроїді? — ні, до нь�
 ok('у приватному режимі без памʼяті не падаємо й не показуємо',
   !run({ ua: UA['iPhone Safari'], noStorage: true }).shown);
 
-let bad = 0;
-for (const [name, good] of t) { console.log((good ? '  ok  ' : 'ПАДАЄ') + ' · ' + name); if (!good) bad++ }
-console.log(bad ? `\n${bad} з ${t.length} не пройшло` : `\nусі ${t.length} сценарії пройшли`);
-process.exit(bad ? 1 : 0);
+report(t);
