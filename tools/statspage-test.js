@@ -28,7 +28,7 @@ const byId = new Map(CAT.ITEMS.map(i => [i.id, i]));
 const item = n => CAT.ITEMS.find(i => i.name === n);
 const db = { orders: {}, hits: {} };
 const env = {
-  db, HOUR, kyivDate, LABEL: { done: 'Видано', canceled: 'Скасовано' }, CANCELED: 'canceled', kop: CAT.kop, lineTitle: CAT.lineTitle, byId,
+  db, HOUR, kyivDate, SHOPS: CAT.SHOPS.map(x => x[0]), LABEL: { done: 'Видано', canceled: 'Скасовано' }, CANCELED: 'canceled', kop: CAT.kop, lineTitle: CAT.lineTitle, byId,
   adjustmentsOf: o => (Array.isArray(o.adjust) ? o.adjust : [])
 };
 const api = new Function(...Object.keys(env), `${code}; return { statsRange, statsPage, dayAdd }`)(...Object.values(env));
@@ -135,6 +135,17 @@ ok('джерела: Instagram 1 зам. із 7 заходів, QR точки 3 �
   && sr.sources.ig.sum === 500 && sr.sources.qr3.orders === 1 && sr.sources.tt.visits === 2 && !sr.sources.tt.orders);
 ok('старі замовлення без мітки — «невідомо», чужі ключі не рахуються', sr.sources.unknown.orders === sr.cur.n - 2 && !sr.sources.hack);
 ok('мітка є і в списку замовлень', sr.orders.some(o => o.src === 'qr3'));
+
+// ---------- сайт проти телефону (цифри каси) ----------
+const kz = page(30).kassa;
+ok('каси не вносили — днів 0', kz.days === 0 && kz.n === 0);
+db.kassa = { [kyivDate(now)]: { [CAT.SHOPS[0][0]]: { n: 20, sum: 15000 } }, '2020-01-01': { [CAT.SHOPS[0][0]]: { n: 99, sum: 1 } } };
+const kk = page(30).kassa, cur = page(1).cur;
+ok('частка сайту — лише за день, де внесли касу', kk.days === 1 && kk.n === 20 && kk.sum === 15000 && kk.of === 30);
+ok('з сайту за той день — без тестових і скасованих', kk.siteN > 0 && kk.siteN <= cur.n + 5);
+db.kassa[kyivDate(now)]['чужа точка'] = { n: 500, sum: 500000 };
+ok('чужі точки не рахуються', page(30).kassa.n === 20);
+delete db.kassa;
 
 let bad = 0;
 for (const [n, good] of t) { console.log((good ? '  ok  ' : 'ПАДАЄ') + ' · ' + n); if (!good) bad++ }

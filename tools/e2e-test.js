@@ -11,10 +11,11 @@ const Module = require('module');
 /* ---- підставний бот: записує, що бот «надіслав», і дає «натискати» команди ---- */
 const sent = [];
 const handlers = [];
+const onMessage = [];
 class FakeBot {
   constructor() { this._msgId = 100 }
   onText(re, fn) { handlers.push([re, fn]) }
-  on() {}
+  on(ev, fn) { if (ev === 'message') onMessage.push(fn) }
   async sendMessage(chatId, text, opt) { sent.push({ chatId, text }); return { message_id: ++this._msgId, chat: { id: chatId } } }
   async editMessageText() { return true }
   async answerCallbackQuery() { return true }
@@ -33,6 +34,13 @@ Module._load = function (req, ...rest) {
 const say = (chatId, fromId, text, type = 'private') => {
   const msg = { chat: { id: chatId, type }, from: { id: fromId }, text };
   for (const [re, fn] of handlers) { const m = text.match(re); if (m) fn(msg, m) }
+};
+
+/* відповідь на повідомлення бота (force_reply): Telegram віддає його текст уже без розмітки */
+const reply = async (chatId, to, text) => {
+  const msg = { chat: { id: chatId, type: 'group' }, from: { id: 5, first_name: 'Оля' }, text,
+    reply_to_message: { message_id: 1, text: to.text.replace(/<[^>]+>/g, ''), from: { is_bot: true } } };
+  for (const fn of onMessage) await fn(msg);
 };
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mb-e2e-'));
@@ -103,6 +111,21 @@ const osh = CAT.ITEMS.find(i => i.name === 'Лаваш тонкий') || CAT.ITE
     && !s.sources.nonsense && s.shopsAll.length === CAT.SHOPS_ALL.length);
   ok('замовлення без входу — «без входу»', s.orders.find(o => o.no === no1).auth === false && s.tg.guest === 1);
   ok('за днем видачі — те саме замовлення', (await call('GET', '/api/stats?days=1&by=slot', null, H)).d.cur.n === 1);
+
+  /* 3б. Цифри каси: /kassa питає в чаті точки, відповідь іде в статистику */
+  sent.length = 0;
+  say(-100, 1, '/kassa', 'group');
+  await new Promise(r => setTimeout(r, 50));
+  const q = sent.find(x => /Телефонні замовлення за/.test(x.text));
+  ok('/kassa питає в чаті точки', q && q.chatId === -100);
+  sent.length = 0;
+  await reply(-100, q, 'багато');
+  ok('незрозуміла відповідь — пояснення і питання ще раз', sent.some(x => /Не вдалося розібрати/.test(x.text)) && sent.some(x => /Телефонні замовлення за/.test(x.text)));
+  sent.length = 0;
+  await reply(-100, q, '9 8100,50');
+  ok('відповідь записана', sent.some(x => /Записано за .*телефоном 9 на 8100\.50 ₴/.test(x.text)));
+  r = await call('GET', '/api/stats?days=1', null, H);
+  ok('статистика: сайт проти телефону', r.d.kassa.days === 1 && r.d.kassa.n === 9 && r.d.kassa.sum === 8100.5 && r.d.kassa.siteN === 1);
 
   /* 4. /stats-off відкликає */
   say(777, 777, '/stats-off');

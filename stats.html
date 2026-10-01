@@ -248,6 +248,18 @@ function render(s){
     ${tile('Скасовано',c.canceled,c.n+c.canceled?`${pct(c.canceled,c.n+c.canceled)} замовлень`:'')}
   </div>
   ${s.tests?`<p class="note" style="margin:8px 2px 0">Тестових замовлень не враховано: ${s.tests} — їх видно на вкладці «🧾 Замовлення» зі значком ТЕСТ.</p>`:''}
+  ${(()=>{ const K=s.kassa; if(!K) return '';
+    if(!K.days) return `<div class="card"><h2>Сайт проти телефону</h2><p class="note">Цифр каси за цей період ще немає.
+      Бот питає їх у чаті точки щовечора після підсумку дня; не відповіли — повторює о 9:00.</p></div>`;
+    const all=K.n+K.siteN, allSum=K.sum+K.siteSum;
+    return `<div class="card"><h2>Сайт проти телефону</h2>
+    <p class="note">Лише дні, за які точка внесла цифри каси: ${K.days} з ${K.of}. Замовлення з сайту — без тестових і скасованих.</p>
+    <div class="tiles">
+      ${tile('Частка сайту',pct(K.siteN,all),`за сумою ${pct(K.siteSum,allSum)}`)}
+      ${tile('З сайту',K.siteN,money(K.siteSum))}
+      ${tile('Телефоном',K.n,money(K.sum))}
+      ${tile('Сер. чек',K.siteN?money(K.siteSum/K.siteN):'—',`телефон ${K.n?money(K.sum/K.n):'—'}`)}
+    </div></div>` })()}
 
   ${s.by==='slot'?'':`<div class="card funnel">
     <h2>Від заходу до замовлення</h2>

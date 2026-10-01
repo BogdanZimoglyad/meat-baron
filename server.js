@@ -1447,6 +1447,33 @@ function statsPage(shopList, fromDay, toDay, by = 'created') {
       return out;
     })(),
     appOrders: live.filter(o => o.app).length,
+    /* Сайт проти телефону (01.10): лише дні й точки, де внесли цифри
+       каси, — інакше частка сайту виходила б завищеною. Замовлення з
+       сайту — за днем оформлення, як у підсумку дня, під яким бот питає. */
+    kassa: (() => {
+      const out = { days: 0, of: dayKeys.length, n: 0, sum: 0, siteN: 0, siteSum: 0 };
+      const site = {};
+      for (const o of Object.values(db.orders)) {
+        if (o.status === CANCELED || isTestOrder(o) || !shopList.includes(o.shop)) continue;
+        const k = kyivDate(o.createdAt) + '|' + o.shop, x = site[k] || (site[k] = { n: 0, sum: 0 });
+        x.n++; x.sum += o.total || 0;
+      }
+      for (const d of dayKeys) {
+        const k = (db.kassa || {})[d] || {};
+        let any = false;
+        for (const i of shopList) {
+          const rec = k[SHOPS[i]];
+          if (!rec) continue;
+          any = true;
+          out.n += rec.n; out.sum += rec.sum;
+          const s = site[d + '|' + i] || { n: 0, sum: 0 };
+          out.siteN += s.n; out.siteSum += s.sum;
+        }
+        if (any) out.days++;
+      }
+      out.sum = kop(out.sum); out.siteSum = kop(out.siteSum);
+      return out;
+    })(),
     /* Звідки прийшли: заходи, замовлення, сума. Без мітки (до 01.10) — «unknown» */
     sources: (() => {
       const out = {};
@@ -1678,10 +1705,99 @@ function daySweep() {
     db.daySent[i] = day;
     save();
     bot.sendMessage(db.shops[i], dayText(Number(i), day), { parse_mode: 'HTML' })
+      .then(() => kassaAsk(Number(i), day))
       .catch(e => console.warn('Підсумок дня точці ' + i + ':', e.message));
   }
 }
 setInterval(daySweep, 5 * 60 * 1000).unref();
+
+/* ---------- цифри каси: скільки замовлень прийшло телефоном ----------
+   Власник (01.10) міряє сайт часткою від усіх замовлень точки, а
+   телефонні живуть лише в касі — там у них своя нумерація. Тому після
+   підсумку дня бот питає в чаті точки два числа: скільки телефонних
+   і на яку суму. Не відповіли до ранку — о 9:00 (приходить оператор)
+   питаємо ще раз, а власнику пишемо, яка точка не внесла.
+   Точку тримаємо за назвою, а не за номером: номер — це місце серед
+   увімкнених, і він зсувається, коли вмикають нову точку. */
+const KASSA_NAG_HOUR = 9;
+const KASSA_MAX_N = 2000, KASSA_MAX_SUM = 5000000;
+const kassaDayText = day => { const [y, m, d] = day.split('-'); return `${d}.${m}.${y}` };
+async function kassaAsk(shop, day, again = false) {
+  const chatId = db.shops[shop];
+  if (!chatId) return;
+  await bot.sendMessage(chatId,
+    `📞 <b>Телефонні замовлення за ${kassaDayText(day)}</b> · ${esc(SHOPS[shop])}\n` +
+    (again ? 'Вчора цифр не внесли. ' : '') +
+    `Скільки телефонних замовлень пробили на касі і на яку суму? Без замовлень із сайту.\n` +
+    `Відповіддю на це повідомлення — два числа: <b>кількість і сума</b>.\nНаприклад: 54 48210`,
+    { parse_mode: 'HTML', reply_markup: { force_reply: true } });
+  db.kassaAsked = db.kassaAsked || {};
+  db.kassaAsked[shop] = day;
+  save();
+}
+/* «54 48210», «54, 48210.50», «0 0» → { n, sum }; інакше null */
+function parseKassa(text) {
+  const m = String(text || '').trim().match(/^(\d{1,4})\s*[,;\s]\s*(\d{1,7}(?:[.,]\d{1,2})?)\s*(?:₴|грн\.?)?$/i);
+  if (!m) return null;
+  const n = Number(m[1]), sum = kop(Number(m[2].replace(',', '.')));
+  if (n > KASSA_MAX_N || sum > KASSA_MAX_SUM || (n === 0) !== (sum === 0)) return null;
+  return { n, sum };
+}
+/* Відповідь на питання бота. Питання впізнаємо за текстом — так воно
+   переживає перезапуск сервера, як і запити суми. true — повідомлення наше. */
+async function kassaReply(msg, r) {
+  const m = String(r.text || '').match(/^📞 Телефонні замовлення за (\d{2})\.(\d{2})\.(\d{4})/);
+  if (!m || !r.from || !r.from.is_bot) return false;
+  const shop = shopOfChat(msg.chat.id);
+  if (shop === null) return true;
+  const day = `${m[3]}-${m[2]}-${m[1]}`;
+  const k = parseKassa(msg.text);
+  if (!k) {
+    await bot.sendMessage(msg.chat.id, 'Не вдалося розібрати. Потрібні два числа через пробіл: кількість і сума. Наприклад: 54 48210',
+      { reply_to_message_id: msg.message_id }).catch(() => {});
+    await kassaAsk(shop, day).catch(() => {});
+    return true;
+  }
+  db.kassa = db.kassa || {};
+  const d = db.kassa[day] || (db.kassa[day] = {});
+  const had = d[SHOPS[shop]];
+  d[SHOPS[shop]] = { n: k.n, sum: k.sum, by: opName(msg.from), at: Date.now() };
+  save();
+  const site = dayStats(shop, day), siteN = site.all - site.canceled, all = siteN + k.n;
+  await bot.sendMessage(msg.chat.id,
+    `✅ Записано за ${kassaDayText(day)}: телефоном ${k.n} на ${money(k.sum)}` +
+    (had ? ` (було ${had.n} на ${money(had.sum)})` : '') +
+    (all ? `\nЗ сайту ${siteN} — це ${Math.round(siteN / all * 100)}% усіх замовлень.` : '') +
+    `\nПомилились — відповідайте на питання ще раз.`,
+    { reply_to_message_id: msg.message_id }).catch(() => {});
+  return true;
+}
+/* Зранку: хто не відповів за вчора — питаємо вдруге, власнику — список */
+function kassaSweep() {
+  if (kyivNow().getHours() < KASSA_NAG_HOUR) return;
+  const today = kyivDate(), day = dayAdd(today, -1);
+  db.kassaNag = db.kassaNag || {};
+  const late = [];
+  for (const i of Object.keys(db.shops)) {
+    if ((db.kassaAsked || {})[i] !== day || db.kassaNag[i] === day) continue;
+    db.kassaNag[i] = day;
+    save();
+    if (((db.kassa || {})[day] || {})[SHOPS[i]]) continue;
+    late.push(SHOPS[i]);
+    kassaAsk(Number(i), day, true).catch(e => console.warn('Каса точці ' + i + ':', e.message));
+  }
+  if (late.length && OWNER_ID) {
+    bot.sendMessage(OWNER_ID, `📞 Цифри каси за ${kassaDayText(day)} не внесли: ${late.join(', ')}. Питання в чаті точки повторили.`)
+      .catch(() => {});
+  }
+}
+setInterval(kassaSweep, 5 * 60 * 1000).unref();
+/* Руками: /kassa у чаті точки — питання за сьогодні */
+bot.onText(/^\/kassa(?:@\w+)?/, msg => {
+  const shop = shopOfChat(msg.chat.id);
+  if (shop === null) return bot.sendMessage(msg.chat.id, 'Цей чат не привʼязаний до точки. /whoami');
+  kassaAsk(shop, kyivDate()).catch(e => console.warn('/kassa:', e.message));
+});
 
 /* ---------- текст замовлення ---------- */
 /* Скільки саме позиції: «600 г», «2 × 1 кг», «3 шт (≈900 г)». Фритюр —
@@ -2972,6 +3088,7 @@ function askFromText(r) {
 bot.on('message', async msg => {
   const r = msg.reply_to_message;
   if (!r || !msg.text) return;
+  if (await kassaReply(msg, r)) return;               // цифри каси за день
   const key = msg.chat.id + ':' + r.message_id;
   /* Запит бот памʼятає лише в памʼяті процесу й лише до першої відповіді.
      Відповідь на той самий запит удруге або після перезапуску сервера
