@@ -98,7 +98,7 @@ const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Kyiv' }
 const HOUR = 3600e3;
 s = build({
   1: ord({ createdAt: Date.now(), status: 'done', slotAt: Date.now() - HOUR }),
-  2: ord({ createdAt: Date.now(), status: 'cooking', slotAt: Date.now() + HOUR }),
+  2: ord({ createdAt: Date.now(), status: 'cooking', slotAt: Date.now() }),   // «зараз»: о 23:30 «+година» — це вже завтра, і тест падав увечері
   3: ord({ createdAt: Date.now(), status: 'accepted', slotAt: Date.now() + 2 * 24 * 3600e3 })
 });
 let dd = s.dayStats(0, today);

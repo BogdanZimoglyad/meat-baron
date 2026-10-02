@@ -510,6 +510,11 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 .cta.got{background:var(--ok);margin-top:12px}
 .cta.got:disabled{opacity:.6}
 .hint{font-size:12px;color:var(--smoke);margin:10px 0 0;line-height:1.55}
+/* Пауза точки чи свято: про це людина має дізнатись до кошика */
+.pause-bar{margin:10px 0 4px;padding:10px 12px;border-radius:12px;background:rgba(216,161,58,.14);
+  border-left:3px solid #D8A13A;color:var(--bone);font-size:14px;line-height:1.4}
+.pause-bar[hidden]{display:none}
+.pause-note{color:var(--bone);background:rgba(216,161,58,.12);border-left:3px solid #D8A13A;padding:8px 10px;border-radius:8px}
 
 /* cart lines */
 /* рядок переноситься: позначка «на мангал» іде окремим рядком під
@@ -1014,6 +1019,7 @@ body:has(.inst:not(.up)) .bar{bottom:66px}
         <nav class="cats" id="cats" role="tablist" aria-label="Категорії"></nav>
       </div>
       <nav class="subs" id="subs" aria-label="Підкатегорії"></nav>
+      <div class="pause-bar" id="pauseBar" role="status" hidden></div>
       <div id="catalog"></div>
     </div>
 
@@ -1105,8 +1111,23 @@ const SHOP_OPEN=8;
    з сайту підтверджує оператор, і він приходить на девʼяту (власник,
    28.09). Використовується лише в тексті для тих, хто замовив уночі. */
 const OPERATOR_FROM=9;
-const closeHour=d=>d.getDay()===0?19:20;               // 0 — неділя
-const lastOrderMin=d=>d.getDay()===0?18*60+20:19*60; // хвилини від опівночі
+/* Пауза й особливі дні точки — приходять із сервера разом зі стоп-листом
+   (loadStock). Пауза: точка тимчасово не бере замовлень на сьогодні —
+   світло, тривога, нікому працювати; оператор ставить її в панелі.
+   Особливі дні: свято (зачинено) чи короткий день (до 15:00) — ставить
+   власник у боті (02.10). Тут — лише щоб сайт не пропонував такого часу;
+   перевіряє однаково сервер. */
+let shopRules={shop:-1,pause:{},days:{}};
+const isoDay=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+/* Година закриття особливого дня: 0 — зачинено весь день, null — звичайний день */
+const specialClose=d=>{ const v=shopRules.shop===shop?shopRules.days[isoDay(d)]:undefined; return v===undefined?null:+v };
+const dayShut=d=>specialClose(d)===0;
+const pausedFor=mode=>shopRules.shop===shop&&(Date.now()<(shopRules.pause.all||0)||
+  (mode==='delivery'&&Date.now()<(shopRules.pause.delivery||0)));
+const closeHour=d=>specialClose(d)||(d.getDay()===0?19:20);               // 0 — неділя
+/* Останнє замовлення на сьогодні: у будні за годину до закриття, у неділю
+   за 40 хв; у короткий день — за годину */
+const lastOrderMin=d=>specialClose(d)? specialClose(d)*60-60 : d.getDay()===0?18*60+20:19*60; // хвилини від опівночі
 const GRILL_FROM=10;                    // мангал з 10:00
 const LEAD_PICKUP=60, LEAD_DELIVERY=100; // хвилин: самовивіз 1 год, доставка 1 год 40 хв (таксі)
 /* Під кінець дня мангал уже розпалений і вугілля готове — останні
@@ -1575,6 +1596,8 @@ async function loadStock(force){
     const r=await req(API+'/api/stock?shop='+shop,null,6000);
     const d=await r.json();
     if(d&&d.ok){
+      shopRules={shop,pause:d.pause||{},days:d.days||{}};
+      paintPause();
       const next=new Set(d.off||[]);
       const changed=stock.shop!==shop||!sameSet(next,stock.off);
       stock={shop,off:next,at:Date.now()};
@@ -2746,8 +2769,28 @@ function dayLabel(d){
    а мангал розпалюють пізніше — тримати всіх до 10:00 нема причини. */
 let fryWanted=false;
 const openFrom=()=>fryWanted?GRILL_FROM:SHOP_OPEN;
-/* Чи вже пізно замовляти на сьогодні — і на мангал, і на сире */
-const closedForToday=()=>{ const n=kNow(); return n.getHours()*60+n.getMinutes()>lastOrderMin(n) };
+/* Чи вже пізно замовляти на сьогодні — і на мангал, і на сире. Або
+   сьогодні не можна взагалі: точка на паузі чи зачинена на свято. */
+const closedForToday=mode=>{ const n=kNow();
+  return n.getHours()*60+n.getMinutes()>lastOrderMin(n) || pausedFor(mode) || dayShut(n) };
+/* Що сказати людині, коли сьогодні не можна: і в оформленні, і у вікні часу */
+function pauseNote(mode){
+  const tel=shopTel(SHOPS[shop][0]);
+  const call=tel?` Або зателефонуйте: <a href="tel:${tel}" style="color:inherit">${tel.replace('+38','')}</a>`:'';
+  if(dayShut(kNow())) return `<p class="hint pause-note">🚫 Сьогодні точка зачинена — оформіть на інший день.${call}</p>`;
+  if(pausedFor('pickup')) return `<p class="hint pause-note">⏸ Точка тимчасово не приймає замовлення на сьогодні — можна оформити на інший день.${call}</p>`;
+  if(mode==='delivery'&&pausedFor('delivery')) return `<p class="hint pause-note">🚕 Доставка сьогодні тимчасово не працює — можна на інший день або самовивіз.${call}</p>`;
+  return '';
+}
+/* Плашка над каталогом — щоб про паузу дізнались до того, як наберуть кошик */
+function paintPause(){
+  const el=document.getElementById('pauseBar'); if(!el) return;
+  const all=dayShut(kNow())||pausedFor('pickup'), dlv=!all&&pausedFor('delivery');
+  el.hidden=!all&&!dlv;
+  el.textContent=dayShut(kNow())? '🚫 Сьогодні точка зачинена — замовлення приймаємо на інші дні'
+    : all? '⏸ Точка тимчасово не приймає замовлення на сьогодні — на інші дні можна'
+    : dlv? '🚕 Доставка сьогодні тимчасово не працює — самовивіз приймаємо' : '';
+}
 /* Точка зачинена зовсім: до відкриття або після закриття. Не те саме,
    що closedForToday — там межа прийому замовлень на сьогодні, а тут
    питання, чи є зараз кому відповісти. */
@@ -2799,14 +2842,17 @@ function earliestExact(mode){
   if(mode!=='delivery' && nowMin+lead>closeMin && nowMin+LEAD_PICKUP_LATE<=closeMin) lead=LEAD_PICKUP_LATE;
   const t=new Date(toK(Date.now())+lead*60000);
   t.setSeconds(0,0);
-  const next=()=>{ const x=new Date(t); x.setDate(x.getDate()+1); return dayStart(x,mode) };
+  /* Наступний робочий день: свята, які власник закрив у боті, переступаємо */
+  const next=from=>{ const x=new Date(from); for(let i=0;i<10;i++){ x.setDate(x.getDate()+1); if(!dayShut(x)) break } return dayStart(x,mode) };
+  let r;
+  // на сьогодні вже не приймаємо (пізно, пауза чи свято) — найближчий інший день
+  if(closedForToday(mode)&&dayKey(t)===dayKey(kNow())) r=next(t);
   // ще не відчинено — чекаємо на відкриття
-  if(t<dayStart(t,mode)) return dayStart(t,mode);
-  // на сьогодні вже не приймаємо — найближче завтра
-  if(closedForToday()&&dayKey(t)===dayKey(kNow())) return next();
+  else if(t<dayStart(t,mode)) r=dayStart(t,mode);
   // після останньої видачі — переносимо на завтра
-  if(t.getHours()*60+t.getMinutes()>closeHour(t)*60) return next();
-  return t;
+  else if(t.getHours()*60+t.getMinutes()>closeHour(t)*60) r=next(t);
+  else r=t;
+  return dayShut(r)? next(r) : r;
 }
 /* Те саме, округлене вниз до години: слот — це година на видачу,
    і 13:30 потрапляє у слот 13:00–14:00. */
@@ -2852,7 +2898,8 @@ function slotsFor(d,mode){
   /* Саме точний час, а не початок години: слот тепер обіцяє «о 14:00»,
      і показувати його, коли встигаємо лише на 14:20, не можна. */
   const out=[], e=earliestExact(mode);
-  if(closedForToday()&&dayKey(d)===dayKey(kNow())) return out;   // на сьогодні вже пізно
+  if(closedForToday(mode)&&dayKey(d)===dayKey(kNow())) return out;   // на сьогодні вже пізно чи пауза
+  if(dayShut(d)) return out;                                          // свято — зачинено
   const sameDay=dayKey(d)===dayKey(e);
   let h=Math.max(openFrom(), sameDay? e.getHours():openFrom());
   const close=closeHour(d), st=dayStart(d,mode);
@@ -2897,7 +2944,8 @@ function validateWhen(mode){
 function pickTimeSheet(mode,back){
   /* Скільки вже набрано на мангал — питаємо щоразу, коли відкривають
      вікно: за пів години між заходами години могли розібрати. */
-  loadGrill().then(()=>{ if(sIn.querySelector('#whenOk')) build() });
+  /* і чи точка не стала на паузу, поки людина набирала кошик */
+  Promise.all([loadGrill(),loadStock(true)]).then(()=>{ if(sIn.querySelector('#whenOk')) build() });
   const build=()=>{
   const days=[];
   for(let i=0;i<DAYS_AHEAD;i++){
@@ -2929,6 +2977,7 @@ function pickTimeSheet(mode,back){
         return `<button class="wi${sl.free?'':' busy'}" data-h="${sl.h}" ${sl.free?'':'disabled'} aria-pressed="${!!on}">${sl.label}</button>`}).join('')}</div>
     </div>
 
+    ${pauseNote(mode)}
     <p class="hint">Готуємо ${mode==='delivery'?'і доставляємо ':''}від ${lead}.${mode==='delivery'?' Буває на 10–15 хв швидше.':''}${fryWanted?` Мангал з ${GRILL_FROM}:00.`:''}
     Замовлення на сьогодні приймаємо до 19:00, у неділю — до 18:20.${fryWanted&&list.some(s=>!s.free)?' Перекреслені години — мангал на них уже завантажений.':''}</p>
     <button class="cta" id="whenOk">Готово</button>`;
@@ -3102,6 +3151,7 @@ function openCheckout(){
       <span class="ps-t"><small>Час отримання</small><b>${whenLabel(mode)}</b></span>
       <span class="ps-a">Обрати</span>
     </button>
+    ${pauseNote(mode)}
 
     <span class="lbl">Оплата</span>
     <button class="pay" data-pay="cash" aria-pressed="${pay==='cash'}"><span class="dot"></span>Готівкою ${mode==='pickup'?'на місці':'курʼєру'}</button>

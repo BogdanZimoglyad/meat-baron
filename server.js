@@ -537,6 +537,105 @@ function applyStock(shop, id, off) {
     note: off ? `${nameOf(it)}: прибрали з сайту до ${OPEN_HOUR}:00` : `${nameOf(it)}: знову в продажу` };
 }
 
+/* ---------- пауза приймання й особливі дні ----------
+   Вимкнули світло, тривога, нікому працювати — точка тимчасово не бере
+   замовлень на сьогодні, а сайт досі приймав (аудит 02.10). Тепер
+   оператор у панелі ставить паузу: на весь прийом чи лише на доставку
+   (немає курʼєрів), на годину, дві чи до кінця дня. Зранку все
+   вмикається саме, як стоп-лист. Замовлення на інші дні приймаються.
+   Свята й короткі дні («до 15:00») ставить лише власник у боті — /days.
+   Точку тримаємо за назвою, а не за номером: номер зсувається, коли
+   вмикають нову точку (як у касі). */
+const PAUSE_WHAT = { all: 'увесь прийом', delivery: 'лише доставка' };
+function pauseOf(shop) {
+  const p = (db.pause || {})[SHOPS[shop]] || {}, now = Date.now();
+  return { all: p.all > now ? p.all : 0, delivery: p.delivery > now ? p.delivery : 0 };
+}
+/* Особливий день: 0 — зачинено, число — година закриття, null — звичайний */
+function dayRule(shop, day) {
+  const d = (db.days || {})[day];
+  if (!d) return null;
+  const v = d[SHOPS[shop]] !== undefined ? d[SHOPS[shop]] : d.all;
+  return v === undefined ? null : Number(v);
+}
+const closeHourOf = (shop, day) => dayRule(shop, day) || (wdayOf(day) === 0 ? 19 : 20);
+/* Особливі дні точки на тиждень із запасом — для сайту */
+function daysAhead(shop, n = 9) {
+  const out = {}, today = kyivDate();
+  for (let i = 0; i < n; i++) {
+    const day = dayAdd(today, i), r = dayRule(shop, day);
+    if (r !== null) out[day] = r;
+  }
+  return out;
+}
+/* Скільки сьогоднішніх замовлень у роботі потрапляє під паузу —
+   оператору, щоб обдзвонив (власник: автоматично клієнтам не пишемо) */
+function pauseHits(shop, what, until) {
+  const today = kyivDate();
+  return Object.values(db.orders).filter(o => o.shop === shop && !FINAL.has(o.status) &&
+    (what === 'all' || o.mode === 'delivery') &&
+    kyivDate(o.slotAt || o.createdAt) === today && (o.slotAt || 0) <= until).length;
+}
+const untilText = until => kyivDate(until) === kyivDate() ? 'до ' + hhmm(until) : 'до кінця дня';
+/* Власнику в особисті й у чат точки — щоб усі бачили, хто й на скільки */
+function tellPause(shop, text) {
+  if (OWNER_ID) bot.sendMessage(OWNER_ID, text).catch(e => console.warn('Пауза — власнику:', e.message));
+  if (db.shops[shop]) bot.sendMessage(db.shops[shop], text).catch(e => console.warn('Пауза — точці:', e.message));
+}
+function applyPause(shop, what, dur, by) {
+  if (!PAUSE_WHAT[what]) return { err: 'Невідома пауза' };
+  db.pause = db.pause || {};
+  const name = SHOPS[shop];
+  const p = db.pause[name] || (db.pause[name] = {});
+  if (dur === 'off') {
+    if (!(p[what] > Date.now())) return { err: 'Паузи й так немає' };
+    delete p[what];
+    save();
+    tellPause(shop, `▶️ ${name}: знову приймаємо — ${PAUSE_WHAT[what]} (${by})`);
+    return { ok: true, note: 'Пауза знята — сайт знову приймає' };
+  }
+  const min = Number(dur);
+  const until = dur === 'day' ? nextOpenMs() : (min === 60 || min === 120) ? Date.now() + min * 60000 : 0;
+  if (!until) return { err: 'Невідома тривалість' };
+  p[what] = until;
+  p.by = by;
+  save();
+  const n = pauseHits(shop, what, until);
+  tellPause(shop, `⏸ ${name}: пауза — ${PAUSE_WHAT[what]} ${untilText(until)} (${by})` +
+    (n ? `\nНа час паузи вже є замовлень: ${n} — обдзвоніть клієнтів.` : ''));
+  return { ok: true, note: `Пауза ${untilText(until)}` + (n ? ` · на цей час уже є замовлень: ${n} — обдзвоніть` : '') };
+}
+/* Пауза минула сама — кажемо, що сайт знову приймає, і прибираємо запис */
+function pauseSweep() {
+  const now = Date.now();
+  for (const [name, p] of Object.entries(db.pause || {})) {
+    for (const what of Object.keys(PAUSE_WHAT)) {
+      if (!p[what] || p[what] > now) continue;
+      delete p[what];
+      save();
+      const shop = SHOPS.indexOf(name);
+      if (shop > -1) tellPause(shop, `▶️ ${name}: пауза скінчилась — знову приймаємо, ${PAUSE_WHAT[what]}`);
+    }
+    if (!p.all && !p.delivery) { delete db.pause[name]; save() }
+  }
+}
+setInterval(pauseSweep, 60 * 1000).unref();
+/* Чому замовлення на цей час не можна прийняти. null — можна. */
+function closedRefuse(shop, mode, slotAt) {
+  const day = kyivDate(slotAt || Date.now());
+  const rule = dayRule(shop, day);
+  const tel = (CATALOG_SHOPS[shop] || [])[1] || '';
+  const call = tel ? ` Або зателефонуйте: ${tel}` : '';
+  if (rule === 0) return 'У цей день точка зачинена — оберіть інший день.' + call;
+  if (rule && slotAt && slotAt > kyivMs(day, rule, 0)) return `У цей день працюємо до ${rule}:00 — оберіть раніший час чи інший день.`;
+  if (day === kyivDate()) {
+    const p = pauseOf(shop);
+    if (p.all) return 'Точка тимчасово не приймає замовлення на сьогодні — оформіть на інший день.' + call;
+    if (mode === 'delivery' && p.delivery) return 'Доставка сьогодні тимчасово не працює — оберіть самовивіз чи інший день.' + call;
+  }
+  return null;
+}
+
 bot.on('callback_query', async cq => {
   const [tag, iStr, val, arg] = (cq.data || '').split(':');
   if (tag !== 'g') return;
@@ -833,7 +932,7 @@ function dayText(shop, day) {
     (d.later ? `\nЧекають свого дня: ${d.later}` : '');
 }
 
-bot.onText(/^\/day(?:@\w+)?/, msg => {
+bot.onText(/^\/day(?:@\w+)?(?:\s|$)/, msg => {   // не ловити /days
   const i = Object.keys(db.shops).find(k => db.shops[k] === msg.chat.id);
   if (i === undefined) return bot.sendMessage(msg.chat.id, 'Цей чат не прив’язаний до точки. /whoami');
   bot.sendMessage(msg.chat.id, dayText(Number(i), kyivDate()), { parse_mode: 'HTML' });
@@ -985,7 +1084,8 @@ app.get('/api/op/orders', (req, res) => {
      на точці не мав жодної цифри за день: скільки вже прийняли, на яку
      суму, скільки мʼяса на мангал (власник, 27.09). */
   res.json({ ok: true, shop: a.shop, shopName: SHOPS[a.shop], now: Date.now(),
-    day: dayStats(a.shop, kyivDate()), orders: list });
+    /* пауза — щоб позначка в шапці панелі нагадувала, що сайт не приймає */
+    day: dayStats(a.shop, kyivDate()), pause: pauseOf(a.shop), orders: list });
 });
 
 /* Уточнити суму, дописати коментар або скасувати — те саме, що кнопками
@@ -1073,6 +1173,7 @@ const opShopState = shop => {
        з будь-яким годинником, а «закрито до 19:40» рахується від нашого. */
     now: Date.now(), openHour: OPEN_HOUR,
     stop: Object.keys(stopOf(shop)),
+    pause: pauseOf(shop),
     grill: {
       cap: GRILL_CAP_G, step: ADD_STEP_G,
       busyUntil: grillBusyUntil(shop),
@@ -1098,6 +1199,16 @@ app.post('/api/op/stock', (req, res) => {
   const b = req.body || {};
   const r = applyStock(a.shop, String(b.id || ''), !!b.off);
   if (r.err) return res.status(400).json({ error: r.err });
+  res.json({ ok: true, note: r.note, ...opShopState(a.shop) });
+});
+
+/* Пауза приймання з планшета: { what: 'all'|'delivery', dur: '60'|'120'|'day'|'off' } */
+app.post('/api/op/pause', (req, res) => {
+  const a = panelOf(req);
+  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  const b = req.body || {};
+  const r = applyPause(a.shop, String(b.what || ''), String(b.dur || ''), 'панель');
+  if (r.err) return res.status(400).json({ error: r.err, ...opShopState(a.shop) });
   res.json({ ok: true, note: r.note, ...opShopState(a.shop) });
 });
 
@@ -1639,6 +1750,111 @@ bot.onText(/^\/status(?:@\w+)?/, msg => {
     { parse_mode: 'HTML' });
 });
 
+/* ---------- особливі дні: свята й короткі дні ----------
+   Ставить лише власник, в особистих із ботом, самими кнопками — без
+   дат текстом (власник, 02.10): /days → точка → день → «Зачинено» чи
+   «до 15:00». Сайт такого часу не пропонує, сервер не приймає, панель
+   не дає перенести на нього. Точці пишемо в чат, щоб знали. */
+const DAYS_PAGE = 28, DAYS_PAGES = 4;                   // ~4 місяці наперед
+const ruleText = v => v === 0 ? '🚫 зачинено' : `🕒 до ${v}:00`;
+const shopKeyOf = sh => sh === 'a' ? 'all' : SHOPS[Number(sh)];
+const shopLabel = key => key === 'all' ? 'усі точки' : key;
+const ddmm = day => { const [, m, d] = day.split('-'); return `${d}.${m}` };
+function daysText() {
+  const today = kyivDate();
+  const list = Object.keys(db.days || {}).filter(d => d >= today).sort();
+  return '📅 <b>Особливі дні</b>\n' + (list.length
+    ? list.map(d => Object.entries(db.days[d]).map(([k, v]) =>
+        `${ddmm(d)} (${TIME_WDAY[wdayOf(d)]}) · ${esc(shopLabel(k))} · ${ruleText(v)}`).join('\n')).join('\n')
+    : 'Поки немає — усі точки працюють за звичайним графіком.') +
+    '\n\nСвято чи короткий день: сайт не прийме замовлень на цей час.';
+}
+function daysKb() {
+  const today = kyivDate(), rows = [[{ text: '➕ Додати день', callback_data: 'hd:n' }]];
+  for (const d of Object.keys(db.days || {}).filter(d => d >= today).sort()) {
+    for (const k of Object.keys(db.days[d])) {
+      const sh = k === 'all' ? 'a' : SHOPS.indexOf(k);
+      if (sh === -1) continue;
+      rows.push([{ text: `🗑 ${ddmm(d)} · ${shopLabel(k)}`, callback_data: `hd:k:${sh}:${d}:x` }]);
+    }
+  }
+  return { inline_keyboard: rows };
+}
+bot.onText(/^\/days(?:@\w+)?/, msg => {
+  if (!msg.chat || msg.chat.type !== 'private' || !isOwner(msg)) return;
+  bot.sendMessage(msg.chat.id, daysText(), { parse_mode: 'HTML', reply_markup: daysKb() })
+    .catch(e => console.warn('/days:', e.message));
+});
+bot.on('callback_query', async cq => {
+  const [tag, step, sh, a1, a2] = (cq.data || '').split(':');
+  if (tag !== 'hd') return;
+  const ans = text => bot.answerCallbackQuery(cq.id, text ? { text } : {}).catch(() => {});
+  if (!OWNER_ID || !cq.from || cq.from.id !== OWNER_ID) return ans('Лише для власника');
+  const edit = (text, kb) => bot.editMessageText(text, { chat_id: cq.message.chat.id,
+    message_id: cq.message.message_id, parse_mode: 'HTML', reply_markup: kb }).catch(() => {});
+  const back = [{ text: '↩ До списку', callback_data: 'hd:l' }];
+
+  if (step === 'l') { await edit(daysText(), daysKb()); return ans() }
+  if (step === 'n') {
+    const rows = [[{ text: 'Усі точки', callback_data: 'hd:p:a:0' }],
+      ...SHOPS.map((s, i) => [{ text: s, callback_data: `hd:p:${i}:0` }]), back];
+    await edit('📅 Для якої точки?', { inline_keyboard: rows });
+    return ans();
+  }
+  if (!shopKeyOf(sh)) return ans('Такої точки вже немає');
+  if (step === 'p') {
+    const page = Math.max(0, Math.min(DAYS_PAGES - 1, Number(a1) || 0)), today = kyivDate();
+    const days = [];
+    for (let i = page * DAYS_PAGE; i < (page + 1) * DAYS_PAGE; i++) days.push(dayAdd(today, i));
+    const rows = [];
+    for (let i = 0; i < days.length; i += 4) rows.push(days.slice(i, i + 4).map(d =>
+      ({ text: `${TIME_WDAY[wdayOf(d)]} ${ddmm(d)}`, callback_data: `hd:d:${sh}:${d}` })));
+    const nav = [];
+    if (page > 0) nav.push({ text: '‹ Раніше', callback_data: `hd:p:${sh}:${page - 1}` });
+    if (page < DAYS_PAGES - 1) nav.push({ text: 'Далі ›', callback_data: `hd:p:${sh}:${page + 1}` });
+    rows.push(nav, back);
+    await edit(`📅 ${esc(shopLabel(shopKeyOf(sh)))} — який день?`, { inline_keyboard: rows.filter(r => r.length) });
+    return ans();
+  }
+  if (!DAY_RE.test(a1 || '')) return ans('Невірна дата');
+  if (step === 'd') {
+    const rows = [[{ text: '🚫 Зачинено весь день', callback_data: `hd:k:${sh}:${a1}:0` }],
+      [14, 15, 16].map(h => ({ text: `до ${h}:00`, callback_data: `hd:k:${sh}:${a1}:${h}` })),
+      [17, 18, 19].map(h => ({ text: `до ${h}:00`, callback_data: `hd:k:${sh}:${a1}:${h}` })),
+      [{ text: '✅ Звичайний день', callback_data: `hd:k:${sh}:${a1}:x` }], back];
+    await edit(`📅 ${dayLabelK(a1)} · ${esc(shopLabel(shopKeyOf(sh)))}\nЯк працюємо?`, { inline_keyboard: rows });
+    return ans();
+  }
+  if (step === 'k') {
+    const key = shopKeyOf(sh), day = a1;
+    db.days = db.days || {};
+    if (a2 === 'x') {
+      if (db.days[day]) { delete db.days[day][key]; if (!Object.keys(db.days[day]).length) delete db.days[day] }
+    } else {
+      const v = Number(a2);
+      if (!(v === 0 || (v >= 10 && v <= 20))) return ans('Невідомий варіант');
+      (db.days[day] || (db.days[day] = {}))[key] = v;
+    }
+    save();
+    /* Що вже замовили на цей день — щоб обдзвонили */
+    const shops = key === 'all' ? SHOPS.map((_, i) => i) : [Number(sh)];
+    const rule = a2 === 'x' ? null : Number(a2);
+    const hit = Object.values(db.orders).filter(o => shops.includes(o.shop) && !FINAL.has(o.status) &&
+      o.slotAt && kyivDate(o.slotAt) === day && (rule === 0 || (rule && o.slotAt > kyivMs(day, rule, 0)))).length;
+    const what = a2 === 'x' ? 'звичайний день' : ruleText(rule);
+    for (const i of shops) {
+      if (db.shops[i]) bot.sendMessage(db.shops[i], `📅 ${dayLabelK(day)} (${ddmm(day)}): ${what}. ` +
+        (a2 === 'x' ? 'Сайт приймає за звичайним графіком.' : 'Сайт не прийме замовлень на цей час.'))
+        .catch(e => console.warn('Особливий день — точці:', e.message));
+    }
+    await edit(`✅ ${ddmm(day)} · ${esc(shopLabel(key))} · ${what}` +
+      (hit ? `\n⚠️ На цей час уже є замовлень: ${hit} — точки мають обдзвонити клієнтів.` : '') +
+      '\n\n' + daysText(), daysKb());
+    return ans('Збережено');
+  }
+  return ans();
+});
+
 /* ---------- обнулення бази перед запуском ----------
    Поки сайт не в роботі, у базі лежать замовлення, які власник із
    працівниками наклацали на тестах. Вони псують «Популярне» (клієнти
@@ -1883,7 +2099,7 @@ function orderText(o) {
   /* Замовлення на інший день видно одразу: щоб ніхто не кинувся смажити
      сьогодні те, що заберуть завтра. */
   const later = futureDay(o) ? `\n⏳ <b>На ${dayShort(o.slotAt)}</b> — у роботу того дня` : '';
-  const odd = oddTime(o.slotAt) ? `\n⚠️ <b>Час поза графіком точки</b> — зателефонуйте й уточніть` : '';
+  const odd = oddTime(o.slotAt, o.shop) ? `\n⚠️ <b>Час поза графіком точки</b> — зателефонуйте й уточніть` : '';
 
   /* Сайт показав клієнту іншу суму: або в нього застарілий кеш після
      зміни цін, або запит підроблено. Правильна — та, що нижче. */
@@ -2230,6 +2446,10 @@ app.post('/api/order', async (req, res) => {
      як рахувався погодинно, так і рахується — там своє округлення. */
   const slotAt = Number.isFinite(b.slotAt) && b.slotAt > Date.now() - HOUR
     ? Math.round(b.slotAt / 60000) * 60000 : 0;
+  /* Пауза точки, свято чи короткий день — сайт такого часу не дає, але
+     сторінка могла відкритись до паузи */
+  const shut = closedRefuse(shopIndex, b.mode === 'delivery' ? 'delivery' : 'pickup', slotAt);
+  if (shut) return res.status(409).json({ error: shut });
   if (fry) {
     const refuse = grillRefuse(shopIndex, slotAt, fg);
     if (refuse) return res.status(409).json({ error: refuse });
@@ -2446,7 +2666,8 @@ app.get('/api/stock', (req, res) => {
   }
   let shop = Number(req.query.shop);
   if (!Number.isInteger(shop) || shop < 0 || shop >= SHOPS.length) shop = 0;
-  res.json({ ok: true, off: Object.keys(stopOf(shop)) });
+  /* Разом зі стоп-листом — пауза й особливі дні: сайт не пропонує часу, якого точка не візьме */
+  res.json({ ok: true, off: Object.keys(stopOf(shop)), pause: pauseOf(shop), days: daysAhead(shop) });
 });
 
 /* ---------- що беруть найчастіше ----------
@@ -2917,11 +3138,11 @@ const timeLabel = (o, at) =>
    повним кошиком ні в чому не винна, — а кажемо точці в картці.
    Межі широкі, як на сайті: від відкриття до закриття включно, тиждень
    наперед із запасом на день. */
-function oddTime(at) {
+function oddTime(at, shop) {
   if (!at) return false;
   const day = kyivDate(at);
-  if (day > dayAdd(kyivDate(), 8)) return true;
-  const close = wdayOf(day) === 0 ? 19 : 20;
+  if (day > dayAdd(kyivDate(), 8) || dayRule(shop, day) === 0) return true;
+  const close = closeHourOf(shop, day);
   return at < kyivMs(day, OPEN_HOUR, 0) || at > kyivMs(day, close, 0);
 }
 
@@ -2957,7 +3178,8 @@ function timeChoices(o) {
   for (let i = 0; i < TIME_DAYS; i++) {
     const day = kyivDate(now + i * 24 * HOUR);
     if (out.some(x => x.day === day)) continue;           // перехід на зимовий час
-    const close = (wdayOf(day) === 0 ? 19 : 20) * 60;
+    if (dayRule(o.shop, day) === 0) continue;               // свято — зачинено
+    const close = closeHourOf(o.shop, day) * 60;
     const slots = [];
     for (let t = from; t < close; t += TIME_STEP_MIN) {
       const at = kyivMs(day, Math.floor(t / 60), t % 60);

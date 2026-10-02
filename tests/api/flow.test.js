@@ -234,6 +234,72 @@ const order = (extra = {}) => ({ shop: 0, shopName: CAT.SHOPS[0][0], mode: 'pick
   await call('POST', '/api/op/grill', { act: 'free' }, P);
   ok('🔥 мангал знову вільний', !((await call('GET', '/api/grill?shop=0')).d.busyUntil > Date.now()));
 
+  /* ---- 7а. Пауза приймання з панелі (02.10) ---- */
+  const OWNER = 777;
+  const now = () => Date.now();                       // «на зараз» — точно сьогодні, хоч о 23:59
+  const cancel = n => call('POST', `/api/op/order/${n}/adjust`, { kind: 'cancel', note: 'тест' }, P);
+  sent.length = 0;
+  r = await call('POST', '/api/op/pause', { what: 'all', dur: 'day' }, P);
+  ok('⏸ пауза поставлена', r.status === 200 && r.d.pause.all > Date.now());
+  ok('⏸ власнику в особисті — хто й на скільки', sent.some(x => x.chatId === OWNER && /⏸.*увесь прийом/.test(x.text)));
+  ok('⏸ і в чат точки', sent.some(x => x.chatId === CHAT && /⏸/.test(x.text)));
+  ok('⏸ сайт бачить паузу разом зі стоп-листом', (await call('GET', '/api/stock?shop=0')).d.pause.all > Date.now());
+  ok('⏸ панель бачить паузу в шапці', (await call('GET', '/api/op/orders', null, P)).d.pause.all > Date.now());
+  r = await call('POST', '/api/order', order({ slotAt: now() }));
+  ok('⏸ на сьогодні — відмова з поясненням', r.status === 409 && /тимчасово не приймає/.test(r.d.error));
+  r = await call('POST', '/api/order', order({ slotAt: kyivNoon(2), when: 'Післязавтра' }));
+  ok('⏸ на інший день — приймаємо', r.status === 200);
+  await cancel(r.d.no);
+  sent.length = 0;
+  r = await call('POST', '/api/op/pause', { what: 'all', dur: 'off' }, P);
+  ok('▶️ паузу знято, власнику сказали', r.status === 200 && !r.d.pause.all && sent.some(x => x.chatId === OWNER && /▶️/.test(x.text)));
+  r = await call('POST', '/api/order', order({ slotAt: now() }));
+  ok('▶️ на сьогодні знову приймаємо', r.status === 200);
+  await cancel(r.d.no);
+  ok('⏸ невідома тривалість — ні', (await call('POST', '/api/op/pause', { what: 'all', dur: '999' }, P)).status === 400);
+
+  await call('POST', '/api/op/pause', { what: 'delivery', dur: '60' }, P);
+  r = await call('POST', '/api/order', order({ slotAt: now(), mode: 'delivery', addr: 'вул. Сумська 1' }));
+  ok('🚕 пауза доставки: доставку на сьогодні не приймаємо', r.status === 409 && /Доставка/.test(r.d.error));
+  r = await call('POST', '/api/order', order({ slotAt: now() }));
+  ok('🚕 пауза доставки: самовивіз приймаємо', r.status === 200);
+  await cancel(r.d.no);
+  await call('POST', '/api/op/pause', { what: 'delivery', dur: 'off' }, P);
+
+  /* ---- 7б. Свята й короткі дні — лише власник, у боті (02.10) ---- */
+  const hol = new Date(kyivNoon(3)).toLocaleDateString('sv-SE', { timeZone: 'Europe/Kyiv' });
+  await press(555, 555, `hd:k:a:${hol}:0`);
+  ok('📅 не власник свято не поставить', (await call('GET', '/api/stock?shop=0')).d.days[hol] === undefined);
+  sent.length = 0;
+  await press(OWNER, OWNER, `hd:k:a:${hol}:0`);
+  ok('📅 власник зачинив день — сайт це бачить', (await call('GET', '/api/stock?shop=0')).d.days[hol] === 0);
+  ok('📅 точці в чат — що день особливий', sent.some(x => x.chatId === CHAT && /📅/.test(x.text)));
+  r = await call('POST', '/api/order', order({ slotAt: kyivNoon(3), when: 'Свято' }));
+  ok('📅 на зачинений день — відмова', r.status === 409 && /зачинена/.test(r.d.error));
+  r = await call('POST', '/api/order', order({ slotAt: kyivNoon(2), when: 'Післязавтра' }));
+  const tno = r.d.no;
+  r = await call('GET', `/api/op/order/${tno}/times`, null, P);
+  ok('📅 панель не дає перенести на свято', r.status === 200 && !r.d.days.some(d => d.day === hol));
+  await cancel(tno);
+
+  await press(OWNER, OWNER, `hd:k:0:${hol}:15`);
+  ok('🕒 короткий день: точка важливіша за «усі»', (await call('GET', '/api/stock?shop=0')).d.days[hol] === 15);
+  r = await call('POST', '/api/order', order({ slotAt: kyivNoon(3) + 4 * 3600e3, when: '16:00' }));
+  ok('🕒 короткий день: після закриття — відмова', r.status === 409 && /до 15:00/.test(r.d.error));
+  r = await call('POST', '/api/order', order({ slotAt: kyivNoon(3), when: '12:00' }));
+  ok('🕒 короткий день: до закриття — приймаємо', r.status === 200);
+  await cancel(r.d.no);
+
+  await press(OWNER, OWNER, `hd:k:0:${hol}:x`);
+  await press(OWNER, OWNER, `hd:k:a:${hol}:x`);
+  ok('✅ звичайний день — особливе прибрано', (await call('GET', '/api/stock?shop=0')).d.days[hol] === undefined);
+  sent.length = 0;
+  say(OWNER, OWNER, '/days');
+  ok('📅 /days — власнику список і кнопка «Додати»', sent.some(x => x.chatId === OWNER && x.kb.some(b => b.callback_data === 'hd:n')));
+  sent.length = 0;
+  say(-100, 1, '/days', 'group');
+  ok('📅 /days у чаті точки мовчить', !sent.length);
+
   /* ---- 8. /panel-off відкликає планшет ---- */
   say(CHAT, 1, '/panel-off', 'group');
   ok('після /panel-off ключ панелі не діє', (await call('GET', '/api/op/orders', null, P)).status === 401);

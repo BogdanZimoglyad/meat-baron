@@ -16,6 +16,9 @@ let load = {}, busyUntil = 0, extra = {};
 let notified = [];
 const env = {
   HOUR, OPEN_HOUR: 8,
+  /* звичайний графік без свят; особливі дні перевіряє tests/api/flow.test.js */
+  dayRule: () => null,
+  closeHourOf: (shop, day) => new Date(day + 'T12:00:00Z').getUTCDay() === 0 ? 19 : 20,
   kyivDate: (ts = Date.now()) => new Date(ts).toLocaleDateString('sv-SE', { timeZone: 'Europe/Kyiv' }),
   hhmm: ms => new Date(ms).toLocaleTimeString('uk-UA', { timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit' }),
   hourFloor: ms => Math.floor(ms / HOUR) * HOUR,

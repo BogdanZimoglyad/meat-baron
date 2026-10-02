@@ -36,6 +36,7 @@ const env = {
   hhmm: ms => new Date(ms).toLocaleTimeString('uk-UA', { timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit' }),
   /* повернення о 8:00 нас тут не цікавить — важливо лише, що мітка в майбутньому */
   nextOpenMs: () => Date.now() + 10 * HOUR,
+  pauseOf: () => ({ all: 0, delivery: 0 }),   // паузу перевіряє tests/api/flow.test.js
   save: () => { saved++ },
   db: null
 };

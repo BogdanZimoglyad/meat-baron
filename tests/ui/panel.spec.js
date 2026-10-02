@@ -197,3 +197,35 @@ test('оператор: змінити вагу позиції без видал
   await expect(card.locator('.ln'), 'позиція одна, не додалась друга').toHaveCount(1);
   expect(errors, 'помилки JS у панелі').toEqual([]);
 });
+
+/* Пауза приймання (02.10): оператор ставить у панелі — сайт одразу
+   показує плашку й не дає часу на сьогодні; знімає — усе як було. */
+test('оператор: ⏸ пауза — сайт бачить плашку; зняв — плашки немає', async ({ page, bot }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  const dialogs = [];
+  page.on('dialog', d => { dialogs.push(d.message()); d.accept() });
+  await openPanel(page, bot);
+  await page.locator('[data-view="pause"]').click();
+  await page.locator('[data-pause="all"][data-dur="day"]').click();
+  expect(dialogs[0], 'перепитали перед паузою').toContain('Поставити на паузу');
+  await expect(page.locator('#pausePill')).toBeVisible();
+  await expect(page.locator('#pausePill')).toContainText('на паузі');
+
+  /* та сама вкладка — на сайт: панель і сайт живуть на одній адресі */
+  await page.goto('/');
+  await expect(page.locator('#pauseBar')).toBeVisible();
+  await expect(page.locator('#pauseBar')).toContainText('не приймає');
+  /* і час на сьогодні сайт уже не пропонує — «якнайшвидше» переїхало на інший день */
+  expect(await page.evaluate(() => closedForToday('pickup')), 'сьогодні закрито для сайту').toBe(true);
+  expect(await page.evaluate(() => asapLabel('pickup')), '«якнайшвидше» — не сьогодні').not.toMatch(/^орієнтовно з/);
+
+  await page.goto('/op.html');                          // ключ панелі памʼятає планшет
+  await page.locator('[data-view="pause"]').click();
+  await page.locator('[data-pause="all"][data-dur="off"]').click();
+  await expect(page.locator('#pausePill')).toBeHidden();
+  await page.goto('/');
+  await page.waitForTimeout(800);                        // пауза приходить за мить після сторінки
+  await expect(page.locator('#pauseBar')).toBeHidden();
+  expect(errors, 'помилки JS').toEqual([]);
+});
