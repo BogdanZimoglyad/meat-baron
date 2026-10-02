@@ -171,3 +171,29 @@ test('оператор: «Готується» можна повернути в 
   await expect(card.locator('[data-uncook]')).toHaveCount(0);
   expect(errors, 'помилки JS у панелі').toEqual([]);
 });
+
+/* Вага позиції змінюється на місці — не прибирати й додавати наново (власник, 02.10) */
+test('оператор: змінити вагу позиції без видалення', async ({ page, bot, request }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  const no = await newOrder(request, 'Панель Вага');
+  await openPanel(page, bot);
+  const card = cardOf(page, no);
+  await card.locator(`[data-go="${no}"]`).click();
+  await expect.poll(() => statusOf(request, no)).toBe('accepted');
+
+  /* у ➕ теж видно, що вже є, з кнопкою «Змінити» */
+  await card.locator('[data-kind="plus"]').click();
+  await expect(card.locator('[data-edit="0"]')).toBeVisible();
+  await page.locator('[data-close]').click();
+
+  await card.locator('[data-kind="minus"]').click();
+  await card.locator('[data-edit="0"]').click();
+  await page.locator('#fv').fill('1350');
+  await card.screenshot({ path: 'test-results/qty.png' });
+  await page.locator('[data-setline]').click();
+  await expect(card).toContainText('1.35 кг');
+  await expect(card).toContainText('уточнено');
+  await expect(card.locator('.ln'), 'позиція одна, не додалась друга').toHaveCount(1);
+  expect(errors, 'помилки JS у панелі').toEqual([]);
+});

@@ -86,6 +86,13 @@ const order = (extra = {}) => ({ shop: 0, shopName: CAT.SHOPS[0][0], mode: 'pick
   ok('➕ неіснуюча позиція — відмова', r.status === 409);
   r = await call('POST', `/api/op/order/${no}/line`, { act: 'del', i: 1 }, P);
   ok('➖ позиція: сума повернулась', r.status === 200 && Math.abs(r.d.order.total - 150) < 0.01);
+  /* ✏️ вага на місці, без прибирання позиції (02.10) */
+  r = await call('POST', `/api/op/order/${no}/line`, { act: 'set', i: 0, g: 3 }, P);
+  ok('✏️ кількість змінено, позиція одна', r.status === 200 && r.d.order.lines.length === 1 && r.d.order.lines[0].qty === 3);
+  r = await call('POST', `/api/op/order/${no}/line`, { act: 'set', i: 0, g: 3 }, P);
+  ok('✏️ та сама кількість — відмова', r.status === 409);
+  r = await call('POST', `/api/op/order/${no}/line`, { act: 'set', i: 0, g: 2 }, P);
+  ok('✏️ назад до двох', r.status === 200 && r.d.order.lines[0].qty === 2 && Math.abs(r.d.order.total - 150) < 0.01);
   r = await call('POST', `/api/op/order/${no}/line`, { act: 'del', i: 0 }, P);
   ok('останню позицію не прибрати — лише скасувати', r.status === 409);
   /* «Зібрано» — позначка для себе: клієнту не йде нічого */
