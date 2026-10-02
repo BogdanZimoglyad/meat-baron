@@ -214,5 +214,17 @@ const round = n => Math.round(n * 100) / 100;
   await api.applyLine(o, 'add', { id: id('Сулугуні'), g: 500 }, 'п');
   ok('правку відхилено — «Зібрано» лишилось', o.packedAt === 5);
 
+  /* Назва в картці зрозуміла без групи: «З сиром» не плутається з
+     курячою ковбаскою з сиром (власник, 02.10) */
+  ok('чевапчічі — з назвою групи', CAT.lineTitle(item('З сиром')) === 'Чевапчічі з сиром');
+  ok('ковбаски — теж', CAT.lineTitle(item('Куряча з сиром')) === 'Куряча ковбаска з сиром');
+  ok('у журналі змін — повна назва', await (async () => {
+    notified = [];
+    const c = order({ lines: [line('З сиром', 850)] });
+    c.total = api.retotal(c);
+    await api.applyLine(c, 'set', { i: 0, g: 1000 }, 'п');
+    return notified[0] && notified[0].note.includes('Чевапчічі з сиром');
+  })());
+
   report(t);
 }
