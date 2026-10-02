@@ -358,7 +358,8 @@ const val=id=>{ const e=$(id); return e?e.value:null };
 const put=(id,v)=>{ const e=$(id); if(e&&v!=null) e.value=v };
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const money=n=>(Math.round(n*100)/100).toFixed(2).replace(/\.00$/,'')+' ₴';
-const hhmm=ms=>new Date(ms).toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});
+/* Київський час, хай який пояс стоїть на планшеті */
+const hhmm=ms=>new Date(ms).toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Kyiv'});
 /* +380979705744 → 097 970 57 44 */
 const telGroups=t=>String(t||'').replace(/^\+38/,'').replace(/^(\d{3})(\d{3})(\d{2})(\d{2})$/,'$1 $2 $3 $4');
 const wLabel=g=>g>=1000?(g/1000).toFixed(g%100?2:g%1000?1:0)+' кг':g+' г';
@@ -1349,7 +1350,7 @@ function nag(d){
      на нічне замовлення вона говорила б кожні дві хвилини до ранку.
      Підсвітка лишається — зранку оператор побачить. Планшет стоїть у
      Харкові, тож годинник у нього київський. */
-  const h=new Date().getHours();
+  const h=+new Date().toLocaleString('en-US',{hour:'numeric',hourCycle:'h23',timeZone:'Europe/Kyiv'});
   if(h<8||h>=21) return;
   speak(due.map(x=>x.say));
 }

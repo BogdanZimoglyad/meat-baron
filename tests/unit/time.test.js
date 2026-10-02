@@ -29,7 +29,7 @@ const env = {
   notifyAdjust: (o, a) => notified.push(a)
 };
 const api = new Function(...Object.keys(env),
-  `${code}; return { kyivMs, timeChoices, applyTime, timeLabel, dayLabelK }`)(...Object.values(env));
+  `${code}; return { kyivMs, timeChoices, applyTime, timeLabel, dayLabelK, whenOf }`)(...Object.values(env));
 
 /* Завтра за Києвом — від нього будуємо всі слоти, щоб тест не залежав
    від того, о котрій його запускають. */
@@ -120,6 +120,16 @@ const ok = (name, cond) => t.push([name, cond]);
   r = await api.applyTime(order({ fry: false }), { at: at(17) }, 'п');
   ok('сире мангал не чіпає', r.ok);
   busyUntil = 0;
+
+  /* Рядок часу — з точного часу за Києвом, а не той, що прислав телефон
+     (власник, 02.10: № 1058, «Завтра · о 17:00» при 18:00 сьогодні) */
+  ok('рядок часу рахується з точного часу',
+    api.whenOf({ mode: 'pickup', slotAt: at(18), when: 'Сьогодні · о 17:00' }) === 'Завтра · о 18:00');
+  ok('доставка — «орієнтовно о»',
+    api.whenOf({ mode: 'delivery', slotAt: at(18), when: '' }) === 'Завтра · орієнтовно о 18:00');
+  ok('«якнайшвидше» лишається «орієнтовно з»',
+    api.whenOf({ mode: 'pickup', slotAt: at(10, 40), when: 'Готове орієнтовно з 10:40' }) === 'Завтра · готове орієнтовно з 10:40');
+  ok('без часу — збережений рядок', api.whenOf({ when: 'якнайшвидше' }) === 'якнайшвидше');
 
   report(t);
 }
