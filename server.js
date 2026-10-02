@@ -762,7 +762,7 @@ function pickupSweep() {
         { reply_markup: { inline_keyboard: [
           [{ text: '🚗 Вже їду', callback_data: `pk:${o.no}:go` },
            { text: '🔕 Не нагадувати', callback_data: `pk:${o.no}:off` }],
-          [{ text: 'Відкрити замовлення', url: SITE + '?order=' + o.no }]
+          [{ text: 'Відкрити замовлення', url: orderLink(o) }]
         ] } })
         .catch(e => console.warn('Нагадування про самовивіз № ' + o.no + ':', e.message));
     }
@@ -1883,6 +1883,7 @@ function orderText(o) {
   /* Замовлення на інший день видно одразу: щоб ніхто не кинувся смажити
      сьогодні те, що заберуть завтра. */
   const later = futureDay(o) ? `\n⏳ <b>На ${dayShort(o.slotAt)}</b> — у роботу того дня` : '';
+  const odd = oddTime(o.slotAt) ? `\n⚠️ <b>Час поза графіком точки</b> — зателефонуйте й уточніть` : '';
 
   /* Сайт показав клієнту іншу суму: або в нього застарілий кеш після
      зміни цін, або запит підроблено. Правильна — та, що нижче. */
@@ -1914,7 +1915,7 @@ function orderText(o) {
     : o.gotBy === 'клієнт' ? ' · клієнт підтвердив'
     : o.gotBy === 'автоматично' ? ' · закрито автоматично' : '';
   return `<b>Замовлення № ${o.no}</b> — ${LABEL[o.status]}${got}\n` +
-    `${delivery}${when}${later}\n${pay}\n\n${lines}${fry}\n\n` +
+    `${delivery}${when}${later}${odd}\n${pay}\n\n${lines}${fry}\n\n` +
     sum +
     `👤 ${esc(o.nm)}\n📞 ${esc(o.tel)}` +
     (o.note ? `\n\n💬 <b>Коментар:</b> ${esc(o.note)}` : '');
@@ -2038,7 +2039,11 @@ function tooOften(bucket, ip, max) {
 /* Сайт питає статус раз на 15 секунд, і той, хто увійшов, разом із ним
    питає своє активне замовлення — це вже 80 запитів за вікно. Плюс
    пробудження вкладки. Тому ліміт вищий, ніж був. */
-const RATE = { order: 5, status: 300, op: 600, hit: 200, history: 20, auth: 10, poll: 120, grill: 120, popular: 60 };
+/* Мобільні оператори ховають за однією адресою тисячі людей, тож
+   тісний ліміт на адресу з ростом зачепив би чесних клієнтів, що
+   замовили одночасно (аудит 02.10). Перебір номерів статусом тепер
+   нічого не дає — суму без ключа не видно, — тож і там можна ширше. */
+const RATE = { order: 12, status: 1000, op: 600, hit: 200, history: 20, auth: 10, poll: 120, grill: 120, popular: 60 };
 
 /* ---------- завантаження мангала ----------
    Мангал тягне близько 15 кг за годину (власник, 19.09), але частину
@@ -2338,6 +2343,21 @@ function markReceived(o, by) {
       { reply_to_message_id: o.msgId }).catch(() => {});
   }
 }
+/* Чи це той, хто замовляв: увійшов із тим самим номером або знає ключ
+   замовлення (ckey) — його сервер віддав лише пристрою, що оформив, і
+   вписує в посилання, які шле самому клієнту. Ключ — у тілі, у ?k= чи
+   в заголовку X-Order-Key. */
+function isMine(o, req) {
+  const a = authOf(req);
+  if (a && a.telKey === o.telKey) return true;
+  const k = String((req.body && req.body.key) || req.query.k || req.headers['x-order-key'] || '');
+  return !!o.ckey && k === o.ckey;
+}
+/* Посилання на замовлення для самого клієнта — з ключем: відкрите в
+   браузері Telegram чи з push, де входу немає, воно все одно покаже суму
+   й дасть натиснути «Отримав». */
+const orderLink = o => SITE + '?order=' + o.no + (o.ckey ? '&k=' + o.ckey : '');
+
 /* Чи можна зараз підтверджувати отримання */
 function receivable(o) {
   if (o.status === CANCELED) return 'Замовлення скасовано';
@@ -2353,10 +2373,7 @@ app.post('/api/order/:no/received', (req, res) => {
   }
   const o = db.orders[req.params.no];
   if (!o) return res.status(404).json({ error: 'Замовлення не знайдено' });
-  const a = authOf(req);
-  const mine = (a && a.telKey === o.telKey) ||
-               (o.ckey && req.body && req.body.key === o.ckey);
-  if (!mine) return res.status(403).json({ error: 'Це замовлення оформили не з цього пристрою' });
+  if (!isMine(o, req)) return res.status(403).json({ error: 'Це замовлення оформили не з цього пристрою' });
   const why = receivable(o);
   if (why === 'ok') return res.json({ ok: true, status: 'done' });
   if (why) return res.status(409).json({ error: why });
@@ -2374,10 +2391,17 @@ app.get('/api/order/:no', (req, res) => {
   if (!o) return res.status(404).json({ error: 'Замовлення не знайдено' });
   /* slotAt — щоб сайт знав, що замовлення на інший день, і не писав
      «готується» напередодні. Часу видачі й так не секрет. */
-  res.json({ no: o.no, status: o.status, label: LABEL[o.status], total: o.total, mode: o.mode, slotAt: o.slotAt || 0,
+  const pub = { no: o.no, status: o.status, label: LABEL[o.status], mode: o.mode, slotAt: o.slotAt || 0,
              /* Час оператор тепер може перенести — сторінка клієнта бере
                 його звідси, а не з памʼяті браузера (29.09) */
-             when: whenOf(o),
+             when: whenOf(o) };
+  /* Суму й коментарі оператора — лише тому, хто замовляв: за ключем із
+     посилання чи памʼяті браузера або за входом. Номери йдуть підряд, і
+     раніше будь-хто перебором читав суми всіх замовлень і причини
+     скасувань (аудит 02.10). Статус і час лишаються за голим номером —
+     ними людина ділиться посиланням «Стежити». */
+  if (!isMine(o, req)) return res.json(pub);
+  res.json({ ...pub, total: o.total,
              ...(adjustmentsOf(o).length ? { totalOrig: o.totalOrig, adjust: pubAdjust(o) } : {}) });   // зміни оператора
 });
 
@@ -2887,6 +2911,20 @@ function dayLabelK(day) {
 /* Рядок часу — той самий вигляд, що дає сайт при виборі часу */
 const timeLabel = (o, at) =>
   `${dayLabelK(kyivDate(at))} · ${o.mode === 'delivery' ? 'орієнтовно о ' : 'о '}${hhmm(at)}`;
+/* Час видачі обирає сайт, а сервер його не перевіряв: сторінка зі
+   старого кеша чи запит повз сайт могли записати замовлення на третю
+   ночі чи на місяць уперед (аудит 02.10). Не відмовляємо — людина з
+   повним кошиком ні в чому не винна, — а кажемо точці в картці.
+   Межі широкі, як на сайті: від відкриття до закриття включно, тиждень
+   наперед із запасом на день. */
+function oddTime(at) {
+  if (!at) return false;
+  const day = kyivDate(at);
+  if (day > dayAdd(kyivDate(), 8)) return true;
+  const close = wdayOf(day) === 0 ? 19 : 20;
+  return at < kyivMs(day, OPEN_HOUR, 0) || at > kyivMs(day, close, 0);
+}
+
 /* Коли видача — щоразу з точного часу за Києвом, а не збережений рядок.
    Рядок сайт складав за годинником телефону й записував раз: у клієнта
    з іншим поясом там стояло «о 17:00» при 18:00 у панелі, а наступного
@@ -3300,14 +3338,14 @@ function notifyCancel(o, why) {
      хто його ввімкнув; SMS дійде решті. Причину для SMS вкорочуємо:
      кирилиця дорога. */
   if (!u.tgId) {
-    pushTo(o.telKey, '✖️ Замовлення скасовано', `№ ${o.no} — ${why}`, SITE + '?order=' + o.no);
+    pushTo(o, '✖️ Замовлення скасовано', `№ ${o.no} — ${why}`, orderLink(o));
     const short = String(why || '').slice(0, 40);
     return smsSend(o.tel,
       `${SMS_BRAND}: №${o.no} скасовано. ${short}` + (tel ? ` Тел: ${tel}` : ''),
       '№' + o.no + ' скасовано');
   }
   bot.sendMessage(u.tgId, text, {
-    reply_markup: { inline_keyboard: [[{ text: 'Відкрити замовлення', url: SITE + '?order=' + o.no }]] }
+    reply_markup: { inline_keyboard: [[{ text: 'Відкрити замовлення', url: orderLink(o) }]] }
   }).catch(e => console.warn('Скасування № ' + o.no + ' не дійшло до клієнта:', e.message));
 }
 
@@ -3330,7 +3368,7 @@ function notifyAdjust(o, a) {
      кілька; SMS лишаються на «готове» й скасування. */
   if (!u.tgId) {
     const p = pushAdjust(o, a);
-    pushTo(o.telKey, p.t, p.b, SITE + '?order=' + o.no);
+    pushTo(o, p.t, p.b, orderLink(o));
     return;
   }
   /* Про незмінну ціну за 100 г пишемо лише для факту з каси без
@@ -3347,7 +3385,7 @@ function notifyAdjust(o, a) {
       : `${a.kind === 'add' ? '➕' : '➖'} Замовлення № ${o.no}: ${a.kind === 'add' ? '+' : '−'}${money(a.amount)}` +
         ` — ${a.note || 'уточнили після зважування'}.\nДо сплати: ${money(o.total)}`;
   bot.sendMessage(u.tgId, text,
-    { reply_markup: { inline_keyboard: [[{ text: 'Стежити за замовленням', url: SITE + '?order=' + o.no }]] } }
+    { reply_markup: { inline_keyboard: [[{ text: 'Стежити за замовленням', url: orderLink(o) }]] } }
   ).catch(e => console.warn('Зміна № ' + o.no + ' не дійшла до клієнта:', e.message));
 }
 
@@ -3396,13 +3434,13 @@ function notify(o, st) {
   /* Без Telegram — push у браузер, а SMS лишається запасним шляхом для
      тих, хто сайт на екран не додавав. */
   if (!u.tgId) {
-    pushTo(o.telKey, NOTE_TITLE[st] || 'Мʼясний Барон', pushText(o, st), SITE + '?order=' + o.no);
+    pushTo(o, NOTE_TITLE[st] || 'Мʼясний Барон', pushText(o, st), orderLink(o));
     return sendSms(o, st);
   }
 
   /* Доставлене підтверджує сам клієнт: оператор бачить лише передачу
      курʼєру (власник, 19.09). Кнопка — просто в сповіщенні. */
-  const kb = [[{ text: 'Стежити за замовленням', url: SITE + '?order=' + o.no }]];
+  const kb = [[{ text: 'Стежити за замовленням', url: orderLink(o) }]];
   if (st === 'onway') kb.unshift([{ text: '✅ Отримав замовлення', callback_data: `r:${o.no}` }]);
 
   bot.sendMessage(u.tgId, make(o), {
@@ -3438,9 +3476,13 @@ function pushKeys() {
 
 app.get('/api/push/key', (req, res) => res.json({ ok: true, key: pushKeys().publicKey }));
 
-/* Підписатися можна лише на свої замовлення: доводимо це ключем ckey,
+/* Підписатися можна лише на своє замовлення: доводимо це ключем ckey,
    який сервер віддав тільки тому пристрою, що оформив замовлення.
-   Інакше досить було б знати чужий номер, щоб читати чужі сповіщення. */
+   Підписка живе на самому замовленні, а не на номері телефону. Раніше
+   вона лягала на номер — і хто знав чужий номер, оформлював на нього
+   фальшиве замовлення, підписувався ключем від нього й далі отримував
+   сповіщення про всі справжні замовлення цієї людини (аудит 02.10).
+   Нове замовлення сторінка статусу підписує знову сама. */
 app.post('/api/push/subscribe', (req, res) => {
   if (tooOften('auth', ipOf(req), RATE.auth)) {
     return res.status(429).json({ error: 'Забагато запитів. Зачекайте кілька хвилин.' });
@@ -3449,31 +3491,57 @@ app.post('/api/push/subscribe', (req, res) => {
   const o = db.orders[b.no];
   if (!o || !o.ckey || b.key !== o.ckey) return res.status(403).json({ error: 'Це замовлення не ваше' });
   const sub = b.sub;
-  if (!sub || !sub.endpoint || !sub.keys) return res.status(400).json({ error: 'Підписка неповна' });
-
-  addPushSub(o.telKey, sub);
+  if (!sub || !pushEndpointOk(sub.endpoint) || !sub.keys || typeof sub.keys !== 'object') {
+    return res.status(400).json({ error: 'Підписка неповна' });
+  }
+  addPushSub(o, sub);
   res.json({ ok: true });
 });
 
-/* Один номер — кілька пристроїв (телефон, планшет удома), але не
+/* Адресу підписки дає браузер, і сервер потім сам на неї стукає. Тож
+   лише https і лише справжнє імʼя сервера — не localhost і не голі
+   цифри адреси: інакше нашим сервером можна було б смикати чужі чи
+   внутрішні адреси. Сервіси push у всіх браузерів саме такі. */
+function pushEndpointOk(raw) {
+  let u;
+  try { u = new URL(String(raw || '')) } catch (e) { return false }
+  const h = u.hostname.toLowerCase();
+  return u.protocol === 'https:' && h.includes('.') && !h.endsWith('localhost') &&
+    !/^[\d.]+$/.test(h) && !h.startsWith('[');
+}
+
+/* Одне замовлення — кілька пристроїв (телефон, планшет удома), але не
    безмежно: лишаємо пʼять найсвіжіших. Та сама адреса не дублюється —
    людина відкриває сторінку замовлення щоразу, і без цього список ріс
    би на кожне відкриття. */
 const PUSH_MAX_DEVICES = 5;
-function addPushSub(telKey, sub) {
-  db.push = db.push || {};
-  const list = (db.push[telKey] || []).filter(s => s.endpoint !== sub.endpoint);
+function addPushSub(o, sub) {
+  const list = (o.push || []).filter(s => s.endpoint !== sub.endpoint);
   list.push({ endpoint: sub.endpoint, keys: sub.keys, at: Date.now() });
-  db.push[telKey] = list.slice(-PUSH_MAX_DEVICES);
+  o.push = list.slice(-PUSH_MAX_DEVICES);
   save();
-  return db.push[telKey];
+  return o.push;
 }
 
-/* Шлемо на всі пристрої цього номера. Протухлі підписки (браузер
-   видалив, людина знесла сайт з екрана) сервер прибирає сам — інакше
-   вони копичились би вічно й уповільнювали кожну відправку. */
-async function pushTo(telKey, title, body, url) {
-  const list = (db.push || {})[telKey] || [];
+/* Підписки старого зразка лежали на номері: переносимо їх на
+   замовлення цього номера, які ще в роботі, — щоб після викату ніхто не
+   лишився без сповіщення про своє «готове». Далі вони не потрібні. */
+(function movePushToOrders() {
+  if (!db.push) return;
+  for (const [telKey, list] of Object.entries(db.push)) {
+    for (const o of Object.values(db.orders)) {
+      if (o.telKey === telKey && !FINAL.has(o.status)) for (const s of list || []) addPushSub(o, s);
+    }
+  }
+  delete db.push;
+  writeNow();
+})();
+
+/* Шлемо на всі пристрої, підписані на це замовлення. Протухлі підписки
+   (браузер видалив, людина знесла сайт з екрана) сервер прибирає сам —
+   інакше вони копичились би вічно й уповільнювали кожну відправку. */
+async function pushTo(o, title, body, url) {
+  const list = o.push || [];
   if (!list.length) return false;
   pushKeys();
   const payload = JSON.stringify({ title, body, url });
@@ -3488,7 +3556,7 @@ async function pushTo(telKey, title, body, url) {
     }
   }
   if (dead.length) {
-    db.push[telKey] = list.filter(s => !dead.includes(s.endpoint));
+    o.push = list.filter(s => !dead.includes(s.endpoint));
     save();
   }
   return sent > 0;

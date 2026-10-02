@@ -155,3 +155,29 @@ test.describe('телефон у поясі Варшави', () => {
     expect(errors, 'помилки JS на сторінці').toEqual([]);
   });
 });
+
+/* Сторінка замовлення за посиланням (аудит 02.10): за голим номером —
+   лише статус; за посиланням із ключем, яке бот шле самому клієнту, —
+   сума, а ключ одразу зникає з адресного рядка, щоб не переслати його
+   разом з адресою. */
+test('чуже посилання — лише статус; своє з ключем — сума, ключ ховається', async ({ page, request }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  const CAT = require('../../catalog.js');
+  const it = CAT.ITEMS.find(i => i.unit === 'шт');
+  const r = await request.post('/api/order', { data: { shop: 0, shopName: CAT.SHOPS[0][0], mode: 'pickup', pay: 'cash',
+    nm: 'Тест Ключ', tel: '+380501112277', note: '', slotAt: Date.now() + 3 * 3600e3,
+    lines: [{ id: it.id, g: 1 }] } });
+  const { no, ckey, total } = await r.json();
+  const sum = String(total).replace(/\.00$/, '');
+
+  await page.goto('/?order=' + no);
+  await expect(page.locator('#sheet')).toContainText('видно лише тому, хто оформив');
+  await expect(page.locator('#sheet')).not.toContainText(sum + ' ₴');
+
+  await page.goto('/?order=' + no + '&k=' + ckey);
+  await expect(page.locator('#sheet')).toContainText(sum + ' ₴');
+  expect(page.url(), 'ключ прибрано з адреси').not.toContain('k=');
+  expect(page.url()).toContain('order=' + no);
+  expect(errors, 'помилки JS на сторінці').toEqual([]);
+});
