@@ -88,6 +88,17 @@ const order = (extra = {}) => ({ shop: 0, shopName: CAT.SHOPS[0][0], mode: 'pick
   ok('➖ позиція: сума повернулась', r.status === 200 && Math.abs(r.d.order.total - 150) < 0.01);
   r = await call('POST', `/api/op/order/${no}/line`, { act: 'del', i: 0 }, P);
   ok('останню позицію не прибрати — лише скасувати', r.status === 409);
+  /* «Зібрано» — позначка для себе: клієнту не йде нічого */
+  sent.length = 0;
+  r = await call('POST', `/api/op/order/${no}/pack`, { on: true }, P);
+  ok('📦 зібрано', r.status === 200 && r.d.order.packed === true);
+  ok('клієнт про «Зібрано» не дізнається',
+    !sent.some(x => x.chatId === CLIENT) && !JSON.stringify((await call('GET', '/api/order/' + no)).d).includes('pack'));
+  r = await call('POST', `/api/op/order/${no}/pack`, { on: false }, P);
+  ok('↩ не зібрано', r.status === 200 && r.d.order.packed === false);
+  r = await call('POST', `/api/op/order/${no}/pack`, { on: true });
+  ok('без ключа панелі — 401', r.status === 401);
+  await call('POST', `/api/op/order/${no}/pack`, { on: true }, P);
   r = await call('POST', `/api/op/order/${no}/status`, { status: 'cooking' }, P);
   ok('панель: готується', r.status === 200 && r.d.order.status === 'cooking');
   ok('картку в чаті оновлено', edits.some(e => e.chatId === CHAT));

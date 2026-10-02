@@ -163,5 +163,17 @@ const round = n => Math.round(n * 100) / 100;
   await api.applyLine(o, 'add', { id: id('Сулугуні'), g: 500 }, 'п');
   ok('після правки складу доставка лишилась', round(o.total - withShip) === round(o.lines[1].sum));
 
+  /* Склад змінився — зібраний пакет уже не той: «Зібрано» знімається */
+  o = order({ packedAt: Date.now() });
+  await api.applyLine(o, 'add', { id: id('Сулугуні'), g: 500 }, 'п');
+  ok('додали позицію — «Зібрано» знято', !o.packedAt);
+  o = order({ packedAt: Date.now() });
+  o.lines.push(line('Сулугуні', 500));
+  await api.applyLine(o, 'del', { i: 1 }, 'п');
+  ok('прибрали позицію — теж знято', !o.packedAt);
+  o = order({ status: 'cooking', packedAt: 5 });
+  await api.applyLine(o, 'add', { id: id('Сулугуні'), g: 500 }, 'п');
+  ok('правку відхилено — «Зібрано» лишилось', o.packedAt === 5);
+
   report(t);
 }

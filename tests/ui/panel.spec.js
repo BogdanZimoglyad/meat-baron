@@ -109,3 +109,41 @@ test('чуже чи використане посилання панель не 
   await expect(page.locator('.enter')).toContainText('застаріло');
   await expect(page.locator('[data-card]')).toHaveCount(0);
 });
+
+/* «Зібрано» — позначка оператора для себе (власник, 02.10): прийняте
+   замовлення склали наперед, воно переїжджає в купку «Зібрано». Змінили
+   склад — позначка знімається, замовлення знову в «У роботі». */
+test('оператор: «Зібрано» — своя купка, правка складу її знімає', async ({ page, bot, request }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  const no = await newOrder(request, 'Панель Зібраний');
+  await openPanel(page, bot);
+  const card = cardOf(page, no);
+  await expect(card.locator('[data-pack]'), 'нове зібраним не позначити').toHaveCount(0);
+  await card.locator(`[data-go="${no}"]`).click();
+  await expect.poll(() => statusOf(request, no)).toBe('accepted');
+
+  await card.locator(`[data-pack="${no}"]`).click();
+  await expect(card.locator('.pk')).toBeVisible();
+  await page.locator('[data-grp="packed"]').click();
+  await expect(cardOf(page, no)).toBeVisible();
+  await page.screenshot({ path: 'test-results/packed.png' });
+  await page.locator('[data-grp="work"]').click();
+  await expect(cardOf(page, no)).toHaveCount(0);
+
+  /* клієнт позначки не бачить — у публічному замовленні її немає */
+  const pub = await (await request.get('/api/order/' + no)).json();
+  expect(JSON.stringify(pub)).not.toContain('pack');
+
+  /* доклали позицію — пакет уже не той */
+  await page.locator('[data-grp="packed"]').click();
+  await cardOf(page, no).locator('[data-kind="plus"]').click();
+  await page.locator('#fv').fill('віденська');
+  await page.locator('[data-pick]').first().click();
+  await page.locator('[data-q="500"]').click();
+  await page.locator('[data-addline]').click();
+  await page.locator('[data-grp="work"]').click();
+  await expect(cardOf(page, no)).toContainText('Віденська');
+  await expect(cardOf(page, no).locator('.pk')).toHaveCount(0);
+  expect(errors, 'помилки JS у панелі').toEqual([]);
+});
