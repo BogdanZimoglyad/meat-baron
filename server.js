@@ -913,8 +913,9 @@ const opOrder = o => ({
   startAt: o.slotAt ? o.slotAt - (o.mode === 'delivery' ? 90 : 60) * 60000 : 0,
   /* Що саме зараз дозволено міняти: панель питає тут, а не вгадує —
      правила живуть на сервері й міняються разом із ним. */
+  packed: !!o.packedAt,
   can: { money: canEdit(o, 'fact'), ship: canEdit(o, 'ship'), cancel: canEdit(o, 'cancel'),
-         time: TIME_STATUSES.has(o.status) },
+         time: TIME_STATUSES.has(o.status), pack: canPack(o) },
   lines: (o.lines || []).map(l => ({ name: nameOf(l), qty: l.g, unit: l.unit, sum: l.sum, fry: !!l.fry, v: l.v || '' }))
 });
 
@@ -1138,6 +1139,17 @@ app.post('/api/op/order/:no/status', async (req, res) => {
   if (!o) return res.status(404).json({ error: 'Замовлення не знайдено' });
   if (o.shop !== a.shop) return res.status(403).json({ error: 'Це замовлення іншої точки' });
   const r = await applyStatus(o, String((req.body || {}).status || ''));
+  if (r.err) return res.status(409).json({ error: r.err, order: opOrder(o) });
+  res.json({ ok: true, order: opOrder(o) });
+});
+
+app.post('/api/op/order/:no/pack', (req, res) => {
+  const a = panelOf(req);
+  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  const o = db.orders[req.params.no];
+  if (!o) return res.status(404).json({ error: 'Замовлення не знайдено' });
+  if (o.shop !== a.shop) return res.status(403).json({ error: 'Це замовлення іншої точки' });
+  const r = applyPack(o, !!(req.body || {}).on);
   if (r.err) return res.status(409).json({ error: r.err, order: opOrder(o) });
   res.json({ ok: true, order: opOrder(o) });
 });
@@ -1900,6 +1912,22 @@ const cancelable = o => !FINAL.has(o.status);
 /* Вартість доставки — виняток: таксі викликають, коли замовлення вже
    готується чи готове, тож вписати її можна майже до видачі. */
 const SHIP_OK = new Set(['new', 'accepted', 'cooking', 'ready']);
+
+/* «Зібрано» — позначка оператора для себе: замовлення склали в пакет
+   наперед і воно чекає на свій час (власник, 02.10). Це не крок статусу:
+   клієнт її не бачить, сповіщень немає, нагадування й підсумки її не
+   читають. Ставиться після «Прийняти в роботу» і до видачі. */
+const PACK_OK = new Set(['accepted', 'cooking', 'ready']);
+const canPack = o => PACK_OK.has(o.status);
+function applyPack(o, on) {
+  if (!canPack(o)) {
+    return { err: o.status === 'new' ? 'Спершу прийміть замовлення в роботу' : `Уже «${LABEL[o.status]}»` };
+  }
+  if (on) o.packedAt = o.packedAt || Date.now();
+  else delete o.packedAt;
+  save();
+  return { ok: true };
+}
 
 /* Зміни суми списком: [{ kind: 'add' | 'sub' | 'note', amount, note, by, at }].
    Перша версія (одна абсолютна сума з коментарем) лежала в totalOrig і
@@ -2741,6 +2769,10 @@ async function applyLine(o, act, raw, by) {
     return { err: `Сума вийшла б ${money(bad)} — так не можна.` };
   }
   if (o.totalOrig == null) o.totalOrig = before;
+  /* Склад змінився — зібраний пакет уже не той. Знімаємо «Зібрано», і
+     замовлення повертається в «У роботі», щоб оператор доклав чи
+     вийняв позицію, а не віддав старий пакет. */
+  delete o.packedAt;
 
   /* Пишемо звичайним «плюсом» чи «мінусом» на різницю — так зміну
      однаково зрозуміють і картка в чаті, і сторінка клієнта, і

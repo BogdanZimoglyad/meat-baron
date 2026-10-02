@@ -163,6 +163,24 @@ t.push(['видане й скасоване — в останню',
   groupOf({ status: 'done' }) === 3 && groupOf({ status: 'canceled' }) === 3
   && groupOf({ status: 'done', day: 'завтра' }) === 3]);
 
+/* «Зібрано» — своя купка, але не для нових, зроблених і тих, що на інший день */
+t.push(['зібране сьогодні — в купку «Зібрано»',
+  ['accepted', 'cooking', 'ready', 'onway'].every(s => groupOf({ status: s, packed: true }) === 4)]);
+t.push(['зібране на інший день лишається в «Чекають свого дня»',
+  groupOf({ status: 'accepted', packed: true, day: 'завтра' }) === 2]);
+t.push(['видане зібране — у завершених', groupOf({ status: 'done', packed: true }) === 3]);
+
+// 8а. кнопка «Зібрано» на картці — лише коли сервер дозволяє
+h = draw(ord({ status: 'accepted', label: 'Прийнято', can: { money: true, cancel: true, pack: true } }), NOW);
+t.push(['прийняте можна позначити зібраним',
+  has(h, 'data-pack="101"') && has(h, 'data-on="1"') && has(h, '📦 Зібрано')]);
+t.push(['поки не зібране — значка немає', !has(h, 'class="pk"') && !has(h, ' packed"')]);
+h = draw(ord({ status: 'accepted', label: 'Прийнято', packed: true, can: { money: true, cancel: true, pack: true } }), NOW);
+t.push(['зібране — значок, рамка й кнопка зняти позначку',
+  has(h, 'class="pk"') && has(h, ' packed"') && has(h, 'data-on="0"') && has(h, 'Не зібрано')]);
+h = draw(ord(), NOW);
+t.push(['нове зібраним не позначити — кнопки немає', !has(h, 'data-pack')]);
+
 // 9. підсумок дня
 const dayStrip = pick('dayStrip');
 let s = dayStrip({ all: 7, canceled: 2, open: 3, pickup: 4, delivery: 1, ship: 0, sum: 8659.42, fg: 16400 });
