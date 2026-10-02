@@ -493,7 +493,7 @@ function draw(d){
      два кроки — пошук і кількість, — і без цієї перевірки набране в
      пошуку («сулуг») підставлялось у поле ваги, а позиція не додавалась
      узагалі. */
-  const sig=form?form.kind+'|'+(form.pick||''):'';
+  const sig=form?form.kind+'|'+(form.pick||'')+'|'+(form.edit==null?'':form.edit):'';
   const typed=(form&&sig===formSig)?{v:val('fv'),n:val('fn')}:null;
   formSig=sig;
   const g=[[],[],[],[],[]];
@@ -588,9 +588,16 @@ function draw(d){
   w.querySelectorAll('[data-back]').forEach(b=>b.onclick=()=>{ form.pick=''; form.search=''; draw(d) });
   w.querySelectorAll('[data-addline]').forEach(b=>b.onclick=()=>addLine(b));
   w.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>delLine(b));
+  w.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{
+    const o=d.orders.find(x=>x.no===form.no)||(FOCUS&&FOCUS.copy);
+    const l=o&&(o.lines||[])[+b.dataset.edit];
+    form.edit=+b.dataset.edit; form.q=l?l.qty:0; draw(d);
+  });
+  w.querySelectorAll('[data-editback]').forEach(b=>b.onclick=()=>{ form.edit=null; draw(d) });
+  w.querySelectorAll('[data-setline]').forEach(b=>b.onclick=()=>setLine(b));
   /* Пошук позиції: перемальовуємо список на кожну літеру, але поле
      створене тим самим draw — значення повертаємо самі, як і у формах. */
-  const sq=form&&form.kind==='plus'&&!form.pick?$('fv'):null;
+  const sq=form&&form.kind==='plus'&&!form.pick&&form.edit==null?$('fv'):null;
   if(sq){
     if(form.search&&!sq.value) sq.value=form.search;   // після перемальовки — набране на місці
     sq.oninput=()=>{ form.search=sq.value; const box=$('srch'); if(box){ box.innerHTML=searchHits(); bindPick(box) } };
@@ -598,7 +605,7 @@ function draw(d){
   w.querySelectorAll('.form input').forEach(i=>i.onkeydown=e=>{
     if(e.key!=='Enter') return;
     e.preventDefault();
-    const b=w.querySelector('[data-send]'); if(b&&!b.disabled) b.click();
+    const b=w.querySelector('[data-send],[data-setline]'); if(b&&!b.disabled) b.click();
   });
 }
 
@@ -713,17 +720,53 @@ const FORM={
    рахуємо й не надсилаємо: сервер порахує сам із номера позиції,
    кількості й позначки «на мангал». */
 function lineForms(o,kind){
+  if(form.edit!=null) return editForm(o);
   if(kind==='minus') return delForm(o);
-  return form.pick? pickForm(o) : searchForm();
+  return form.pick? pickForm(o) : searchForm(o);
+}
+
+/* Вага чи кількість рядка так, як її бачить оператор */
+const qtyOf=l=>l.unit==='вага'?wLabel(l.qty):l.qty+' шт';
+const lineName=l=>`${esc(l.name)}${l.v?` «${esc(l.v)}»`:''}`;
+
+/* Що вже є в замовленні — з кнопкою «Змінити». Клієнт просить «ребер не
+   півтора, а кіло», або на касі зважили більше — раніше для цього
+   позицію прибирали й додавали наново (власник, 02.10). Тепер — у ➕ і в
+   ➖ однаково. */
+const curRows=(o,del)=>(o.lines||[]).map((l,i)=>`<div class="srow">
+      <span>${lineName(l)} · ${qtyOf(l)}${l.fry?' 🔥':''}</span>
+      <button data-edit="${i}">✏️ Змінити</button>
+      ${del?`<button data-del="${i}" class="danger">✕ Прибрати</button>`:''}
+    </div>`).join('');
+
+function editForm(o){
+  const l=(o.lines||[])[form.edit];
+  if(!l){ form.edit=null; return lineForms(o,form.kind) }
+  const piece=l.unit!=='вага';
+  const it=priceList().find(i=>i.id===l.id);
+  const minG=(it&&it.minG)||100;
+  /* Швидкі кнопки — як при додаванні; поточна кількість теж серед них,
+     щоб було видно, від чого відштовхуємось */
+  const base=piece?[1,2,3,4,5]:[minG,500,1000,1500,2000,2500];
+  const quick=[...new Set([...base,l.qty])].filter(v=>v>=(piece?1:minG)).sort((a,b)=>a-b);
+  return `<div class="form">
+    <label>${lineName(l)} · зараз ${qtyOf(l)}</label>
+    <div class="vars">${quick.map(v=>
+      `<button data-q="${v}" class="${Number(form.q)===v?'on':''}">${piece?v+' шт':wLabel(v)}</button>`).join('')}</div>
+    <input type="text" inputmode="numeric" id="fv" placeholder="${piece?'або скільки штук':'або скільки грамів, напр. 1350'}">
+    <input type="text" id="fn" placeholder="Причина, якщо треба: зважили, клієнт попросив">
+    <div class="hint">Ціна — та, за якою замовляли. Клієнт побачить нову кількість і суму.</div>
+    <div class="row">
+      <button class="ok" data-setline="${form.edit}">Зберегти</button>
+      <button class="no" data-editback="1">Назад</button>
+    </div>
+  </div>`;
 }
 
 function delForm(o){
-  const rows=(o.lines||[]).map((l,i)=>`<div class="srow">
-      <span>${esc(l.name)}${l.v?` «${esc(l.v)}»`:''} · ${l.unit==='вага'?wLabel(l.qty):l.qty+' шт'}${l.fry?' 🔥':''}</span>
-      <button data-del="${i}" class="danger">✕ Прибрати</button>
-    </div>`).join('');
+  const rows=curRows(o,true);
   return `<div class="form">
-    <label>Що прибрати із замовлення</label>
+    <label>Змінити чи прибрати</label>
     ${rows}
     ${/* Причина не обовʼязкова, але клієнту вона пояснює, чому сума
          впала: «закінчилось» і «ви передумали» — різні речі. */''}
@@ -739,8 +782,9 @@ function delForm(o){
    моніторі з клавіатурою це було непомітно, а на сенсорному екрані точки
    нове поле губило фокус, і екранна клавіатура збивалась після першої ж
    літери (власник, 01.10). Так само, як пошук у стоп-листі. */
-function searchForm(){
+function searchForm(o){
   return `<div class="form">
+    ${o&&(o.lines||[]).length?`<label>Уже в замовленні</label>${curRows(o,false)}`:''}
     <label>Що додати</label>
     <input type="text" id="fv" autocomplete="off" placeholder="Назва: ошийок, сулугуні, лаваш…" autofocus>
     <div id="srch">${searchHits()}</div>
@@ -1420,6 +1464,17 @@ async function addLine(btn){
   btn.disabled=true; const was=btn.textContent; btn.textContent='…';
   const r=await post('/api/op/order/'+form.no+'/line',
     {act:'add',id:it.id,g:q,v:form.v||'',fry:!!form.fry});
+  if(!r){ btn.disabled=false; btn.textContent=was; return }
+  form=null; await load();
+}
+
+async function setLine(btn){
+  const typed=val('fv');
+  const q=Math.floor(Number(String(typed==null||typed===''?form.q:typed).replace(/\D/g,''))||0);
+  if(!(q>0)) return alert('Вкажіть кількість цифрами');
+  btn.disabled=true; const was=btn.textContent; btn.textContent='…';
+  const r=await post('/api/op/order/'+form.no+'/line',
+    {act:'set',i:+btn.dataset.setline,g:q,note:val('fn')||''});
   if(!r){ btn.disabled=false; btn.textContent=was; return }
   form=null; await load();
 }

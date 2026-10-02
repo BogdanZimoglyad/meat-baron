@@ -163,6 +163,45 @@ const round = n => Math.round(n * 100) / 100;
   await api.applyLine(o, 'add', { id: id('Сулугуні'), g: 500 }, 'п');
   ok('після правки складу доставка лишилась', round(o.total - withShip) === round(o.lines[1].sum));
 
+  /* ---------- змінити вагу чи кількість, не прибираючи позицію (02.10) ---------- */
+  notified = [];
+  o = order();
+  let bef = o.total;
+  r = await api.applyLine(o, 'set', { i: 0, g: 1500 }, 'панель');
+  ok('вагу змінено на місці, позиція одна', r.ok && o.lines.length === 1 && o.lines[0].g === 1500);
+  ok('сума виросла рівно на пів кіло ошийка',
+    round(o.total - bef) === round(CAT.lineSum({ ...item('Ошийок'), g: 500 })));
+  ok('у журналі — було й стало',
+    notified[0] && notified[0].kind === 'add' && notified[0].note.includes('змінили') && notified[0].note.includes('→'));
+  bef = o.total;
+  r = await api.applyLine(o, 'set', { i: 0, g: 700, note: 'зважили' }, 'панель');
+  ok('менше — сума впала, причина в журналі',
+    r.ok && o.total < bef && notified[1].kind === 'sub' && notified[1].note.includes('зважили'));
+  /* ціна — та, за якою замовляли, а не сьогоднішня з прайсу */
+  o = order();
+  o.lines[0].sum = 100; o.total = 100; o.totalOrig = 100;
+  await api.applyLine(o, 'set', { i: 0, g: 2000 }, 'п');
+  ok('ціна з рядка замовлення', o.lines[0].sum === 200 && o.total === 200);
+  /* на мангал — смаження рахується від нової ваги */
+  o = order({ lines: [line('Ошийок', 1000, true)] });
+  o.total = api.retotal(o);
+  const fryWas = o.fg;
+  await api.applyLine(o, 'set', { i: 0, g: 2000 }, 'п');
+  ok('вага на мангал перерахована', o.fg === 2000 && o.fg !== fryWas);
+  o = order();
+  r = await api.applyLine(o, 'set', { i: 0, g: 1000 }, 'п');
+  ok('та сама кількість — відмова', !!r.err);
+  r = await api.applyLine(o, 'set', { i: 0, g: 10 }, 'п');
+  ok('менше мінімуму — відмова', !!r.err && o.lines[0].g === 1000);
+  r = await api.applyLine(o, 'set', { i: 5, g: 500 }, 'п');
+  ok('неіснуючий рядок — відмова', !!r.err);
+  o = order({ status: 'cooking' });
+  r = await api.applyLine(o, 'set', { i: 0, g: 500 }, 'п');
+  ok('після «Готується» — ні', !!r.err && o.lines[0].g === 1000);
+  o = order({ packedAt: 1 });
+  await api.applyLine(o, 'set', { i: 0, g: 500 }, 'п');
+  ok('змінили вагу — «Зібрано» знято', !o.packedAt);
+
   /* Склад змінився — зібраний пакет уже не той: «Зібрано» знімається */
   o = order({ packedAt: Date.now() });
   await api.applyLine(o, 'add', { id: id('Сулугуні'), g: 500 }, 'п');

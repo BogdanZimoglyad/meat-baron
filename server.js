@@ -1103,7 +1103,7 @@ app.post('/api/op/order/:no/line', async (req, res) => {
   if (o.shop !== a.shop) return res.status(403).json({ error: 'Це замовлення іншої точки' });
 
   const b = req.body || {};
-  const act = b.act === 'del' ? 'del' : 'add';
+  const act = b.act === 'del' || b.act === 'set' ? b.act : 'add';
   const r = await applyLine(o, act, b, 'панель · ' + SHOPS[a.shop]);
   if (r.err) return res.status(409).json({ error: r.err, order: opOrder(o) });
   res.json({ ok: true, order: opOrder(o) });
@@ -2740,6 +2740,27 @@ async function applyLine(o, act, raw, by) {
     const [gone] = o.lines.splice(i, 1);
     goodsDelta = -gone.sum;
     what = 'прибрали ' + lineTitle(gone) + ' · ' + qtyText(gone);
+  } else if (act === 'set') {
+    /* Змінити вагу чи кількість наявної позиції. Раніше для цього
+       прибирали позицію й додавали наново (власник, 02.10). Ціну беремо
+       з самого рядка — ту, за якою клієнт замовляв, а не сьогоднішню з
+       прайсу: сума всіх трьох видів (вага, штуки, упаковки) пропорційна
+       кількості. */
+    const i = Number(raw.i);
+    if (!(i >= 0 && i < o.lines.length)) return { err: 'Такої позиції в замовленні немає' };
+    const was = o.lines[i];
+    const it = byId.get(String(was.id || ''));
+    const q = Math.floor(Number(raw.g) || 0);
+    const minQ = was.unit === 'вага' ? ((it && it.minG) || MIN_G) : 1;
+    const maxQ = was.unit === 'вага' ? 20000 : 99;
+    if (!(q >= minQ) || q > maxQ) {
+      return { err: `Кількість — від ${was.unit === 'вага' ? minQ + ' г' : minQ + ' шт'} до ${was.unit === 'вага' ? maxQ / 1000 + ' кг' : maxQ + ' шт'}` };
+    }
+    if (q === was.g) return { err: 'Кількість і так така' };
+    const line = { ...was, g: q, sum: kop(was.sum / was.g * q) };
+    o.lines[i] = line;
+    goodsDelta = line.sum - was.sum;
+    what = 'змінили ' + lineTitle(was) + ' · ' + qtyText(was) + ' → ' + qtyText(line);
   } else {
     if (o.lines.length >= 40) return { err: 'У замовленні вже забагато позицій' };
     const it = byId.get(String(raw.id || ''));
