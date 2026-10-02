@@ -2697,9 +2697,35 @@ const MON=['січня','лютого','березня','квітня','трав
            'липня','серпня','вересня','жовтня','листопада','грудня'];
 let pickWhen=null;            // null = «якнайшвидше»
 
+/* ---------- київський час ----------
+   Точки працюють за київським часом, хай який пояс стоїть на телефоні.
+   Раніше сайт рахував години за годинником телефону: у клієнта з поясом
+   на годину менше «17:00» ставало 18:00 у панелі, а на його сторінці
+   стояло «о 17:00» (власник, 02.10 — замовлення № 1058).
+   Усі розрахунки годин і днів ведемо в «київському» Date: це звичайний
+   Date телефону, зсунутий так, що getHours() показує київську годину.
+   toK — справжня мить → київський Date, fromK — назад, перед відправкою
+   на сервер і перед порівнянням із часом із сервера. Коли телефон і так
+   у Києві, зсув нульовий і нічого не міняється. */
+const KYIV_TZ='Europe/Kyiv';
+let kyivFmt=null;
+const kyivShift=ms=>{                // хвилини: Київ мінус телефон
+  try{
+    kyivFmt=kyivFmt||new Intl.DateTimeFormat('en-US',{timeZone:KYIV_TZ,hourCycle:'h23',
+      year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'numeric'});
+    const p={}; kyivFmt.formatToParts(ms).forEach(x=>p[x.type]=x.value);
+    const off=(Date.UTC(+p.year,p.month-1,+p.day,+p.hour%24,+p.minute)-Math.floor(ms/60000)*60000)/60000;
+    return Math.round(off)+new Date(ms).getTimezoneOffset();
+  }catch(e){ return 0 }
+};
+const toK=ms=>ms+kyivShift(ms)*60000;
+const fromK=ms=>ms-kyivShift(ms-kyivShift(ms)*60000)*60000;
+const kNow=()=>new Date(toK(Date.now()));
+const hhmmK=ms=>{ const d=new Date(toK(ms)); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0') };
+
 function dayKey(d){return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()}
 function dayLabel(d){
-  const t=new Date(), tm=new Date(); tm.setDate(t.getDate()+1);
+  const t=kNow(), tm=kNow(); tm.setDate(t.getDate()+1);
   if(dayKey(d)===dayKey(t)) return 'Сьогодні';
   if(dayKey(d)===dayKey(tm)) return 'Завтра';
   return DAY_NAMES[d.getDay()]+', '+d.getDate()+' '+MON[d.getMonth()];
@@ -2709,11 +2735,11 @@ function dayLabel(d){
 let fryWanted=false;
 const openFrom=()=>fryWanted?GRILL_FROM:SHOP_OPEN;
 /* Чи вже пізно замовляти на сьогодні — і на мангал, і на сире */
-const closedForToday=()=>{ const n=new Date(); return n.getHours()*60+n.getMinutes()>lastOrderMin(n) };
+const closedForToday=()=>{ const n=kNow(); return n.getHours()*60+n.getMinutes()>lastOrderMin(n) };
 /* Точка зачинена зовсім: до відкриття або після закриття. Не те саме,
    що closedForToday — там межа прийому замовлень на сьогодні, а тут
    питання, чи є зараз кому відповісти. */
-const closedNow=()=>{ const n=new Date(); const h=n.getHours()+n.getMinutes()/60;
+const closedNow=()=>{ const n=kNow(); const h=n.getHours()+n.getMinutes()/60;
   return h<SHOP_OPEN||h>=closeHour(n) };
 
 /* ---------- завантаження мангала ----------
@@ -2736,6 +2762,7 @@ const slotMs=(d,h)=>{const t=new Date(d); t.setHours(Math.floor(h),Math.round((h
    4 кг, а на годину лишилось три — це вже інша година. */
 function slotFree(ms){
   if(!fryWanted||!grill.cap||grill.shop!==shop) return true;
+  ms=fromK(ms);                       // години мангала сервер рахує справжнім часом
   if(ms<grill.busyUntil) return false;
   /* Оператор міг додати кілограмів на цю годину — тоді ліміт вищий */
   const cap=grill.cap+(grill.extra[ms]||0);
@@ -2754,17 +2781,17 @@ function dayStart(d,mode){
   return t;
 }
 function earliestExact(mode){
-  const n=new Date(); const nowMin=n.getHours()*60+n.getMinutes();
+  const n=kNow(); const nowMin=n.getHours()*60+n.getMinutes();
   let lead=mode==='delivery'?LEAD_DELIVERY:LEAD_PICKUP;
   const closeMin=closeHour(n)*60;
   if(mode!=='delivery' && nowMin+lead>closeMin && nowMin+LEAD_PICKUP_LATE<=closeMin) lead=LEAD_PICKUP_LATE;
-  const t=new Date(Date.now()+lead*60000);
+  const t=new Date(toK(Date.now())+lead*60000);
   t.setSeconds(0,0);
   const next=()=>{ const x=new Date(t); x.setDate(x.getDate()+1); return dayStart(x,mode) };
   // ще не відчинено — чекаємо на відкриття
   if(t<dayStart(t,mode)) return dayStart(t,mode);
   // на сьогодні вже не приймаємо — найближче завтра
-  if(closedForToday()&&dayKey(t)===dayKey(new Date())) return next();
+  if(closedForToday()&&dayKey(t)===dayKey(kNow())) return next();
   // після останньої видачі — переносимо на завтра
   if(t.getHours()*60+t.getMinutes()>closeHour(t)*60) return next();
   return t;
@@ -2784,7 +2811,7 @@ function asapAt(mode){
   const e=earliestExact(mode);
   if(slotFree(new Date(e).setMinutes(0,0,0))) return e;
   for(let i=0;i<DAYS_AHEAD;i++){
-    const d=new Date(); d.setDate(d.getDate()+i); d.setHours(0,0,0,0);
+    const d=kNow(); d.setDate(d.getDate()+i); d.setHours(0,0,0,0);
     const s=slotsFor(d,mode).find(x=>x.free);
     if(s) return new Date(s.ms);
   }
@@ -2792,20 +2819,20 @@ function asapAt(mode){
 }
 /* Слот, на який підемо, якщо людина лишила «Якнайшвидше» */
 function chosenSlot(mode){
-  if(pickWhen) return slotMs(new Date(pickWhen.day),pickWhen.h);
+  if(pickWhen) return fromK(slotMs(new Date(pickWhen.day),pickWhen.h));
   /* Точний час, а не початок години. Раніше 19:39 записувалось як
      19:00 — і в панелі замовлення виглядало простроченим за пів години
      до того, як його взагалі мали приготувати (власник, 28.09).
      Завантаження мангала від цього не страждає: воно й так зводить час
      до години окремо (hourFloor). */
   const e=asapAt(mode);
-  return e? e.getTime() : 0;
+  return e? fromK(e.getTime()) : 0;
 }
 function asapLabel(mode){
   const e=asapAt(mode);
   if(!e) return 'на мангал вільного часу немає';
   const h=String(e.getHours()).padStart(2,'0')+':'+String(e.getMinutes()).padStart(2,'0');
-  return dayKey(e)===dayKey(new Date()) ? 'орієнтовно з '+h
+  return dayKey(e)===dayKey(kNow()) ? 'орієнтовно з '+h
        : dayLabel(e).toLowerCase()+', орієнтовно з '+h;
 }
 /* слоти на конкретний день */
@@ -2813,7 +2840,7 @@ function slotsFor(d,mode){
   /* Саме точний час, а не початок години: слот тепер обіцяє «о 14:00»,
      і показувати його, коли встигаємо лише на 14:20, не можна. */
   const out=[], e=earliestExact(mode);
-  if(closedForToday()&&dayKey(d)===dayKey(new Date())) return out;   // на сьогодні вже пізно
+  if(closedForToday()&&dayKey(d)===dayKey(kNow())) return out;   // на сьогодні вже пізно
   const sameDay=dayKey(d)===dayKey(e);
   let h=Math.max(openFrom(), sameDay? e.getHours():openFrom());
   const close=closeHour(d), st=dayStart(d,mode);
@@ -2838,7 +2865,7 @@ function whenLabel(mode){
     const e=asapAt(mode);
     if(!e) return 'на мангал вільного часу немає';
     const h=String(e.getHours()).padStart(2,'0')+':'+String(e.getMinutes()).padStart(2,'0');
-    return dayKey(e)===dayKey(new Date())
+    return dayKey(e)===dayKey(kNow())
       ? `${soon} орієнтовно з ${h}`
       : `${dayLabel(e)}, ${soon.toLowerCase()} орієнтовно з ${h}`;
   }
@@ -2862,7 +2889,7 @@ function pickTimeSheet(mode,back){
   const build=()=>{
   const days=[];
   for(let i=0;i<DAYS_AHEAD;i++){
-    const d=new Date(); d.setDate(d.getDate()+i); d.setHours(0,0,0,0);
+    const d=kNow(); d.setDate(d.getDate()+i); d.setHours(0,0,0,0);
     if(slotsFor(d,mode).some(s=>s.free)) days.push(d);
   }
   let sel=pickWhen? days.findIndex(d=>dayKey(d)===dayKey(new Date(pickWhen.day))) : 0;
@@ -3313,7 +3340,7 @@ function openStatus(startStatus){
        зараз, сіре — попереду. Червоного «наступного» кроку більше немає:
        його читали як уже розпочатий (власник, 29.09). */
     const off=status==='canceled';              // скасоване — без кроків і без галочки
-    const laterDay=!!o.slotAt&&new Date(o.slotAt).toDateString()!==new Date().toDateString()&&o.slotAt>Date.now();
+    const laterDay=!!o.slotAt&&dayKey(new Date(toK(o.slotAt)))!==dayKey(kNow())&&o.slotAt>Date.now();
     const reached=status==='done'? STK.length-1 : STK.indexOf(status);   // -1 — точка ще не підтвердила
     /* Крок, на якому замовлення зараз. Видане — ніде: усе пройдено. */
     const cur=status==='done'? -1 : reached;
@@ -3323,8 +3350,7 @@ function openStatus(startStatus){
       if(!o.slotAt) return 'почнемо найближчим часом';
       const at=o.slotAt-(o.mode==='delivery'?90:60)*60000;
       if(at<=Date.now()) return 'ось-ось почнемо';
-      const d=new Date(at);
-      return 'почнемо близько '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+      return 'почнемо близько '+hhmmK(at);
     };
     const steps=[['Прийнято',status==='new'?'чекаємо підтвердження точки':'оператор підтвердив'],
       /* Замовлення на інший день сьогодні ніхто не готує — не обіцяємо
@@ -3341,7 +3367,7 @@ function openStatus(startStatus){
       <path d="${off?'M6 6l12 12M18 6L6 18':'M4 12.5l5.5 5.5L20 7'}"/></svg></div>
     <h3 style="text-align:center;font-size:23px;text-transform:uppercase">${off?'Замовлення скасовано':'Замовлення оформлено'}</h3>
     <p style="text-align:center;color:var(--smoke);font-size:13px;margin:5px 0 4px">№ ${o.no} · ${o.shop}</p>
-    <p class="o-when" style="text-align:center;color:var(--ember-hot);font-size:13.5px;margin:0 0 18px">${o.when||''}</p>
+    <p class="o-when" style="text-align:center;color:var(--ember-hot);font-size:13.5px;margin:0 0 18px">${esc(whenText(o))}</p>
 
     ${off?`<div class="ready-note off">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -3467,7 +3493,8 @@ function openStatus(startStatus){
         if(Number.isFinite(d.total)){o.total=d.total; o.totalOrig=d.totalOrig; o.adjust=d.adjust||[]; if(d.slotAt) o.slotAt=d.slotAt}
         /* Оператор міг перенести час — показуємо новий, не чекаючи, поки
            людина перевідкриє сторінку. */
-        if(d.when&&d.when!==o.when){ o.when=d.when; const w=document.querySelector('.o-when'); if(w) w.textContent=d.when }
+        if(d.when) o.when=d.when;
+        { const w=document.querySelector('.o-when'), t=whenText(o); if(w&&w.textContent!==t) w.textContent=t }
         if(pollTick!==tick) return;
         if(d.status){draw(d.status); if(d.status==='done'||d.status==='canceled'){clearInterval(poll);clearLast(o.no)} showActiveBar()}
       }catch(e){}
@@ -3644,7 +3671,7 @@ async function paintActiveBar(){
   el.innerHTML=withWhen.map(o=>{
     const ready=o.status==='ready';
     const sub=ready? 'Можна забирати · '+o.shopName
-                   : o.shopName+(o.when?' · '+o.when:'');
+                   : o.shopName+(whenText(o)?' · '+whenText(o):'');
     return `<button class="act-in${ready?' ready':''}" data-no="${o.no}">
       <span class="act-dot"></span>
       <span class="act-t"><b>Замовлення № ${o.no} · ${ST_LABEL[o.status]||'Очікує підтвердження'}</b>
@@ -3838,11 +3865,23 @@ if(me) req(API+'/api/me',{headers:authHead()},8000)
   .catch(()=>{});   // немає звʼязку — лишаємо як є, кабінет відкриється офлайн
 
 function fmtDate(ts){
-  const d=new Date(ts), t=new Date(), y=new Date(); y.setDate(t.getDate()-1);
+  const d=new Date(toK(ts)), t=kNow(), y=kNow(); y.setDate(t.getDate()-1);
   const hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
   if(dayKey(d)===dayKey(t)) return 'сьогодні, '+hm;
   if(dayKey(d)===dayKey(y)) return 'вчора, '+hm;
   return d.getDate()+' '+MON[d.getMonth()]+', '+hm;
+}
+
+/* Коли видача — рахуємо щоразу з точного часу, а не беремо збережений
+   рядок: «Завтра · о 17:00» записувався в момент замовлення, і наступного
+   дня сторінка все ще казала «завтра» (власник, 02.10). */
+function whenText(o){
+  if(!o) return '';
+  if(!o.slotAt) return o.when||'';
+  const asap=/орієнтовно з/.test(o.when||'');
+  const soon=o.mode==='delivery'?'привеземо':'готове';
+  return dayLabel(new Date(toK(o.slotAt)))+' · '
+    +(asap?soon+' орієнтовно з ':o.mode==='delivery'?'орієнтовно о ':'о ')+hhmmK(o.slotAt);
 }
 
 /* Кнопка в шапці веде або на вхід, або в кабінет */

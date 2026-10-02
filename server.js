@@ -625,7 +625,7 @@ async function remindSweep() {
     try {
       const m = await bot.sendMessage(o.chatId,
         `⏰ <b>Замовлення № ${o.no}</b> не прийняте вже ${Math.round(age / 60000)} хв.` +
-        (o.when ? `\n🕒 ${esc(o.when)}` : '') +
+        (whenOf(o) ? `\n🕒 ${esc(whenOf(o))}` : '') +
         (o.fry ? `\n🔥 На мангал: ${wLabel(o.fg)}` : ''),
         { parse_mode: 'HTML', reply_to_message_id: o.msgId,
           reply_markup: { inline_keyboard: [[{ text: '✅ Прийняти в роботу', callback_data: `s:${o.no}:accepted` }]] } });
@@ -898,7 +898,7 @@ function panelOf(req) {
    не «публічний» вигляд замовлення — панель за ключем точки. */
 const opOrder = o => ({
   no: o.no, status: o.status, label: LABEL[o.status],
-  mode: o.mode, slotAt: o.slotAt || 0, when: o.when || '',
+  mode: o.mode, slotAt: o.slotAt || 0, when: whenOf(o),
   /* Порожньо для сьогоднішніх, «завтра» чи «26.09» — для решти. Без цього
      в картці стояв самий час, і замовлення на завтра на 17:00 виглядало
      так само, як сьогоднішнє на 17:00. Дату рахує сервер: планшет може
@@ -1861,7 +1861,7 @@ function orderText(o) {
     : `\n🏪 САМОВИВІЗ: ${esc(o.shopName)}`;
 
   const pay = { cash: '💵 Готівкою', card: '💳 Карткою на місці' }[o.pay] || o.pay;
-  const when = o.when ? `\n🕒 <b>${esc(o.when)}</b>` : '';
+  const when = whenOf(o) ? `\n🕒 <b>${esc(whenOf(o))}</b>` : '';
   /* Замовлення на інший день видно одразу: щоб ніхто не кинувся смажити
      сьогодні те, що заберуть завтра. */
   const later = futureDay(o) ? `\n⏳ <b>На ${dayShort(o.slotAt)}</b> — у роботу того дня` : '';
@@ -2359,7 +2359,7 @@ app.get('/api/order/:no', (req, res) => {
   res.json({ no: o.no, status: o.status, label: LABEL[o.status], total: o.total, mode: o.mode, slotAt: o.slotAt || 0,
              /* Час оператор тепер може перенести — сторінка клієнта бере
                 його звідси, а не з памʼяті браузера (29.09) */
-             when: o.when || '',
+             when: whenOf(o),
              ...(adjustmentsOf(o).length ? { totalOrig: o.totalOrig, adjust: pubAdjust(o) } : {}) });   // зміни оператора
 });
 
@@ -2547,7 +2547,7 @@ const pubOrder = o => ({
   mode: o.mode,
   fry: o.fry,
   fg: o.fg || 0,
-  when: o.when || '',
+  when: whenOf(o),
   slotAt: o.slotAt || 0,            // сайту — щоб не обіцяв «готується» напередодні
   total: o.total,
   ...(adjustmentsOf(o).length ? { totalOrig: o.totalOrig, adjust: pubAdjust(o) } : {}),
@@ -2869,6 +2869,19 @@ function dayLabelK(day) {
 /* Рядок часу — той самий вигляд, що дає сайт при виборі часу */
 const timeLabel = (o, at) =>
   `${dayLabelK(kyivDate(at))} · ${o.mode === 'delivery' ? 'орієнтовно о ' : 'о '}${hhmm(at)}`;
+/* Коли видача — щоразу з точного часу за Києвом, а не збережений рядок.
+   Рядок сайт складав за годинником телефону й записував раз: у клієнта
+   з іншим поясом там стояло «о 17:00» при 18:00 у панелі, а наступного
+   дня — досі «Завтра» (власник, 02.10, № 1058). «Якнайшвидше» лишається
+   «орієнтовно з», як і було. */
+function whenOf(o) {
+  if (!o.slotAt) return o.when || '';
+  const asap = /орієнтовно з/.test(o.when || '');
+  const soon = o.mode === 'delivery' ? 'привеземо' : 'готове';
+  return asap
+    ? `${dayLabelK(kyivDate(o.slotAt))} · ${soon} орієнтовно з ${hhmm(o.slotAt)}`
+    : timeLabel(o, o.slotAt);
+}
 
 /* Мангал на годину, куди хочемо перенести, — без самого цього
    замовлення: переносимо в межах тієї ж години, і воно не має
@@ -2923,7 +2936,7 @@ async function applyTime(o, raw, by) {
     }
   }
 
-  const was = o.when || (o.slotAt ? timeLabel(o, o.slotAt) : 'якнайшвидше');
+  const was = whenOf(o) || 'якнайшвидше';
   o.slotAt = at;
   o.when = timeLabel(o, at);
   /* Пишемо звичайним коментарем 💬 — як правку складу пишемо плюсом чи
@@ -3328,7 +3341,7 @@ const SITE = (process.env.SITE_URL || 'https://meat-baron.kh.ua/').replace(/\/+$
 
 const NOTE = {
   accepted: o => `✅ Замовлення № ${o.no} прийнято.\n` +
-    (o.when ? `Орієнтовно: ${o.when}\n` : '') +
+    (whenOf(o) ? `Орієнтовно: ${whenOf(o)}\n` : '') +
     (o.mode === 'pickup' ? `Точка: ${o.shopName}` : 'Доставка: курʼєр звʼяжеться щодо вартості.'),
   onway: o => `🚗 Замовлення № ${o.no} уже в дорозі.` +
     (o.addr ? `\nВезуть за адресою: ${o.addr}` : '') +
@@ -3349,7 +3362,7 @@ const pushText = (o, st) => {
     return `№ ${o.no} — ` + (o.mode === 'pickup' ? `чекаємо на вас: ${o.shopName}` : 'курʼєр уже виїжджає');
   }
   if (st === 'onway') return `№ ${o.no} — курʼєр зателефонує, коли буде на місці`;
-  return `№ ${o.no}` + (o.when ? ` — орієнтовно ${o.when}` : '');
+  return `№ ${o.no}` + (whenOf(o) ? ` — орієнтовно ${whenOf(o)}` : '');
 };
 
 function notify(o, st) {

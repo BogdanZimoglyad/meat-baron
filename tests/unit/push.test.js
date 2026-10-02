@@ -34,7 +34,9 @@ const build = (db, { deadEndpoint } = {}) => {
         log.push(s.endpoint);
       }
     },
-    pushKeys: () => ({ publicKey: 'pub' })
+    pushKeys: () => ({ publicKey: 'pub' }),
+    /* рядок часу перевіряє tests/unit/time.test.js; тут — без slotAt */
+    whenOf: o => o.when || ''
   };
   const fn = new Function(...Object.keys(env),
     `${code}; return { addPushSub, pushTo, pushText, pushAdjust, NOTE_TITLE }`);

@@ -121,3 +121,37 @@ test('доставка: без адреси не пускає, з адресою
   const card = (await bot.sent()).find(x => x.chatId === CHAT && x.text.includes(String(no)));
   expect(card && card.text).toContain('Сумська');
 });
+
+/* Телефон клієнта не в київському поясі: обраний час однаковий і на
+   сайті, і в чаті точки, і на сервері (власник, 02.10 — № 1058: «17:00»
+   на телефоні стало 18:00 у панелі). */
+test.describe('телефон у поясі Варшави', () => {
+  test.use({ timezoneId: 'Europe/Warsaw' });
+  test('обраний час — київський скрізь', async ({ page, bot, request }) => {
+    const errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Додати Ошийок', exact: true }).click();
+    await page.locator('#addBtn').click();
+    await toCheckout(page);
+    await page.locator('#pickWhen').click();
+    await page.locator('#wDays [data-d="1"]').click();             // наступний день із вільними годинами
+    const slot = page.locator('#wSlots [data-h]:not([disabled])').first();
+    const label = (await slot.innerText()).trim();                 // «10:00» — як бачить людина
+    await slot.click();
+    await page.locator('#whenOk').click();
+    await fillContacts(page, 'Тест Пояс', '+380501112299');
+    await bot.clear();
+    await page.locator('#send').click();
+    await expect(page.locator('#sheet')).toContainText('ЗАМОВЛЕННЯ ОФОРМЛЕНО', { ignoreCase: true });
+    const no = await orderNo(page);
+    await expect(page.locator('.o-when')).toContainText('о ' + label);
+
+    const d = await (await request.get('/api/order/' + no)).json();
+    const kyiv = new Date(d.slotAt).toLocaleTimeString('uk-UA', { timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit' });
+    expect(kyiv, 'на сервері — та сама година за Києвом').toBe(label);
+    const card = (await bot.sent()).find(x => x.chatId === CHAT && new RegExp('№\\s*' + no).test(x.text));
+    expect(card && card.text, 'у чаті точки — та сама година').toContain('о ' + label);
+    expect(errors, 'помилки JS на сторінці').toEqual([]);
+  });
+});
