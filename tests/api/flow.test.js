@@ -146,6 +146,9 @@ const order = (extra = {}) => ({ shop: 0, shopName: CAT.SHOPS[0][0], mode: 'pick
   r = await call('POST', `/api/op/order/${no}/status`, { status: 'ready' }, P);
   ok('панель: готове', r.status === 200 && r.d.order.status === 'ready');
   ok('покупцю в бот: готове', sent.some(x => x.chatId === CLIENT));
+  /* Посилання клієнту — з ключем: відкрите в браузері Telegram без входу,
+     воно все одно покаже суму (аудит 02.10) */
+  ok('посилання покупцю — з ключем замовлення', sent.some(x => x.chatId === CLIENT && x.kb.some(b => /[?&]k=[0-9a-f]+/.test(b.url || ''))));
   r = await call('POST', `/api/op/order/${no}/status`, { status: 'done' }, P);
   ok('панель: видано', r.status === 200 && r.d.order.status === 'done');
   r = await call('GET', '/api/me/active', null, U);
@@ -166,6 +169,38 @@ const order = (extra = {}) => ({ shop: 0, shopName: CAT.SHOPS[0][0], mode: 'pick
   r = await call('POST', `/api/order/${dno}/received`, { key: ckey });
   ok('покупець підтвердив — доставлено', r.status === 200 && (await call('GET', '/api/order/' + dno)).d.status === 'done');
   ok('точці — що клієнт отримав', sent.some(x => x.chatId === CHAT && /Клієнт підтвердив/.test(x.text)));
+
+  /* ---- 4а. Чуже замовлення за номером: лише статус (аудит 02.10) ---- */
+  r = await call('GET', '/api/order/' + dno);
+  ok('за голим номером — статус є, суми й коментарів немає', r.d.status === 'done' && r.d.total === undefined && r.d.adjust === undefined);
+  r = await call('GET', '/api/order/' + dno + '?k=' + ckey);
+  ok('з ключем замовлення — сума й зміни оператора', r.d.total > 0 && Array.isArray(r.d.adjust));
+  ok('з чужим ключем — лише статус', (await call('GET', '/api/order/' + dno + '?k=bad')).d.total === undefined);
+  ok('хто увійшов — бачить суму свого', (await call('GET', '/api/order/' + no, null, U)).d.total > 0);
+  ok('хто увійшов — суми чужого не бачить', (await call('GET', '/api/order/' + dno, null, U)).d.total === undefined);
+
+  /* ---- 4б. Підписка на push: лише своє замовлення й лише справжні сервіси ---- */
+  const push = { endpoint: 'https://fcm.googleapis.com/fcm/send/x1', keys: { p256dh: 'p', auth: 'a' } };
+  ok('push: чужим ключем — ні', (await call('POST', '/api/push/subscribe', { no: dno, key: 'bad', sub: push })).status === 403);
+  ok('push: на внутрішню адресу — ні', (await call('POST', '/api/push/subscribe', { no: dno, key: ckey, sub: { ...push, endpoint: 'https://127.0.0.1/x' } })).status === 400);
+  ok('push: своє замовлення — так', (await call('POST', '/api/push/subscribe', { no: dno, key: ckey, sub: push })).status === 200);
+
+  /* ---- 4в. Час поза графіком — точці попередження, а не відмова клієнту ---- */
+  const kyivNoon = days => {
+    const d = new Date(Date.now() + days * 864e5).toLocaleDateString('sv-SE', { timeZone: 'Europe/Kyiv' });
+    const guess = Date.parse(d + 'T12:00:00Z');
+    const h = Number(new Date(guess).toLocaleString('en-US', { timeZone: 'Europe/Kyiv', hour: 'numeric', hour12: false }));
+    return guess - (h - 12) * 3600e3;
+  };
+  sent.length = 0;
+  r = await call('POST', '/api/order', order({ slotAt: kyivNoon(40), when: 'Колись' }));
+  ok('замовлення на місяць уперед прийнято', r.status === 200);
+  ok('…а в картці точки — «час поза графіком»', sent.some(x => x.chatId === CHAT && /поза графіком/.test(x.text)));
+  await call('POST', `/api/op/order/${r.d.no}/adjust`, { kind: 'cancel', note: 'тест' }, P);
+  sent.length = 0;
+  r = await call('POST', '/api/order', order({ slotAt: kyivNoon(2), when: 'Післязавтра' }));
+  ok('звичайний час — без попередження', r.status === 200 && !sent.some(x => /поза графіком/.test(x.text)));
+  await call('POST', `/api/op/order/${r.d.no}/adjust`, { kind: 'cancel', note: 'тест' }, P);
 
   /* ---- 5. Перенесення часу й скасування з причиною ---- */
   r = await call('POST', '/api/order', order({ slotAt: soon() + 24 * 3600e3, when: 'Завтра' }), U);

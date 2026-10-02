@@ -1,7 +1,7 @@
 /* Перевірка сповіщень у браузер на справжньому коді: вирізаємо з
    server.js роботу зі списком підписок і тексти, і ганяємо на
-   підставленій базі. Головне тут — щоб на один номер не копичились
-   підписки й щоб протухлі зникали.
+   підставленій базі. Головне тут — щоб на замовлення не копичились
+   підписки, щоб протухлі зникали і щоб сервер не стукав куди завгодно.
    Запуск: npm test */
 const fs = require('fs');
 const report = require('../report.js');
@@ -11,18 +11,18 @@ const src = fs.readFileSync(path.join(__dirname, '..', '..', 'server.js'), 'utf8
 const cut = re => { const m = src.match(re); if (!m) { throw new Error('не знайшли: ' + re) } return m[0] };
 const code = [
   cut(/const PUSH_MAX_DEVICES = 5;[\s\S]*?\n\}/),
+  cut(/function pushEndpointOk\(raw\) \{[\s\S]*?\n\}/),
   cut(/const NOTE_TITLE = \{[\s\S]*?\n\};/),
   cut(/const pushText = \(o, st\) => \{[\s\S]*?\n\};/),
   cut(/const pushAdjust = \(o, a\) =>[\s\S]*?\n[^\n]*До сплати \$\{money\(o\.total\)\}` \};/),
-  cut(/async function pushTo\(telKey, title, body, url\) \{[\s\S]*?\n\}/)
+  cut(/async function pushTo\(o, title, body, url\) \{[\s\S]*?\n\}/)
 ].join('\n');
 
 /* Замість справжньої відправки — журнал: що пішло і куди. Одна адреса
    вдає протухлу, щоб побачити, чи прибирає її сервер. */
-const build = (db, { deadEndpoint } = {}) => {
+const build = ({ deadEndpoint } = {}) => {
   const log = [];
   const env = {
-    db,
     money: n => (Math.round(n * 100) / 100).toFixed(2).replace(/\.00$/, '') + ' ₴',
     save: () => {},
     console: { warn: () => {}, log: () => {} },
@@ -39,7 +39,7 @@ const build = (db, { deadEndpoint } = {}) => {
     whenOf: o => o.when || ''
   };
   const fn = new Function(...Object.keys(env),
-    `${code}; return { addPushSub, pushTo, pushText, pushAdjust, NOTE_TITLE }`);
+    `${code}; return { addPushSub, pushTo, pushText, pushAdjust, NOTE_TITLE, pushEndpointOk }`);
   return { ...fn(...Object.values(env)), log };
 };
 
@@ -47,47 +47,58 @@ const sub = (n) => ({ endpoint: 'https://push.example/' + n, keys: { p256dh: 'k'
 const t = [];
 const ok = (name, cond) => t.push([name, cond]);
 
-// ---------- список пристроїв ----------
-let db = { push: {} };
-let s = build(db);
-s.addPushSub('+380670000000', sub(1));
-ok('перша підписка лягла', db.push['+380670000000'].length === 1);
+// ---------- список пристроїв — на самому замовленні ----------
+/* Раніше підписка лягала на номер телефону: фальшиве замовлення на
+   чужий номер давало підписку на всі справжні замовлення цієї людини
+   (аудит 02.10). Тепер кожне замовлення тримає свій список. */
+let s = build();
+const ord1 = { no: 1 }, ord2 = { no: 2 };
+s.addPushSub(ord1, sub(1));
+ok('перша підписка лягла', ord1.push.length === 1);
 
-s.addPushSub('+380670000000', sub(1));
-ok('та сама адреса не дублюється', db.push['+380670000000'].length === 1);
+s.addPushSub(ord1, sub(1));
+ok('та сама адреса не дублюється', ord1.push.length === 1);
 
-s.addPushSub('+380670000000', sub(2));
-ok('другий пристрій додається окремо', db.push['+380670000000'].length === 2);
+s.addPushSub(ord1, sub(2));
+ok('другий пристрій додається окремо', ord1.push.length === 2);
 
-for (let i = 3; i <= 9; i++) s.addPushSub('+380670000000', sub(i));
-ok('більше пʼяти пристроїв не тримаємо', db.push['+380670000000'].length === 5);
-ok('лишились найсвіжіші', db.push['+380670000000'].map(x => x.endpoint).includes('https://push.example/9')
-  && !db.push['+380670000000'].map(x => x.endpoint).includes('https://push.example/1'));
+for (let i = 3; i <= 9; i++) s.addPushSub(ord1, sub(i));
+ok('більше пʼяти пристроїв не тримаємо', ord1.push.length === 5);
+ok('лишились найсвіжіші', ord1.push.map(x => x.endpoint).includes('https://push.example/9')
+  && !ord1.push.map(x => x.endpoint).includes('https://push.example/1'));
 
-s.addPushSub('+380509999999', sub(1));
-ok('чужий номер має свій список', db.push['+380509999999'].length === 1
-  && db.push['+380670000000'].length === 5);
+s.addPushSub(ord2, sub(1));
+ok('інше замовлення має свій список', ord2.push.length === 1 && ord1.push.length === 5);
+
+// ---------- куди можна стукати ----------
+/* Адресу дає браузер, а стукає на неї сервер — тож лише справжні
+   сервіси push по https, а не внутрішні адреси. */
+ok('push-сервіс Google приймаємо', s.pushEndpointOk('https://fcm.googleapis.com/fcm/send/abc'));
+ok('push-сервіс Apple приймаємо', s.pushEndpointOk('https://web.push.apple.com/QF3x'));
+ok('без https — ні', !s.pushEndpointOk('http://fcm.googleapis.com/fcm/send/abc'));
+ok('localhost — ні', !s.pushEndpointOk('https://localhost:3000/x'));
+ok('голі цифри адреси — ні', !s.pushEndpointOk('https://169.254.169.254/latest'));
+ok('адреса в дужках (IPv6) — ні', !s.pushEndpointOk('https://[::1]/x'));
+ok('сміття — ні', !s.pushEndpointOk('не адреса') && !s.pushEndpointOk(undefined));
 
 // ---------- відправка ----------
 {
-  db = { push: { '+380670000000': [sub(1), sub(2)] } };
-  s = build(db);
-  let sent = await s.pushTo('+380670000000', 'Готове', '№ 5', 'https://site/?order=5');
-  ok('шлемо на всі пристрої номера', sent === true && s.log.length === 2);
+  let o5 = { no: 5, push: [sub(1), sub(2)] };
+  s = build();
+  let sent = await s.pushTo(o5, 'Готове', '№ 5', 'https://site/?order=5');
+  ok('шлемо на всі пристрої замовлення', sent === true && s.log.length === 2);
 
-  db = { push: {} };
-  s = build(db);
-  sent = await s.pushTo('+380670000000', 'Готове', '№ 5', '');
+  s = build();
+  sent = await s.pushTo({ no: 5 }, 'Готове', '№ 5', '');
   ok('немає підписок — просто нічого не робимо', sent === false && s.log.length === 0);
 
   /* Браузер видалив підписку або людина знесла сайт з екрана: сервер
      має прибрати таку адресу, інакше вона висітиме вічно. */
-  db = { push: { '+380670000000': [sub(1), sub(2)] } };
-  s = build(db, { deadEndpoint: 'https://push.example/1' });
-  sent = await s.pushTo('+380670000000', 'Готове', '№ 5', '');
+  o5 = { no: 5, push: [sub(1), sub(2)] };
+  s = build({ deadEndpoint: 'https://push.example/1' });
+  sent = await s.pushTo(o5, 'Готове', '№ 5', '');
   ok('живий пристрій отримав', sent === true && s.log.length === 1);
-  ok('протухла адреса прибрана', db.push['+380670000000'].length === 1
-    && db.push['+380670000000'][0].endpoint === 'https://push.example/2');
+  ok('протухла адреса прибрана', o5.push.length === 1 && o5.push[0].endpoint === 'https://push.example/2');
 
   // ---------- тексти ----------
   const o = { no: 77, mode: 'pickup', shopName: 'вул. Шевченка 142а', when: 'сьогодні, 17:30' };

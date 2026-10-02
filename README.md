@@ -44,16 +44,15 @@ const API='https://api.meat-baron.kh.ua';
 
 ## Домен
 
-`meat-baron.kh.ua` зареєстровано в NIC.UA, сервери імен теж NIC.UA
-(`ns10–12.uadns.com`). Записи:
+`meat-baron.kh.ua` зареєстровано в NIC.UA (оплачено до 2028 року), але
+сервери імен — **Cloudflare** (`alaric` / `brynne.ns.cloudflare.com`):
+там і SSL (Full, Always Use HTTPS), і кеш сайту. Записи — у панелі
+Cloudflare → DNS:
 
 ```
-@                    A      185.199.108.153   ┐
-@                    A      185.199.109.153   │ GitHub Pages
-@                    A      185.199.110.153   │
-@                    A      185.199.111.153   ┘
+@                    A      185.199.108–111.153   GitHub Pages (через Cloudflare)
 www                  CNAME  bogdanzimoglyad.github.io.
-api                  CNAME  xjuas1uq.up.railway.app.
+api                  CNAME  xjuas1uq.up.railway.app.   DNS only, без проксі
 _railway-verify.api  TXT    railway-verify=…  (підтвердження для Railway)
 ```
 
@@ -64,9 +63,9 @@ _railway-verify.api  TXT    railway-verify=…  (підтвердження дл
 На Railway у змінних проєкту стоїть `SITE_URL=https://meat-baron.kh.ua/`:
 з неї бот будує кнопку «Стежити» в сповіщеннях.
 
-**Сервери імен NIC.UA — окреме замовлення зі своїм терміном.** Домен
-оплачено до 2028 року, а DNS-хостинг — до 13 грудня 2026, і без
-продовження домен перестане відкриватися.
+**Домен у NIC.UA оплачено до 2028 року** — продовжити вчасно, інакше сайт
+перестане відкриватися. DNS-хостинг NIC.UA після переїзду на Cloudflare
+вже не потрібен.
 
 Вхід, кошик і останнє замовлення браузер зберігає окремо для кожного
 домену: після переїзду всі, хто входив на github.io, входять заново.

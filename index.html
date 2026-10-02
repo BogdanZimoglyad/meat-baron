@@ -1352,6 +1352,18 @@ async function req(url,opts,ms){
   try{ return await fetch(url,{...(opts||{}),signal:ctl.signal}) }
   finally{ clearTimeout(t) }
 }
+/* Сума й коментарі оператора — лише тому, хто замовляв: сервер віддає
+   їх за ключем замовлення (ckey) або за входом. За голим номером —
+   тільки статус і час (аудит 02.10). */
+const orderUrl=(no,key)=>API+'/api/order/'+no+(key?'?k='+encodeURIComponent(key):'');
+/* Ключ із посилання бота читаємо раз і прибираємо з адресного рядка:
+   людина ділиться адресою зі сторінки — і разом із нею віддала б і суму,
+   і кнопку «Отримав». */
+const linkKey=(()=>{
+  const p=new URLSearchParams(location.search), k=p.get('k')||'';
+  if(k){ p.delete('k'); try{ history.replaceState(null,'',location.pathname+(p.toString()?'?'+p:'')+location.hash) }catch(e){} }
+  return k;
+})();
 let poll=null;        // статус замовлення
 let pollTick=null;    // один такт опитування, щоб смикнути його руками
 let loginPoll=null;   // очікування підтвердження входу в Telegram
@@ -3413,7 +3425,7 @@ function openStatus(startStatus){
     ${status==='onway'&&o.mode==='delivery'?`<button class="cta got" id="gotIt">✅ Отримав замовлення</button>
     <p class="hint" style="margin-top:6px">Натисніть, коли курʼєр передасть пакунок — точка побачить, що все дійшло.</p>`:''}
 
-    <div class="box">
+    ${!Number.isFinite(o.total)?`<div class="box"><p class="hint" style="margin:0">Склад і суму видно лише тому, хто оформив замовлення.</p></div>`:`<div class="box">
       ${o.lines.length
         ? o.lines.map(l=>`<div class="sum"><span>${esc(lineTitle(l))} · ${lineQty(l)}${l.fry?' · на мангалі':''}</span><span>${money(l.sum)}</span></div>`).join('')
         : `<p class="hint" style="margin:0 0 6px">Склад замовлення видно лише на тому пристрої, з якого його оформили.</p>`}
@@ -3430,7 +3442,7 @@ function openStatus(startStatus){
       ${adjChanged(o)
         ? `<p class="hint">Суму уточнив оператор.${o.mode==='delivery'&&!shipOf(o)?' Вартість доставки уточнить окремо.':''}</p>`
         : `${o.mode==='delivery'&&!shipOf(o)?'<p class="hint">Оператор зателефонує і уточнить вартість доставки.</p>':''}<p class="weight-note">${WEIGHT_NOTE}</p>`}
-    </div>
+    </div>`}
 
     <p class="ord-link">Посилання на замовлення можна зберегти або переслати:<br>
       <button class="lnk-copy" id="copyLink">Скопіювати посилання</button></p>
@@ -3488,7 +3500,7 @@ function openStatus(startStatus){
     /* Відповідь могла прийти, коли екран замовлення вже закрили і відкрили
        інший (кошик): тоді не малюємо — інакше статус перемальовував би кошик. */
     const tick=async()=>{
-      try{const r=await req(API+'/api/order/'+o.no,null,8000);const d=await r.json();
+      try{const r=await req(orderUrl(o.no,o.ckey),{headers:authHead()},8000);const d=await r.json();
         /* сума могла змінитись: оператор зважив замовлення */
         if(Number.isFinite(d.total)){o.total=d.total; o.totalOrig=d.totalOrig; o.adjust=d.adjust||[]; if(d.slotAt) o.slotAt=d.slotAt}
         /* Оператор міг перенести час — показуємо новий, не чекаючи, поки
@@ -3766,7 +3778,7 @@ async function openOrder(no,known){
            /* Ключ підтвердження отримання лежить у памʼяті браузера. Без
               нього кнопка «Отримав замовлення» билася об 403 у всіх, хто
               не входив через Telegram: там перевірка йде саме по ньому. */
-           ckey:my.ckey||'',
+           ckey:my.ckey||linkKey||'',
            /* Склад беремо з сервера, якщо він його прислав: оператор міг
               додати чи прибрати позицію на прохання клієнта, і памʼять
               браузера про це не знає. Раніше перевага була в памʼяті —
@@ -3780,14 +3792,18 @@ async function openOrder(no,known){
   }
   const v=readLastList().find(x=>String(x.no)===String(no))||{};
   const mine=!!v.no;
+  /* Ключ — з памʼяті браузера або з посилання, яке бот надіслав самому
+     клієнту (?k=): відкрите в браузері Telegram, де входу немає, воно
+     все одно покаже суму й дасть натиснути «Отримав». */
+  const key=(mine&&v.ckey)||linkKey||'';
   let r=null,d=null;
-  try{ r=await req(API+'/api/order/'+no,null,10000); d=await r.json() }catch(e){}
+  try{ r=await req(orderUrl(no,key),{headers:authHead()},10000); d=await r.json() }catch(e){}
   if(r&&r.ok&&d&&d.no){
     /* Час — із сервера: оператор міг перенести замовлення на прохання
        клієнта, а памʼять браузера пам'ятає той, що обирали (29.09). */
     order={no:d.no, shop:(mine&&v.shop)||SHOPS[shop][0], when:d.when||(mine&&v.when)||'', slotAt:d.slotAt||(mine&&v.slotAt)||0,
            total:d.total, totalOrig:d.totalOrig, adjust:d.adjust||[], mode:d.mode||'pickup',
-           ckey:(mine&&v.ckey)||'',
+           ckey:key,
            fry:mine&&!!v.fry, fg:(mine&&v.fg)||0, lines:(mine&&v.lines)||[]};
     return openStatus(d.status);
   }

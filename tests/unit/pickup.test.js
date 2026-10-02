@@ -13,7 +13,7 @@ const mkEnv=(orders,hour)=>({
   kyivNow:()=>{const d=new Date(); d.setHours(hour,30,0,0); return d},
   OPEN_HOUR:8, PICKUP_EVERY:600000, PICKUP_MAX:6, PICKUP_TELL_SHOP:3,
   save:()=>{},
-  SITE:'https://x/',
+  SITE:'https://x/', orderLink:o=>'https://x/?order='+o.no,
   bot:{sendMessage:(chat,text)=>{sent.push({chat,text:text.slice(0,60)});return Promise.resolve()}},
   console:{warn:()=>{}}
 });
