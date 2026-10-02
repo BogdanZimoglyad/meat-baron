@@ -36,9 +36,16 @@ jobs:
           if [ "$EVENT" = "schedule" ] && { [ "$h" -lt 8 ] || [ "$h" -ge 21 ]; }; then
             echo "У Києві $h год — уночі не перевіряємо"; exit 0
           fi
+          # Telegram мусить сказати "ok":true. Інакше — червоний запуск із
+          # причиною: зіпсований секрет не має мовчки глушити сторожа
+          # (власник, 02.10). Сам токен у лог не потрапляє.
           send() {
-            curl -s -m 20 "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-              --data-urlencode "chat_id=${OWNER_ID}" --data-urlencode "text=$1" > /dev/null
+            r=$(curl -s -m 20 "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${OWNER_ID}" --data-urlencode "text=$1")
+            case "$r" in *'"ok":true'*) echo "Повідомлення власнику доставлено"; return 0;; esac
+            why=$(printf '%s' "$r" | sed -n 's/.*"description":"\([^"]*\)".*/\1/p')
+            echo "::error::Telegram не прийняв повідомлення (${why:-немає відповіді}) — перевірте секрети BOT_TOKEN і OWNER_ID"
+            return 1
           }
           bad=""
           # Три спроби з паузою: одна невдала відповідь — ще не падіння
@@ -53,7 +60,9 @@ jobs:
           check "API і бот" "https://api.meat-baron.kh.ua/api/health"
           check "Сайт" "https://meat-baron.kh.ua/?cb=$RANDOM"
           if [ -z "$bad" ]; then
-            [ "$TEST" = "true" ] && send "✅ Сторож на звʼязку: сайт і API живі. Якщо щось ляже з 8:00 до 21:00 — напишу сюди."
+            if [ "$TEST" = "true" ]; then
+              send "✅ Сторож на звʼязку: сайт і API живі. Якщо щось ляже з 8:00 до 21:00 — напишу сюди." || exit 1
+            fi
             exit 0
           fi
           send "🚨 Мʼясний Барон не відповідає:${bad}
