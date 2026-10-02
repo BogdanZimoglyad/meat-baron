@@ -110,6 +110,31 @@ const order = (extra = {}) => ({ shop: 0, shopName: CAT.SHOPS[0][0], mode: 'pick
   r = await call('POST', `/api/op/order/${no}/time`, { at: soon() + 3600e3 }, P);
   ok('🕒 час після «Готується» не міняється', r.status === 409);
 
+  /* ↩ назад у «Прийнято»: клієнт переніс час, а вже «Готується»
+     (власник, 02.10). Знову відкриваються час, сума й склад. */
+  sent.length = 0;
+  r = await call('POST', `/api/op/order/${no}/back`, {}, P);
+  ok('↩ панель: знову «Прийнято»', r.status === 200 && r.d.order.status === 'accepted');
+  ok('↩ час, сума й склад знову відкриті', r.d.order.can.time && r.d.order.can.money && !r.d.order.can.back);
+  ok('↩ клієнту про відкат не пишемо', !sent.some(x => x.chatId === CLIENT));
+  r = await call('POST', `/api/op/order/${no}/adjust`, { kind: 'fact', amount: 160 }, P);
+  ok('↩ після відкату суму змінити можна', r.status === 200 && r.d.order.total === 160);
+  r = await call('POST', `/api/op/order/${no}/back`, {}, P);
+  ok('↩ з «Прийнято» назад нікуди', r.status === 409);
+  r = await call('POST', `/api/op/order/${no}/back`, {});
+  ok('↩ без ключа панелі — 401', r.status === 401);
+  /* те саме кнопкою в чаті точки; повторне «Готується» клієнту вдруге не пишемо */
+  await call('POST', `/api/op/order/${no}/status`, { status: 'cooking' }, P);
+  await press(-999, 5, `b:${no}`);
+  ok('↩ кнопка з чужого чату не діє', (await call('GET', '/api/order/' + no)).d.status === 'cooking');
+  await press(CHAT, 5, `b:${no}`);
+  await tick();
+  ok('↩ кнопка в чаті: знову «Прийнято»', (await call('GET', '/api/order/' + no)).d.status === 'accepted');
+  sent.length = 0;
+  r = await call('POST', `/api/op/order/${no}/status`, { status: 'cooking' }, P);
+  ok('↩ знову «Готується»', r.status === 200 && r.d.order.status === 'cooking');
+  ok('↩ про «Готується» клієнту вдруге не пишемо', !sent.some(x => x.chatId === CLIENT));
+
   sent.length = 0;
   r = await call('POST', `/api/op/order/${no}/status`, { status: 'ready' }, P);
   ok('панель: готове', r.status === 200 && r.d.order.status === 'ready');

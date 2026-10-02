@@ -915,7 +915,7 @@ const opOrder = o => ({
      правила живуть на сервері й міняються разом із ним. */
   packed: !!o.packedAt,
   can: { money: canEdit(o, 'fact'), ship: canEdit(o, 'ship'), cancel: canEdit(o, 'cancel'),
-         time: TIME_STATUSES.has(o.status), pack: canPack(o) },
+         time: TIME_STATUSES.has(o.status), pack: canPack(o), back: o.status === 'cooking' },
   lines: (o.lines || []).map(l => ({ name: nameOf(l), qty: l.g, unit: l.unit, sum: l.sum, fry: !!l.fry, v: l.v || '' }))
 });
 
@@ -1139,6 +1139,17 @@ app.post('/api/op/order/:no/status', async (req, res) => {
   if (!o) return res.status(404).json({ error: 'Замовлення не знайдено' });
   if (o.shop !== a.shop) return res.status(403).json({ error: 'Це замовлення іншої точки' });
   const r = await applyStatus(o, String((req.body || {}).status || ''));
+  if (r.err) return res.status(409).json({ error: r.err, order: opOrder(o) });
+  res.json({ ok: true, order: opOrder(o) });
+});
+
+app.post('/api/op/order/:no/back', async (req, res) => {
+  const a = panelOf(req);
+  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  const o = db.orders[req.params.no];
+  if (!o) return res.status(404).json({ error: 'Замовлення не знайдено' });
+  if (o.shop !== a.shop) return res.status(403).json({ error: 'Це замовлення іншої точки' });
+  const r = await applyBack(o);
   if (r.err) return res.status(409).json({ error: r.err, order: opOrder(o) });
   res.json({ ok: true, order: opOrder(o) });
 });
@@ -1949,6 +1960,10 @@ function keyboard(o) {
   const btns = nextBtns(o).map(([st, txt]) => ([{ text: txt, callback_data: `s:${o.no}:${st}` }]));
   if (o.mode === 'delivery' && SHIP_OK.has(o.status)) btns.push(
     [{ text: o.ship ? '🚕 Змінити вартість доставки' : '🚕 Вартість доставки', callback_data: `a:${o.no}:ship` }]);
+  /* Клієнт переніс час, а вже «Готується» — назад, щоб знову відкрились
+     час, сума й склад (власник, 02.10) */
+  if (o.status === 'cooking') btns.push(
+    [{ text: '↩ Повернути в «Прийнято»', callback_data: `b:${o.no}` }]);
   /* Скасування — окремим рядком унизу, щоб не тиснули випадково */
   if (cancelable(o)) btns.push([{ text: '✖️ Скасувати замовлення', callback_data: `a:${o.no}:cancel` }]);
   if (EDITABLE.has(o.status)) btns.push(
@@ -2952,6 +2967,23 @@ async function applyStatus(o, st) {
   return { ok: true };
 }
 
+/* Крок назад: «Готується» → «Прийнято». Найближче замовлення одразу
+   взяли й натиснули «Готується», а клієнт по телефону переніс час — і
+   ні час, ні суму, ні склад уже не змінити: усе це лише до «Готується»
+   (власник, 02.10). Окрема дія, а не статус у applyStatus: там статус
+   іде лише вперед, щоб подвійний дотик чи стара кнопка не відкотили
+   замовлення. Далі «Готове» назад не відкочуємо — про нього клієнту вже
+   пішли сповіщення й SMS. Клієнту про відкат не пишемо: оператор щойно
+   говорив із ним, а новий час чи суму він отримає звичайним сповіщенням. */
+async function applyBack(o) {
+  if (o.status !== 'cooking') return { err: `Уже «${LABEL[o.status]}»`, stale: true };
+  o.status = 'accepted';
+  o.updatedAt = Date.now();
+  save();
+  await editCard(o);
+  return { ok: true };
+}
+
 bot.on('callback_query', async cq => {
   const [tag, noStr, st] = (cq.data || '').split(':');
   if (tag !== 's') return;
@@ -2973,6 +3005,22 @@ bot.on('callback_query', async cq => {
   }
 
   await bot.answerCallbackQuery(cq.id, { text: LABEL[st] });
+});
+
+bot.on('callback_query', async cq => {
+  const [tag, noStr] = (cq.data || '').split(':');
+  if (tag !== 'b') return;
+  const o = db.orders[noStr];
+  if (!o) return bot.answerCallbackQuery(cq.id, { text: 'Замовлення не знайдено' });
+  if (cq.message && cq.message.chat.id !== o.chatId) {
+    return bot.answerCallbackQuery(cq.id, { text: 'Це замовлення іншої точки' });
+  }
+  const r = await applyBack(o);
+  if (r.err) {
+    await bot.editMessageReplyMarkup(keyboard(o), { chat_id: o.chatId, message_id: o.msgId }).catch(() => {});
+    return bot.answerCallbackQuery(cq.id, { text: r.err + ' — кнопки оновлено' });
+  }
+  await bot.answerCallbackQuery(cq.id, { text: 'Знову «Прийнято» — час, суму й склад можна міняти' });
 });
 
 /* ---------- оператор уточнює суму ----------

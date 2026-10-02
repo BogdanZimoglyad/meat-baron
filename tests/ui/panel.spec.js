@@ -147,3 +147,27 @@ test('оператор: «Зібрано» — своя купка, правка
   await expect(cardOf(page, no).locator('.pk')).toHaveCount(0);
   expect(errors, 'помилки JS у панелі').toEqual([]);
 });
+
+/* ↩ «Готується» → «Прийнято»: клієнт переніс час, а замовлення вже
+   готується — без відкату ні час, ні суму, ні склад не змінити (власник, 02.10) */
+test('оператор: «Готується» можна повернути в «Прийнято»', async ({ page, bot, request }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  page.on('dialog', d => d.accept());
+  const no = await newOrder(request, 'Панель Перенесений');
+  await openPanel(page, bot);
+  const card = cardOf(page, no);
+  await card.locator(`[data-go="${no}"]`).click();
+  await expect.poll(() => statusOf(request, no)).toBe('accepted');
+  await card.locator(`[data-go="${no}"][data-st="cooking"]`).click();
+  await expect.poll(() => statusOf(request, no)).toBe('cooking');
+  await expect(card.locator('[data-kind="time"]'), 'під час готування часу не змінити').toHaveCount(0);
+
+  await card.screenshot({ path: 'test-results/back.png' });
+  await card.locator(`[data-uncook="${no}"]`).click();
+  await expect.poll(() => statusOf(request, no)).toBe('accepted');
+  await expect(card.locator('[data-kind="time"]')).toBeVisible();
+  await expect(card.locator('[data-kind="fact"]')).toBeVisible();
+  await expect(card.locator('[data-uncook]')).toHaveCount(0);
+  expect(errors, 'помилки JS у панелі').toEqual([]);
+});

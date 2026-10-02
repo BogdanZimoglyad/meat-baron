@@ -559,6 +559,7 @@ function draw(d){
   const dh=w.querySelector('[data-done]');
   if(dh) dh.onclick=()=>{ showDone=!showDone; draw(d) };
   w.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>step(b.dataset.go,b.dataset.st,b));
+  w.querySelectorAll('[data-uncook]').forEach(b=>b.onclick=()=>uncook(b.dataset.uncook,b));
   w.querySelectorAll('[data-pack]').forEach(b=>b.onclick=()=>pack(b.dataset.pack,b.dataset.on==='1',b));
   w.querySelectorAll('[data-form]').forEach(b=>b.onclick=()=>{
     form={no:+b.dataset.form,kind:b.dataset.kind}; draw(d); focusForm();
@@ -691,8 +692,11 @@ function more(o){
      (власник, 29.09). Лише поки не почали готувати — так каже сервер. */
   if(can.time) b.push(['time','🕒 Час']);
   if(can.cancel) b.push(['cancel','✖️ Скасувати',1]);
-  if(!b.length) return '';
-  return `<div class="more">${b.map(([k,t,danger])=>
+  /* Уже «Готується», а клієнт переніс час — крок назад відкриває знову
+     час, суму й склад (власник, 02.10). Не форма, а одна дія. */
+  const back=can.back?`<button data-uncook="${o.no}">↩ Повернути в «Прийнято»</button>`:'';
+  if(!b.length&&!back) return '';
+  return `<div class="more">${back}${b.map(([k,t,danger])=>
     `<button data-form="${o.no}" data-kind="${k}"${danger?' class="danger"':''}>${t}</button>`).join('')}</div>`;
 }
 
@@ -1342,6 +1346,19 @@ async function step(no,st,btn){
     const r=await fetch(API+'/api/op/order/'+no+'/status',{method:'POST',
       headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
       body:JSON.stringify({status:st})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){ alert(d.error||'Не вдалося'); }
+    await load();
+  }catch(e){ btn.disabled=false; btn.textContent=was; alert('Немає звʼязку') }
+}
+
+async function uncook(no,btn){
+  if(!confirm('Повернути № '+no+' в «Прийнято»? Знову можна буде змінити час, суму й склад.')) return;
+  btn.disabled=true;
+  const was=btn.textContent; btn.textContent='…';
+  try{
+    const r=await fetch(API+'/api/op/order/'+no+'/back',{method:'POST',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+token}});
     const d=await r.json().catch(()=>({}));
     if(!r.ok){ alert(d.error||'Не вдалося'); }
     await load();
