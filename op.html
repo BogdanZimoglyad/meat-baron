@@ -325,6 +325,7 @@ button{font:inherit;cursor:pointer;border:none}
     <span class="pill off" id="mute" hidden>🔇 торкніться екрана, щоб увімкнути звук</span>
     <span class="pill" id="voice" role="button" hidden></span>
     <span class="pill" id="net">звʼязок…</span>
+    <span class="pill off" id="pausePill" role="button" hidden></span>
     <span class="pill hot" id="cNew" hidden>нових: 0</span>
     <span class="pill" id="cWork">у роботі: 0</span>
   </div>
@@ -333,6 +334,7 @@ button{font:inherit;cursor:pointer;border:none}
     <button data-view="stock">🚫 Стоп-лист</button>
     <button data-view="grill">🔥 Мангал</button>
     <button data-view="cal">📅 Календар</button>
+    <button data-view="pause">⏸ Пауза</button>
   </nav>
 </div>
 
@@ -1039,6 +1041,58 @@ function drawGrill(){
   $('wrap').querySelectorAll('[data-grill]').forEach(b=>b.onclick=()=>grillAct(b));
 }
 
+/* ---------- пауза приймання ----------
+   Вимкнули світло, тривога, нікому працювати — сайт перестає приймати
+   замовлення на сьогодні; на інші дні приймає. Окремо — лише доставка,
+   коли немає курʼєрів. Зранку все вмикається саме (власник, 02.10).
+   Власнику й у чат точки про паузу пише сервер. */
+const pauseUntil=ms=>{
+  const day=t=>new Date(t).toLocaleDateString('sv-SE',{timeZone:'Europe/Kyiv'});
+  return day(ms)===day(Date.now())? 'до '+hhmm(ms) : 'до ранку';
+};
+function paintPausePill(p){
+  const el=$('pausePill'); if(!el) return;
+  const now=Date.now(), all=(p&&p.all)>now, dlv=(p&&p.delivery)>now;
+  el.hidden=!all&&!dlv;
+  el.textContent=all? '⏸ сайт на паузі '+pauseUntil(p.all) : dlv? '⏸ доставка на паузі '+pauseUntil(p.delivery) : '';
+}
+function drawPause(){
+  if(!SHOP) return $('wrap').innerHTML='<p class="empty">Завантажую…</p>';
+  const p=SHOP.pause||{}, now=Date.now();
+  paintPausePill(p);
+  const row=(what,title,idle)=>{
+    const on=(p[what]||0)>now;
+    return `<div class="state ${on?'shut':''}"><b>${title}</b>
+      <div class="hint2">${on?`На паузі <b>${pauseUntil(p[what])}</b> — сайт не приймає замовлень на сьогодні.`:idle}</div></div>
+    <div class="gacts">
+      ${on?`<button class="free" data-pause="${what}" data-dur="off">▶️ Зняти паузу</button>`:''}
+      <button class="shut" data-pause="${what}" data-dur="60">⏸ На годину</button>
+      <button class="shut" data-pause="${what}" data-dur="120">⏸ На дві</button>
+      <button class="shut" data-pause="${what}" data-dur="day">⏸ До кінця дня</button>
+    </div>`;
+  };
+  $('wrap').innerHTML=`<div class="screen">
+    <p class="hint2">Світло, тривога, нікому працювати — поставте паузу, і сайт перестане приймати
+    замовлення на сьогодні. На інші дні приймає. Зранку все вмикається саме.</p>
+    ${row('all','Увесь прийом з сайту','Сайт приймає замовлення.')}
+    ${row('delivery','Лише доставка','Доставку приймаємо. Пауза тут — коли немає курʼєрів: самовивіз працює далі.')}
+  </div>`;
+  $('wrap').querySelectorAll('[data-pause]').forEach(b=>b.onclick=()=>pauseAct(b));
+}
+$('pausePill').onclick=()=>setView('pause');
+async function pauseAct(btn){
+  const what=btn.dataset.pause, dur=btn.dataset.dur;
+  const label=what==='all'?'увесь прийом з сайту':'доставку';
+  if(dur!=='off'&&!confirm(`Поставити на паузу ${label} — ${dur==='day'?'до кінця дня':dur==='60'?'на годину':'на дві години'}?`)) return;
+  btn.disabled=true; const was=btn.textContent; btn.textContent='…';
+  const r=await post('/api/op/pause',{what,dur});
+  if(!r){ btn.disabled=false; btn.textContent=was; return }
+  /* Під паузу потрапили вже оформлені замовлення — нехай оператор
+     обдзвонить: автоматично клієнтам не пишемо (власник, 02.10) */
+  if(/обдзвоніть/.test(r.note||'')) alert(r.note);
+  if(view==='pause') drawPause(); else paintPausePill(SHOP.pause);
+}
+
 async function grillAct(btn){
   btn.disabled=true; const was=btn.textContent; btn.textContent='…';
   const r=await post('/api/op/grill',{act:btn.dataset.grill,slot:Number(btn.dataset.slot)||0});
@@ -1211,7 +1265,7 @@ function setView(v){
   $('wrap').innerHTML='<p class="empty">Завантажую…</p>';
   if(v==='orders'){ if(DATA) draw(DATA); load(); return }
   if(v==='cal'){ drawCal(); loadCal(); if(CAL.pick) loadDay(); return }
-  loadShop().then(()=>{ if(view===v) v==='stock'?drawStock():drawGrill() });
+  loadShop().then(()=>{ if(view===v) v==='stock'?drawStock():v==='pause'?drawPause():drawGrill() });
 }
 
 /* ---------- голосові нагадування ----------
@@ -1507,6 +1561,7 @@ async function load(){
        інакше картка показувала б старий статус до наступної хвилини */
     if(FOCUS&&!d.orders.some(o=>o.no===FOCUS.no)&&CAL.pick) loadDay().then(()=>{ if(FOCUS&&view==='orders'&&!form) draw(DATA) });
     draw(d);
+    paintPausePill(d.pause);
     /* Стоп-лист і мангал міняють і з бота — тримаємо екран свіжим.
        Календар — тим самим тактом: нове замовлення на завтра має
        зʼявитись у клітинці без перезаходу. */
@@ -1514,7 +1569,7 @@ async function load(){
     else if(view==='orders'&&Date.now()-calAt>60000){ loadCal(); if(CAL.pick) loadDay() }
     else if(view!=='orders'){
       await loadShop();
-      if(view==='stock') paintStock(); else if(view==='grill') drawGrill();
+      if(view==='stock') paintStock(); else if(view==='grill') drawGrill(); else if(view==='pause') drawPause();
     }
   }catch(e){
     $('net').textContent=lastOk? 'звʼязку немає · останнє '+hhmm(lastOk) : 'звʼязку немає';

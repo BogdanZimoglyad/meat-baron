@@ -1,0 +1,62 @@
+# Сторож (аудит 02.10): раз на 10 хвилин з 8:00 до 21:00 за Києвом
+# перевіряє, чи живі сайт і API з ботом. Ліг — пише власнику в Telegram
+# від імені нашого ж бота. Працює на серверах GitHub, тож повідомлення
+# дійде, навіть коли наш сервер на Railway лежить.
+#
+# Потрібні два секрети репозиторію (Settings → Secrets and variables →
+# Actions): BOT_TOKEN — той самий, що в Railway, і OWNER_ID.
+# Перевірити руками: Actions → «Сторож» → Run workflow — прийде пробне
+# повідомлення.
+name: Сторож
+
+on:
+  schedule:
+    - cron: '*/10 4-19 * * *'      # за UTC; години Києва відсіює крок нижче
+  workflow_dispatch:
+    inputs:
+      test:
+        description: 'Надіслати пробне повідомлення, навіть якщо все живе'
+        type: boolean
+        default: true
+
+jobs:
+  check:
+    name: Сайт і API живі
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Перевірка
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          OWNER_ID: ${{ secrets.OWNER_ID }}
+          EVENT: ${{ github.event_name }}
+          TEST: ${{ inputs.test }}
+        run: |
+          h=$(TZ=Europe/Kyiv date +%-H)
+          if [ "$EVENT" = "schedule" ] && { [ "$h" -lt 8 ] || [ "$h" -ge 21 ]; }; then
+            echo "У Києві $h год — уночі не перевіряємо"; exit 0
+          fi
+          send() {
+            curl -s -m 20 "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${OWNER_ID}" --data-urlencode "text=$1" > /dev/null
+          }
+          bad=""
+          # Три спроби з паузою: одна невдала відповідь — ще не падіння
+          check() {
+            for i in 1 2 3; do
+              code=$(curl -s -o /dev/null -w '%{http_code}' -m 20 "$2")
+              [ "$code" = "200" ] && { echo "$1: живий"; return 0; }
+              sleep 20
+            done
+            bad="${bad}"$'\n'"• $1 (відповідь: ${code})"
+          }
+          check "API і бот" "https://api.meat-baron.kh.ua/api/health"
+          check "Сайт" "https://meat-baron.kh.ua/?cb=$RANDOM"
+          if [ -z "$bad" ]; then
+            [ "$TEST" = "true" ] && send "✅ Сторож на звʼязку: сайт і API живі. Якщо щось ляже з 8:00 до 21:00 — напишу сюди."
+            exit 0
+          fi
+          send "🚨 Мʼясний Барон не відповідає:${bad}
+
+          Перевіряю кожні 10 хв, поки не підніметься. Що дивитись: Railway → Deployments і Logs."
+          exit 1
