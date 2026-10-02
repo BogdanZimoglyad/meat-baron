@@ -181,6 +181,12 @@ t.push(['зібране — значок, рамка й кнопка зняти 
 h = draw(ord(), NOW);
 t.push(['нове зібраним не позначити — кнопки немає', !has(h, 'data-pack')]);
 
+// 8б. «Готується» можна повернути в «Прийнято», коли сервер дозволяє
+h = draw(ord({ status: 'cooking', label: 'Готується', can: { cancel: true, back: true } }), NOW);
+t.push(['готується — є кнопка повернути в «Прийнято»', has(h, 'data-uncook="101"')]);
+h = draw(ord({ status: 'accepted', label: 'Прийнято', can: { money: true, cancel: true } }), NOW);
+t.push(['прийняте — кнопки повернення немає', !has(h, 'data-uncook')]);
+
 // 9. підсумок дня
 const dayStrip = pick('dayStrip');
 let s = dayStrip({ all: 7, canceled: 2, open: 3, pickup: 4, delivery: 1, ship: 0, sum: 8659.42, fg: 16400 });
