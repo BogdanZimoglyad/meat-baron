@@ -89,7 +89,18 @@ const round = n => Math.round(n * 100) / 100;
   ok('менше мінімальної ваги — відмова', !!r.err && o.lines.length === 1);
   r = await api.applyLine(o, 'add', { id: 'немає-такого', g: 500 }, 'п');
   ok('позиції не з прайсу не приймаємо', !!r.err && o.lines.length === 1);
-  const sauce = CAT.ITEMS.find(i => CAT.variantsOf(i));
+  /* штучне з різновидом (соус) — вагове з видом (халумі) перевіряємо окремо */
+  const sauce = CAT.ITEMS.find(i => CAT.variantsOf(i) && i.unit !== 'вага');
+  const hal = CAT.ITEMS.find(i => i.name === 'Халумі');
+  if (hal) {
+    r = await api.applyLine(o, 'add', { id: hal.id, g: 500 }, 'п');
+    ok('халумі без смаку — відмова', !!r.err);
+    r = await api.applyLine(o, 'add', { id: hal.id, g: 500, v: 'Паприка' }, 'п');
+    const hl = o.lines[o.lines.length - 1];
+    ok('халумі «Паприка» 500 г додається за ціною на вагу', r.ok && hl.v === 'Паприка' && hl.g === 500
+      && Math.abs(hl.sum - CAT.lineSum({ unit: hal.unit, price: CAT.priceOf(hal, 'Паприка'), g: 500, grp: hal.grp, name: hal.name })) < 0.01);
+    ok('у назві рядка видно смак', /Паприка/.test(CAT.lineTitle(hl)));
+  }
   if (sauce) {
     r = await api.applyLine(o, 'add', { id: sauce.id, g: 1 }, 'п');
     ok('соус без вибраного різновиду — відмова', !!r.err);

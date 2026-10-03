@@ -33,6 +33,10 @@ const money = n => CAT.kop(n).toFixed(2).replace(/\.00$/, '') + ' ₴';
 
 /* «36.19 ₴ за 100 г», «39 ₴ за порцію», «13.90 ₴ за 100 г · упаковка 1 кг» */
 function priceLine(it) {
+  /* Вагове з видами (халумі) — ціна за 100 г і самі види: «мʼята або паприка» */
+  if (CAT.variantsOf(it) && it.unit === 'вага') {
+    return `${money(it.price)} за 100 г, ${CAT.variantsOf(it).list.map(x => x[0].toLowerCase()).join(' або ')}`;
+  }
   if (CAT.variantsOf(it)) return `${CAT.variantsOf(it).list.length} видів на вибір`;
   if (it.unit === 'шт') {
     const u = CAT.countUnitOf(it);
