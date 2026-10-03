@@ -255,6 +255,11 @@ button{font:inherit;cursor:pointer;border:none}
 .bar i.hot{background:var(--ember)}
 .gslot button{min-height:40px;border-radius:10px;background:var(--char);
   border:1px solid var(--line-2);color:var(--bone);font-size:14px}
+.gbtns{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:8px}
+.gslot button.gshut{color:var(--ember-hot);border-color:rgba(224,74,60,.4)}
+.gslot button.gopen{color:var(--ok);border-color:rgba(123,168,79,.45)}
+.gslot.off{border-color:rgba(224,74,60,.45)}
+.gslot.off .bar{opacity:.4}
 .gacts{display:flex;gap:8px;flex-wrap:wrap}
 .gacts button{flex:1;min-width:150px;min-height:48px;border-radius:12px;background:var(--coal);
   border:1px solid var(--line-2);color:var(--bone);font-size:15px}
@@ -1074,18 +1079,25 @@ function drawGrill(){
   const g=SHOP.grill, now=SHOP.now||Date.now();
   const shut=g.busyUntil>now;
   const slots=g.slots.map((ms,i)=>{
-    const cap=g.cap+(g.extra[ms]||0), used=g.load[ms]||0;
-    const pct=cap?Math.min(100,Math.round(used/cap*100)):100;
+    const ex=g.extra[ms]||0, cap=g.cap+ex, used=g.load[ms]||0;
+    const off=cap<=0;
+    const pct=cap>0?Math.min(100,Math.round(used/cap*100)):100;
     const full=used>=cap;
     /* Поточна година — довідково: сайт на неї вже не продає, надбавка
        нічого не змінить, тож і кнопки немає. */
     const isNow=ms===g.nowSlot;
-    return `<div class="gslot${isNow?' now':''}">
+    /* −5 / +5 / закрити годину — власник, 03.10: додавати могли, прибрати ні */
+    const btn=(act,txt,cls)=>`<button data-grill="${act}" data-slot="${ms}"${cls?` class="${cls}"`:''}>${txt}</button>`;
+    return `<div class="gslot${isNow?' now':''}${off?' off':''}">
       <div class="gtop"><b>${esc(g.labels[i])}</b>${isNow?'<em>зараз</em>':''}
-        <span class="${full?'full':''}">${wLabel(used)} з ${wLabel(cap)}${full?' · забито':''}${
-          g.extra[ms]?` · +${wLabel(g.extra[ms])} від вас`:''}</span></div>
+        <span class="${full?'full':''}">${off
+          ? 'закрита для сайту'+(used?` · уже ${wLabel(used)}`:'')
+          : `${wLabel(used)} з ${wLabel(cap)}${full?' · забито':''}`}${
+          ex&&!off?` · ${ex>0?'+':'−'}${wLabel(Math.abs(ex))} від вас`:''}</span></div>
       <div class="bar"><i class="${full?'hot':''}" style="width:${pct}%"></i></div>
-      ${isNow?'':`<button data-grill="add" data-slot="${ms}">+${wLabel(g.step)} на ${esc(g.labels[i])}</button>`}
+      ${isNow?'':`<div class="gbtns">
+        ${btn('sub','−'+wLabel(g.step))}${btn('add','+'+wLabel(g.step))}
+        ${off?btn('open','✅ Відкрити годину','gopen'):btn('shut','🚫 Закрити годину','gshut')}</div>`}
     </div>`;
   }).join('')
   || '<p class="hint2">До закриття годин уже не лишилось — мангал на сьогодні все.</p>';
@@ -1095,14 +1107,14 @@ function drawGrill(){
       : 'Мангал приймає замовлення з сайту.'}
       <div class="hint2">Сайту віддано ${wLabel(g.cap)} на годину — решту тримаємо на тих,
       хто прийшов чи подзвонив.</div></div>
-    ${slots}
     <div class="gacts">
       <button class="shut" data-grill="60">🔥 Зайнятий на годину</button>
       <button class="shut" data-grill="120">🔥 На дві</button>
       <button class="shut" data-grill="day">🔥 До кінця дня</button>
       <button class="free" data-grill="free">✅ Вільний, приймаємо</button>
-      <button data-grill="noadd">♻️ Прибрати надбавки</button>
+      <button data-grill="noadd">♻️ Усі години — як звичайно</button>
     </div>
+    ${slots}
   </div>`;
   $('wrap').querySelectorAll('[data-grill]').forEach(b=>b.onclick=()=>grillAct(b));
 }
@@ -1257,7 +1269,7 @@ function grillHours(g){
   return `<div class="ghours"><div class="hint2" style="padding:0 0 6px">🔥 Мангал: ${wLabel(g.used)} з ${wLabel(g.cap)} (${gpct(g.used,g.cap)}%)</div>
     ${g.hours.map(x=>{ const p=gpct(x.used,x.cap); return `<div class="gh${p>=100?' full':''}"><b>${x.h}</b>
       <div class="bar"><i class="${gcls(p)}" style="width:${Math.min(100,p)}%"></i></div>
-      <span>${x.used?wLabel(x.used):'—'} з ${wLabel(x.cap)}</span></div>` }).join('')}</div>`;
+      <span>${x.cap>0?(x.used?wLabel(x.used):'—')+' з '+wLabel(x.cap):'закрита'+(x.used?' · '+wLabel(x.used):'')}</span></div>` }).join('')}</div>`;
 }
 function dayHtml(){
   if(!CAL.pick) return '<p class="hint2">Оберіть день, щоб побачити його замовлення.</p>';

@@ -2839,6 +2839,7 @@ function slotFree(ms){
   if(ms<grill.busyUntil) return false;
   /* Оператор міг додати кілограмів на цю годину — тоді ліміт вищий */
   const cap=grill.cap+(grill.extra[ms]||0);
+  if(cap<=0) return false;            // оператор закрив цю годину
   return (grill.load[ms]||0)+Math.min(fryGrams(),cap)<=cap;
 }
 

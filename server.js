@@ -445,15 +445,16 @@ const busyKb = i => ({
     [{ text: '🔥 Зайнятий до кінця дня', callback_data: `g:${i}:day` }],
     [{ text: '✅ Вільний, приймаємо', callback_data: `g:${i}:free` }],
     nextSlots().map(ms => ({ text: `+5 кг на ${hhmm(ms)}`, callback_data: `g:${i}:add:${ms}` })),
-    [{ text: '♻️ Прибрати надбавки', callback_data: `g:${i}:noadd` }]
+    [{ text: '♻️ Усі години — як звичайно', callback_data: `g:${i}:noadd` }]
   ]
 });
 function busyText(i) {
   const t = grillBusyUntil(i), load = grillLoad(i), extra = extraOf(i);
   const rows = nextSlots(4).map(ms => {
     const cap = GRILL_CAP_G + (extra[ms] || 0), used = load[ms] || 0;
+    if (cap <= 0) return `${hhmm(ms)} — закрита для сайту` + (used ? ` (уже ${wLabel(used)})` : '');
     return `${hhmm(ms)} — ${wLabel(used)} з ${wLabel(cap)}` +
-      (used >= cap ? ' · забито' : '') + (extra[ms] ? ` (+${wLabel(extra[ms])} від вас)` : '');
+      (used >= cap ? ' · забито' : '') + (extra[ms] ? ` (${extra[ms] > 0 ? '+' : '−'}${wLabel(Math.abs(extra[ms]))} від вас)` : '');
   }).join('\n');
   return `<b>Мангал · ${esc(SHOPS[i])}</b>\n` +
     (t ? `Для сайту закритий до <b>${hhmm(t)}</b>.\n` : 'Приймає замовлення з сайту.\n') +
@@ -493,19 +494,30 @@ bot.on('callback_query', async cq => {
 function applyGrill(shop, act, arg) {
   db.busy = db.busy || {};
   db.extra = db.extra || {};
-  if (act === 'add') {
+  /* Окрема година: «+5 кг», «−5 кг» (аж до нуля), «закрити» й «відкрити».
+     Надбавка може бути й мінусовою: −10 кг — година для сайту закрита
+     (власник, 03.10: додавати могли, а прибрати — ні). */
+  if (act === 'add' || act === 'sub' || act === 'shut' || act === 'open') {
     const slot = hourFloor(Number(arg) || 0);
     if (!slot || slot < hourFloor(Date.now())) {
       return { err: 'Ця година вже минула — відкрийте мангал ще раз' };
     }
     const e = db.extra[shop] || (db.extra[shop] = {});
-    e[slot] = (e[slot] || 0) + ADD_STEP_G;
+    const was = e[slot] || 0;
+    if (act === 'sub' && GRILL_CAP_G + was <= 0) return { err: `${hhmm(slot)} уже закрита для сайту` };
+    const now = act === 'add' ? was + ADD_STEP_G
+      : act === 'sub' ? Math.max(-GRILL_CAP_G, was - ADD_STEP_G)
+      : act === 'shut' ? -GRILL_CAP_G : 0;
+    if (now) e[slot] = now; else delete e[slot];
     /* Надбавка означає «беремо ще», тож знімаємо і загальне блокування */
-    if (db.busy[shop] && slot < db.busy[shop]) db.busy[shop] = slot;
+    if (act === 'add' && db.busy[shop] && slot < db.busy[shop]) db.busy[shop] = slot;
     save();
-    return { ok: true, note: `+${wLabel(ADD_STEP_G)} на ${hhmm(slot)}` };
+    const cap = GRILL_CAP_G + now;
+    return { ok: true, note: cap <= 0 ? `${hhmm(slot)} закрита для сайту`
+      : act === 'open' ? `${hhmm(slot)} знову по ${wLabel(cap)}`
+      : `${hhmm(slot)}: сайту ${wLabel(cap)}` };
   }
-  if (act === 'noadd') { db.extra[shop] = {}; save(); return { ok: true, note: 'Надбавки прибрано' } }
+  if (act === 'noadd') { db.extra[shop] = {}; save(); return { ok: true, note: 'Усі години — як звичайно' } }
   if (act === 'free') { db.busy[shop] = 0; save(); return { ok: true, note: 'Мангал знову приймає' } }
   if (act === 'day') {
     /* Після закриття до кінця дня лишається нуль хвилин: блокування
@@ -2322,7 +2334,7 @@ function tillCloseMs() {
    більше, ніж ліміт сайту, — оператор додає кілограми кнопкою в боті. */
 const extraOf = shop => {
   const all = (db.extra || {})[shop] || {}, out = {}, from = hourFloor(Date.now());
-  for (const k in all) if (Number(k) >= from && all[k] > 0) out[k] = all[k];
+  for (const k in all) if (Number(k) >= from && all[k]) out[k] = all[k];
   return out;
 };
 const capOf = (shop, slot) => GRILL_CAP_G + (extraOf(shop)[hourFloor(slot)] || 0);
@@ -2347,6 +2359,7 @@ function grillRefuse(shop, slotAt, fg) {
   if (!slotAt) return null;                       // старий клієнт без часу — не чіпаємо
   if (slotAt < grillBusyUntil(shop)) return 'Мангал на цей час зайнятий. Оберіть пізніший час.';
   const cap = capOf(shop, slotAt);
+  if (cap <= 0) return 'На цю годину мангал не приймає. Оберіть інший час.';
   const used = grillLoad(shop)[hourFloor(slotAt)] || 0;
   if (used + Math.min(fg, cap) > cap) {
     return 'На цю годину мангал уже завантажений. Оберіть інший час.';
