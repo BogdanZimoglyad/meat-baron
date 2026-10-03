@@ -300,6 +300,28 @@ const order = (extra = {}) => ({ shop: 0, shopName: CAT.SHOPS[0][0], mode: 'pick
   say(-100, 1, '/days', 'group');
   ok('📅 /days у чаті точки мовчить', !sent.length);
 
+  /* ---- 7б. самовивіз ↔ доставка: клієнт передумав (03.10) ---- */
+  {
+    const base = CAT.lineSum({ ...lavash, g: 2 });
+    let m = await call('POST', '/api/order', order({ tel: '+380671119911', pay: 'card' }));
+    const mno = m.d.no;
+    m = await call('POST', `/api/op/order/${mno}/mode`, { mode: 'delivery', addr: '' }, P);
+    ok('🔁 на доставку без адреси — відмова', m.status === 409 && /адресу/.test(m.d.error));
+    m = await call('POST', `/api/op/order/${mno}/mode`, { mode: 'delivery', addr: 'вул. Сумська 10, кв. 5' }, P);
+    ok('🔁 на доставку: спосіб, адреса, оплата готівкою курʼєру', m.status === 200 && m.d.order.mode === 'delivery'
+      && m.d.order.addr === 'вул. Сумська 10, кв. 5' && m.d.order.pay === 'cash' && m.d.order.can.ship);
+    m = await call('POST', `/api/op/order/${mno}/adjust`, { kind: 'ship', amount: 150 }, P);
+    ok('🔁 після переводу 🚕 вартість додається', Math.abs(m.d.order.total - base - 150) < 0.01);
+    m = await call('POST', `/api/op/order/${mno}/mode`, { mode: 'pickup' }, P);
+    ok('🔁 назад на самовивіз: вартість доставки знято', m.status === 200 && m.d.order.mode === 'pickup'
+      && Math.abs(m.d.order.total - base) < 0.01 && m.d.order.adjust.some(a => a.kind === 'sub' && a.amount === 150));
+    m = await call('POST', `/api/op/order/${mno}/mode`, { mode: 'pickup' }, P);
+    ok('🔁 «вже самовивіз» — відмова', m.status === 409);
+    for (const st of ['accepted', 'cooking', 'ready', 'done']) await call('POST', `/api/op/order/${mno}/status`, { status: st }, P);
+    m = await call('POST', `/api/op/order/${mno}/mode`, { mode: 'delivery', addr: 'вул. Сумська 10' }, P);
+    ok('🔁 після «Видано» спосіб не змінити', m.status === 409);
+  }
+
   /* ---- 8. /panel-off відкликає планшет ---- */
   say(CHAT, 1, '/panel-off', 'group');
   ok('після /panel-off ключ панелі не діє', (await call('GET', '/api/op/orders', null, P)).status === 401);

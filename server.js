@@ -1032,7 +1032,8 @@ const opOrder = o => ({
      правила живуть на сервері й міняються разом із ним. */
   packed: !!o.packedAt,
   can: { money: canEdit(o, 'fact'), ship: canEdit(o, 'ship'), cancel: canEdit(o, 'cancel'),
-         time: TIME_STATUSES.has(o.status), pack: canPack(o), back: o.status === 'cooking' },
+         time: TIME_STATUSES.has(o.status), pack: canPack(o), back: o.status === 'cooking',
+         mode: MODE_STATUSES.has(o.status) },
   lines: (o.lines || []).map(l => ({ name: nameOf(l), qty: l.g, unit: l.unit, sum: l.sum, fry: !!l.fry, v: l.v || '' }))
 });
 
@@ -1279,6 +1280,17 @@ app.post('/api/op/order/:no/back', async (req, res) => {
   if (!o) return res.status(404).json({ error: 'Замовлення не знайдено' });
   if (o.shop !== a.shop) return res.status(403).json({ error: 'Це замовлення іншої точки' });
   const r = await applyBack(o);
+  if (r.err) return res.status(409).json({ error: r.err, order: opOrder(o) });
+  res.json({ ok: true, order: opOrder(o) });
+});
+
+app.post('/api/op/order/:no/mode', async (req, res) => {
+  const a = panelOf(req);
+  if (!a) return res.status(401).json({ error: 'Потрібен доступ. У чаті точки — /panel' });
+  const o = db.orders[req.params.no];
+  if (!o) return res.status(404).json({ error: 'Замовлення не знайдено' });
+  if (o.shop !== a.shop) return res.status(403).json({ error: 'Це замовлення іншої точки' });
+  const r = await applyMode(o, req.body || {}, 'панель · ' + SHOPS[a.shop]);
   if (r.err) return res.status(409).json({ error: r.err, order: opOrder(o) });
   res.json({ ok: true, order: opOrder(o) });
 });
@@ -3287,6 +3299,58 @@ async function applyStatus(o, st) {
    замовлення. Далі «Готове» назад не відкочуємо — про нього клієнту вже
    пішли сповіщення й SMS. Клієнту про відкат не пишемо: оператор щойно
    говорив із ним, а новий час чи суму він отримає звичайним сповіщенням. */
+/* ---------- самовивіз ↔ доставка ----------
+   Клієнт передзвонює: «не встигаю, привезіть» або навпаки «заберу сам»
+   (власник, 03.10). Можна, поки замовлення не видали й не віддали
+   курʼєру — до «Готове» включно.
+   На доставку: оператор вписує адресу, оплата стає готівкою курʼєру
+   (термінала в таксі немає), вартість — як і раніше, кнопкою 🚕.
+   На самовивіз: вартість доставки знімаємо з суми.
+   Пишемо в журнал змін, як правку складу: картка в чаті, сторінка
+   клієнта й сповіщення вже вміють це показати. Час видачі не чіпаємо —
+   якщо треба, оператор переносить його кнопкою 🕒. */
+const MODE_STATUSES = new Set(['new', 'accepted', 'cooking', 'ready']);
+async function applyMode(o, raw, by) {
+  if (!MODE_STATUSES.has(o.status)) return { err: 'Спосіб можна змінити, поки замовлення не видали й не віддали курʼєру' };
+  const to = raw.mode === 'delivery' ? 'delivery' : raw.mode === 'pickup' ? 'pickup' : '';
+  if (!to) return { err: 'Невідомий спосіб' };
+  if (to === o.mode) return { err: to === 'delivery' ? 'Це вже доставка' : 'Це вже самовивіз' };
+  const why = String(raw.note || '').trim().slice(0, 120);
+  o.adjust = adjustmentsOf(o).slice();
+  if (o.totalOrig == null) o.totalOrig = o.total;
+  if (to === 'delivery') {
+    const addr = String(raw.addr || '').trim().slice(0, 200);
+    if (addr.length < 5) return { err: 'Вкажіть адресу доставки' };
+    const wasCard = o.pay === 'card';
+    o.mode = 'delivery';
+    o.addr = addr;
+    o.addrParts = null;
+    o.pay = 'cash';
+    o.adjust.push({ kind: 'note', amount: 0, by, at: Date.now(),
+      note: `замість самовивозу — доставка: ${addr}${wasCard ? '; оплата готівкою курʼєру' : ''}. Вартість доставки уточнить оператор` + (why ? '. ' + why : '') });
+  } else {
+    const ship = o.ship || 0;
+    o.mode = 'pickup';
+    o.addr = '';
+    o.addrParts = null;
+    o.ship = 0;
+    if (ship) {
+      o.total = kop(o.total - ship);
+      o.adjust.push({ kind: 'sub', amount: ship, by, at: Date.now(),
+        note: 'замість доставки — самовивіз, вартість доставки знято' + (why ? '. ' + why : '') });
+    } else {
+      o.adjust.push({ kind: 'note', amount: 0, by, at: Date.now(),
+        note: `замість доставки — самовивіз: ${o.shopName || ''}` + (why ? '. ' + why : '') });
+    }
+  }
+  o.when = whenOf(o);              // «привеземо» ↔ «готове» в рядку часу
+  o.updatedAt = Date.now();
+  save();
+  await editCard(o);
+  notifyAdjust(o, o.adjust[o.adjust.length - 1]);
+  return { ok: true };
+}
+
 async function applyBack(o) {
   if (o.status !== 'cooking') return { err: `Уже «${LABEL[o.status]}»`, stale: true };
   o.status = 'accepted';
