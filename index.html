@@ -459,6 +459,10 @@ body.has-bar .to-top{bottom:calc(84px + env(safe-area-inset-bottom) + var(--vv-b
 .hero-img svg{width:44px;height:44px;opacity:.28}
 .lbl{font-size:12px;color:var(--smoke);margin:16px 0 8px;display:block}
 .wgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+/* вид вагового товару (халумі: мʼята / паприка) — над вагою */
+.vgrid{grid-template-columns:repeat(2,1fr);margin-bottom:12px}
+.vgrid.need .w{border-color:var(--ember-hot);animation:needV .5s 2}
+@keyframes needV{50%{transform:translateX(3px)}}
 .w{border:1px solid var(--line-2);border-radius:9px;padding:9px 0;font-size:13px;color:var(--smoke);transition:.14s}
 .w[aria-pressed=true]{background:var(--ember);border-color:var(--ember);color:#fff}
 /* «скільки це штук» — для позицій, які просять штуками, а важать на вагах */
@@ -1087,7 +1091,7 @@ body:has(.inst:not(.up)) .bar{bottom:66px}
 
 <!-- Прайс і правила рахунку. Той самий файл читає сервер,
      тому підроблену суму замовлення видно одразу. -->
-<script src="catalog.js?v=812a670b"></script>
+<script src="catalog.js?v=9f61a19f"></script>
 <script>
 /* Категорії, зняті з продажу, відсіює CATS_OFF із catalog.js —
    вкладка зникає разом із товарами. */
@@ -2152,10 +2156,14 @@ function bindItemActs(it,root){
 }
 
 /* ---------- item sheet ---------- */
-function openItem(id, editIdx){
+function openItem(id, editIdx, onDone){
   const it=ITEMS.find(i=>i.id===id);
   const editing=Number.isInteger(editIdx);
-  if(variantsOf(it)&&!editing){openVariants(it); return}      // соуси: спершу який саме
+  if(variantsOf(it)&&isCount(it)&&!editing){openVariants(it); return}      // соуси: спершу який саме
+  /* Вагове з видами (халумі: мʼята / паприка) — вид обирають тут же,
+     над вагою; без виду кнопка не додає. */
+  const vs=variantsOf(it);
+  let vSel=editing?(cart[editIdx].v||''):'';
   if(isCount(it)&&!editing){addToCart(it,1); return}
   /* До 20 кг — стільки на позицію приймає сервер і панель. Було 6 кг, і
      більше мовчки обрізалось до 6, хоча компанія бере й по 10 кг
@@ -2183,6 +2191,8 @@ function openItem(id, editIdx){
   <div class="sh-h"><h3>${nameOf(it)}</h3><button class="x" onclick="close_()">✕</button></div>
   <p class="hint" style="margin-top:-6px">${sheetLead(it)}${it.cat==='raw'?`Ціна за 100 г сирого мʼяса — ${money(it.price)}. Посмажимо на мангалі за ${FRY_RATE} ₴/кг.`:`Ціна за 100 г — ${money(it.price)}.`}${sale(it)?` <b style="color:var(--ember-hot)">${esc(sale(it))}</b>`:''}</p>
   ${descOf(it)?`<p class="hint sh-desc">${descOf(it)}</p>`:''}
+  ${vs?`<span class="lbl">${esc(vs.pick||vs.label||'Вид')}</span>
+  <div class="wgrid vgrid">${vs.list.map(([v])=>`<button class="w" data-vv="${esc(v)}" aria-pressed="${v===vSel}">${esc(v)}</button>`).join('')}</div>`:''}
   <span class="lbl">${por?'Оберіть кількість':'Оберіть вагу'}</span>
   <div class="wgrid">${quick.map(v=>`<button class="w" data-g="${v}" aria-pressed="${v===g}">${wLabel(v)}${por?`<i>${v/por} шт</i>`:''}</button>`).join('')}</div>
   <div class="rowline">
@@ -2205,9 +2215,9 @@ function openItem(id, editIdx){
     tv.textContent=money(it.price*g/100);
     rg.value=Math.min(g,rgQ*k);
     if(syncField!==false) wv.value=g/k;
-    sIn.querySelectorAll('.w').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.g===g));
+    sIn.querySelectorAll('.w[data-g]').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.g===g));
   };
-  sIn.querySelectorAll('.w').forEach(b=>b.onclick=()=>{g=+b.dataset.g;paint()});
+  sIn.querySelectorAll('.w[data-g]').forEach(b=>b.onclick=()=>{g=+b.dataset.g;paint()});
   rg.oninput=()=>{g=+rg.value;paint()};
   wv.oninput=()=>{
     const v=parseInt(wv.value,10);
@@ -2217,9 +2227,17 @@ function openItem(id, editIdx){
   };
   wv.onblur=()=>{paint()};
   wv.onfocus=()=>wv.select();
-  sIn.querySelector('#addBtn').onclick=()=>{
-    if(editing){cart[editIdx].g=g;paintBar();openCart();return}
-    addToCart(it,g); close();
+  const addBtn=sIn.querySelector('#addBtn');
+  const paintV=()=>{
+    sIn.querySelectorAll('[data-vv]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.vv===vSel));
+    if(vs&&!addBtn.disabled) addBtn.textContent=vSel?(editing?'Зберегти':'Додати в кошик'):'Оберіть '+(vs.pick||vs.label||'вид').toLowerCase();
+  };
+  sIn.querySelectorAll('[data-vv]').forEach(b=>b.onclick=()=>{vSel=b.dataset.vv;paintV()});
+  paintV();
+  addBtn.onclick=()=>{
+    if(vs&&!vSel){ sIn.querySelector('.vgrid').classList.add('need'); return }
+    if(editing){cart[editIdx].g=g; if(vs){cart[editIdx].v=vSel; cart[editIdx].price=priceOf(it,vSel)} paintBar();openCart();return}
+    addToCart(it,g,vSel||undefined); (onDone||close)();
   };
 }
 /* v — різновид, наприклад соус «Ткемалі». Різні соуси — різні рядки
@@ -2295,7 +2313,7 @@ const upsellPrice=i=>variantsOf(i)? variantsNote(i) : money(i.price)+(i.unit==='
 const upsellAdd=i=>addToCart(i, isCount(i)?1:(portionOf(i)||Math.max(500,i.minG)));
 /* Позицію з різновидами одним дотиком не додати — треба обрати який.
    Після вибору повертаємо в кошик: звідти людина й прийшла. */
-const upsellPick=i=>{ if(variantsOf(i)){ openVariants(i,openCart); return true } upsellAdd(i); return false };
+const upsellPick=i=>{ if(variantsOf(i)){ isCount(i)?openVariants(i,openCart):openItem(i.id,undefined,openCart); return true } upsellAdd(i); return false };
 
 /* Сітка в кошику під списком позицій. Показуємо два рядки, решту
    відкриває кнопка: інакше сам кошик тоне під допродажем. Скільки це
@@ -2375,7 +2393,7 @@ function upsellGate(next){
   sIn.querySelector('.up-scroll').onclick=e=>{
     const b=e.target.closest('[data-u]'); if(!b) return;
     const item=ITEMS.find(i=>i.id===b.dataset.u);
-    if(variantsOf(item)){ openVariants(item,next); return }   // соус — спершу який; «Готово» веде далі до оформлення, куди людина й ішла
+    if(variantsOf(item)){ isCount(item)?openVariants(item,next):openItem(item.id,undefined,next); return }   // соус чи халумі — спершу який; далі до оформлення, куди людина й ішла
     if(b.classList.contains('on')){
       const i=cart.findIndex(l=>l.id===item.id);
       if(i>-1) cart.splice(i,1);

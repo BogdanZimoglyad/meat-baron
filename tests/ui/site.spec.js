@@ -181,3 +181,26 @@ test('чуже посилання — лише статус; своє з клю�
   expect(page.url()).toContain('order=' + no);
   expect(errors, 'помилки JS на сторінці').toEqual([]);
 });
+
+test('халумі: без смаку не додається, «Мʼята» — у кошику й у чаті точки', async ({ page, bot }) => {
+  test.setTimeout(60000);
+  await page.goto('/');
+  await page.locator('#q').fill('халумі');
+  await page.getByRole('button', { name: 'Додати Халумі', exact: true }).click();
+  /* без смаку кнопка просить обрати й нічого не кладе */
+  await expect(page.locator('#addBtn')).toHaveText(/Оберіть смак/);
+  await page.locator('#addBtn').click();
+  await expect(page.locator('#addBtn')).toHaveText(/Оберіть смак/);          // досі просить — нічого не поклали
+  await page.locator('[data-vv="Мʼята"]').click();
+  await expect(page.locator('#addBtn')).toHaveText('Додати в кошик');
+  await page.locator('#addBtn').click();
+  await expect(page.locator('#barL')).toHaveText(/1 позиція/);
+  await page.locator('#barBtn').click();
+  await expect(page.locator('#sheet')).toContainText('Мʼята');
+  await checkout(page);
+  await fillContacts(page, 'Тест Халумі', '+380501112255');
+  await bot.clear();
+  await page.locator('#send').click();
+  await expect(page.locator('#sheet')).toContainText('ЗАМОВЛЕННЯ ОФОРМЛЕНО', { ignoreCase: true });
+  await expect.poll(async () => (await bot.sent()).some(m => m.chatId === CHAT && /Халумі.*Мʼята/.test(m.text))).toBe(true);
+});
