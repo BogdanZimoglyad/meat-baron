@@ -112,6 +112,19 @@ button{font:inherit;cursor:pointer;border:none}
 .card.new{border-color:rgba(224,74,60,.6);box-shadow:0 0 0 1px rgba(224,74,60,.25)}
 .card.ready{border-color:rgba(123,168,79,.5)}
 .card.late{border-color:rgba(216,161,58,.65)}
+/* Стрічка за часом: статус видно смужкою зліва, щоб у змішаній черзі
+   з першого погляду відрізняти нове, в роботі, готове (власник, 03.10) */
+.card.s-new{border-left:6px solid var(--ember)}
+.card.s-accepted{border-left:6px solid #8a8178}
+.card.s-cooking{border-left:6px solid #e08a2e}
+.card.s-ready{border-left:6px solid var(--ok)}
+.card.s-onway{border-left:6px solid #4f8fd6}
+.card.s-packed{border-left:6px solid #4f8fd6}
+.tl-h{display:flex;align-items:baseline;gap:10px;margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.tl-h b{font-size:22px}
+.tl-h span{color:var(--smoke);font-size:14px}
+.tl-h.now b{color:var(--ember-hot)}
+.tl-h:first-child{margin-top:0}
 /* Зібрано наперед — синя рамка й значок біля статусу */
 .card.packed{border-color:rgba(98,160,230,.6)}
 .hd .pk{font-size:13px;padding:3px 10px;border-radius:999px;background:rgba(98,160,230,.2);color:#9cc6f2}
@@ -445,6 +458,31 @@ function dayStrip(d){
    подзвонити курʼєру, проставити вартість, — і серед самовивозу вона
    губилась (власник, 27.09). Порядок роботи при цьому не ламається:
    нове лишається в новому, готове в готовому. */
+/* Одна черга за часом видачі: усі живі замовлення — нові, в роботі,
+   зібрані, на інші дні — упереміш, з роздільниками по годинах. Раніше
+   купки йшли блоками, а доставка окремо, і замовлення на 14:00 могло
+   стояти нижче за 16:00 (власник, 03.10). Без часу — «якнайшвидше»
+   на початку. Завершені — згорнуті внизу, як і були. */
+function timeline(list,now){
+  const at=o=>o.slotAt||0;
+  const live=list.slice().sort((a,b)=>(at(a)||1)-(at(b)||1)||a.no-b.no);
+  const hourOf=o=>{ if(!o.slotAt) return 'asap';
+    const k=new Date(o.slotAt).toLocaleString('sv-SE',{timeZone:'Europe/Kyiv'}).slice(0,13); return k };
+  const groups=[];
+  for(const o of live){
+    const k=hourOf(o), g=groups[groups.length-1];
+    if(g&&g.k===k) g.l.push(o); else groups.push({k,l:[o]});
+  }
+  const nowH=new Date(now).toLocaleString('sv-SE',{timeZone:'Europe/Kyiv'}).slice(0,13);
+  return groups.map(g=>{
+    const o=g.l[0];
+    const head= g.k==='asap' ? 'Якнайшвидше'
+      : String(new Date(o.slotAt).toLocaleTimeString('uk-UA',{hour:'2-digit',timeZone:'Europe/Kyiv'})).padStart(2,'0')+':00';
+    const day= g.k==='asap' ? '' : dayWord(o.slotAt);
+    return `<div class="tl-h${g.k===nowH?' now':''}"><b>${head}</b><span>${day}${day?' · ':''}${g.l.length} зам.${g.k===nowH?' · зараз':''}</span></div>
+      ${grid(g.l,now)}`;
+  }).join('');
+}
 const grid=(l,now)=>`<div class="grid">${l.map(o=>card(o,now)).join('')}</div>`;
 const sect=(title,cls,list,now,split=true)=>{
   if(!list.length) return '';
@@ -533,10 +571,7 @@ function draw(d){
                      +sect('Чекають свого дня','later',dl[2],now,false)
                      +doneSect(dl[3],now))||E
     : (d.orders.length?'':'<p class="empty">Замовлень зараз немає.</p>')
-      +sect('Нові — прийняти в роботу','hot',g[0],now)
-      +sect('У роботі','',g[1],now)
-      +sect('📦 Зібрано — чекають видачі','packed',g[4],now)
-      +sect('Чекають свого дня','later',g[2],now)
+      +timeline([...g[0],...g[1],...g[4],...g[2]],now)
       +doneSect(g[3],now);
   w.innerHTML=dayStrip(d.day)+`<div class="board">${side}<div class="main">${body}</div>
     <aside class="rside" id="rcal">${rcalHtml()}</aside></div>`;
@@ -658,7 +693,7 @@ function card(o,now){
   const nagged=typeof NAGGED!=='undefined'&&NAGGED.has(o.no);
   const cls=(o.status==='new'?'new':o.status==='ready'?'ready':late?'late':'')+(nagged?' nag':'')+(o.packed?' packed':'');
   const when=o.slotAt? hhmm(o.slotAt) : 'якнайшвидше';
-  return `<article class="card ${cls}" data-card="${o.no}">
+  return `<article class="card s-${o.packed&&o.status==='accepted'?'packed':o.status} ${cls}" data-card="${o.no}">
     <div class="hd">
       <span class="no">№ ${o.no}</span>
       <span class="st">${esc(o.label)}</span>
