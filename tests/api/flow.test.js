@@ -343,6 +343,20 @@ const order = (extra = {}) => ({ shop: 0, shopName: CAT.SHOPS[0][0], mode: 'pick
     await cancel(g1.d.no); await cancel(g2.d.no);
     c = await call('GET', '/api/op/day?d=' + day, null, P);
     ok('🔥 усе скасували — мангал порожній', c.d.grill.used === 0);
+
+    /* Закрити годину в панелі — сайт на неї не приймає; відкрили — приймає (03.10) */
+    const h14 = at + 2 * 3600e3;
+    let s = await call('POST', '/api/op/grill', { act: 'shut', slot: h14 }, P);
+    ok('🚫 година закрита — панель бачить мінус 10 кг', s.status === 200 && s.d.grill.extra[h14] === -10000);
+    s = await call('POST', '/api/order', order({ slotAt: h14, when: '14:00', fry: true, lines: fryLine(1000), tel: '+380671119944' }), IP);
+    ok('🚫 на закриту годину сайт не приймає', s.status === 409 && /не приймає/.test(s.d.error));
+    s = await call('POST', '/api/order', order({ slotAt: h14, when: '14:00', tel: '+380671119944' }), IP);
+    ok('🚫 без мангала на ту ж годину — можна', s.status === 200);
+    await cancel(s.d.no);
+    await call('POST', '/api/op/grill', { act: 'open', slot: h14 }, P);
+    s = await call('POST', '/api/order', order({ slotAt: h14, when: '14:00', fry: true, lines: fryLine(1000), tel: '+380671119944' }), IP);
+    ok('✅ відкрили годину — знову приймає', s.status === 200);
+    await cancel(s.d.no);
   }
 
   /* ---- 8. /panel-off відкликає планшет ---- */

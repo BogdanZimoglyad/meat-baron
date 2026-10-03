@@ -275,3 +275,28 @@ test('календар: смужка мангала в дні й шкала по
   await expect(hours.locator('.gh', { hasText: '12:00' })).toContainText('1.5 кг з 10 кг');
   expect(errors, 'помилки JS на сторінці').toEqual([]);
 });
+
+test('мангал: −5 кг, закрити годину й відкрити назад', async ({ page, bot, request }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await openPanel(page, bot);
+  await page.locator('[data-view="grill"]').click();
+  await expect(page.locator('.gacts')).toBeVisible();
+  const sub = page.locator('[data-grill="sub"]').first();
+  /* уночі після закриття годин на сьогодні вже немає — перевіряти нічого */
+  test.skip(!(await sub.count()), 'після закриття годин на сьогодні немає');
+  const slot = Number(await sub.getAttribute('data-slot'));
+  const extra = async () => ((await (await request.get('/api/grill?shop=0')).json()).extra || {})[slot] || 0;
+  const row = page.locator('.gslot').filter({ has: page.locator(`[data-grill="sub"][data-slot="${slot}"]`) });
+
+  await sub.click();
+  await expect.poll(extra).toBe(-5000);
+  await expect(row).toContainText('з 5 кг');
+  await row.locator('[data-grill="shut"]').click();
+  await expect.poll(extra).toBe(-10000);
+  await expect(row).toContainText('закрита для сайту');
+  await row.locator('[data-grill="open"]').click();
+  await expect.poll(extra).toBe(0);
+  await expect(row).toContainText('з 10 кг');
+  expect(errors, 'помилки JS на сторінці').toEqual([]);
+});

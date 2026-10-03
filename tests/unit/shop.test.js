@@ -43,7 +43,7 @@ const env = {
 const build = db => {
   env.db = db;
   const fn = new Function(...Object.keys(env),
-    `${code}; return { applyGrill, applyStock, opShopState, stopOf, grillLoad }`);
+    `${code}; return { applyGrill, applyStock, opShopState, stopOf, grillLoad, extraOf }`);
   return fn(...Object.values(env));
 };
 const freshDb = (orders = {}) => ({ orders, busy: {}, extra: {}, stop: {} });
@@ -92,6 +92,21 @@ ok('надбавка відкриває закриту годину', db.busy[0]
 
 s.applyGrill(0, 'noadd');
 ok('«прибрати надбавки» чистить усі', Object.keys(db.extra[0]).length === 0);
+
+// −5 кг аж до нуля, закрити й відкрити годину (власник, 03.10)
+r = s.applyGrill(0, 'sub', soon);
+ok('−5 кг: сайту на цю годину менше', r.ok && db.extra[0][soon] === -5000 && s.extraOf(0)[soon] === -5000);
+s.applyGrill(0, 'sub', soon);
+ok('−5 ще раз — година закрита (нуль)', db.extra[0][soon] === -10000 && /закрита/.test(s.applyGrill(0, 'sub', soon).err || ''));
+s.applyGrill(0, 'add', soon);
+ok('+5 після закриття — знову 5 кг', db.extra[0][soon] === -5000);
+r = s.applyGrill(0, 'open', soon);
+ok('«Відкрити годину» — назад як звичайно', r.ok && db.extra[0][soon] === undefined);
+s.applyGrill(0, 'add', soon);
+r = s.applyGrill(0, 'shut', soon);
+ok('«Закрити годину» — навіть із надбавкою стає нуль', r.ok && db.extra[0][soon] === -10000 && /закрита/.test(r.note));
+ok('на минулу годину не закриваємо', !!s.applyGrill(0, 'shut', past).err);
+s.applyGrill(0, 'noadd');
 
 // точки не заважають одна одній
 db = freshDb(); s = build(db);
