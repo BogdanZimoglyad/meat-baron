@@ -1120,6 +1120,32 @@ app.post('/api/op/order/:no/adjust', async (req, res) => {
 const dayOfOrder = o => kyivDate(o.slotAt || o.createdAt || 0);
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/* Мангал на день: скільки кг записано на кожну годину й скільки влазить
+   (ліміт сайту + надбавки «+5 кг»). Години — з 10:00 до закриття цього
+   дня, зі святами й короткими днями. Для шкали в календарі панелі
+   (власник, 03.10). Скасовані не займають. */
+function grillDay(shop, day) {
+  if (dayRule(shop, day) === 0) return { hours: [], used: 0, peak: 0, cap: 0 };
+  const close = closeHourOf(shop, day), byHour = {};
+  for (const no in db.orders) {
+    const o = db.orders[no];
+    if (o.shop !== shop || !o.fry || !o.slotAt || o.status === CANCELED || kyivDate(o.slotAt) !== day) continue;
+    const k = hourFloor(o.slotAt);
+    byHour[k] = (byHour[k] || 0) + (o.fg || 0);
+  }
+  const hours = [];
+  for (let h = GRILL_FROM_H; h < close; h++) {
+    const at = kyivMs(day, h, 0);
+    hours.push({ at, h: String(h).padStart(2, '0') + ':00', used: byHour[hourFloor(at)] || 0, cap: capOf(shop, at) });
+  }
+  /* Замовлене на годину до 10:00 чи після закриття (оператор переніс) —
+     теж мангал: додаємо в загальне, щоб не губилось */
+  const used = Object.values(byHour).reduce((s, g) => s + g, 0);
+  /* Найтісніша година, % — щоб день із однією забитою годиною не виглядав спокійним */
+  const peak = hours.reduce((m, x) => Math.max(m, x.cap ? Math.round(x.used / x.cap * 100) : 0), 0);
+  return { hours, used, peak, cap: hours.reduce((s, x) => s + x.cap, 0) };
+}
+
 app.get('/api/op/calendar', (req, res) => {
   const a = opGate(req, res);
   if (!a) return;
@@ -1139,6 +1165,8 @@ app.get('/api/op/calendar', (req, res) => {
     x.fg += o.fry ? (o.fg || 0) : 0;
     x.sum = kop(x.sum + (o.total || 0));
   }
+  /* Заповнення мангала — лише для днів, де є що смажити */
+  for (const d in days) if (days[d].fg) { const g = grillDay(a.shop, d); days[d].gUsed = g.used; days[d].gCap = g.cap; days[d].gPeak = g.peak }
   res.json({ ok: true, today: kyivDate(), days });
 });
 
@@ -1151,7 +1179,7 @@ app.get('/api/op/day', (req, res) => {
     .filter(o => o.shop === a.shop && dayOfOrder(o) === d)
     .sort((x, y) => (x.slotAt || x.createdAt || 0) - (y.slotAt || y.createdAt || 0))
     .map(opOrder);
-  res.json({ ok: true, day: d, label: dayLabelK(d), orders: list });
+  res.json({ ok: true, day: d, label: dayLabelK(d), orders: list, grill: grillDay(a.shop, d) });
 });
 
 /* ---------- стоп-лист і мангал у панелі ----------

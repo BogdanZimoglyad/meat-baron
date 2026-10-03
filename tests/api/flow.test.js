@@ -322,6 +322,29 @@ const order = (extra = {}) => ({ shop: 0, shopName: CAT.SHOPS[0][0], mode: 'pick
     ok('🔁 після «Видано» спосіб не змінити', m.status === 409);
   }
 
+  /* ---- 7в. Мангал у календарі: смужка дня й шкала по годинах (03.10) ---- */
+  {
+    const at = kyivNoon(5), day = new Date(at).toLocaleDateString('sv-SE', { timeZone: 'Europe/Kyiv' });
+    /* інша адреса — у ліміту «12 замовлень за 10 хв» свій лічильник на кожну */
+    const IP = { 'X-Forwarded-For': '10.0.0.77' };
+    const fryLine = g => [{ id: osh.id, name: osh.name, grp: osh.grp, unit: osh.unit, g, fry: true }];
+    const g1 = await call('POST', '/api/order', order({ slotAt: at, when: '12:00', fry: true, lines: fryLine(2000) }), IP);
+    const g2 = await call('POST', '/api/order', order({ slotAt: at + 1800e3, when: '12:30', fry: true, lines: fryLine(1000), tel: '+380671119922' }), IP);
+    const g3 = await call('POST', '/api/order', order({ slotAt: at + 3600e3, when: '13:00', fry: true, lines: fryLine(1000), tel: '+380671119933' }), IP);
+    await cancel(g3.d.no);
+    let c = await call('GET', `/api/op/calendar?from=${day}&to=${day}`, null, P);
+    const cd = c.d.days[day] || {};
+    ok('🔥 календар: день знає, скільки на мангалі й скільки влазить', g1.status === 200 && g2.status === 200
+      && cd.gUsed === 3000 && cd.gCap > 3000 && cd.gPeak === Math.round(3000 / 10000 * 100));
+    c = await call('GET', '/api/op/day?d=' + day, null, P);
+    const h12 = (c.d.grill.hours || []).find(x => x.h === '12:00'), h13 = (c.d.grill.hours || []).find(x => x.h === '13:00');
+    ok('🔥 день по годинах: 12:00 — обидва, з 10:00, скасоване не займає', h12 && h12.used === 3000 && h12.cap === 10000
+      && c.d.grill.hours[0].h === '10:00' && h13 && h13.used === 0);
+    await cancel(g1.d.no); await cancel(g2.d.no);
+    c = await call('GET', '/api/op/day?d=' + day, null, P);
+    ok('🔥 усе скасували — мангал порожній', c.d.grill.used === 0);
+  }
+
   /* ---- 8. /panel-off відкликає планшет ---- */
   say(CHAT, 1, '/panel-off', 'group');
   ok('після /panel-off ключ панелі не діє', (await call('GET', '/api/op/orders', null, P)).status === 401);
