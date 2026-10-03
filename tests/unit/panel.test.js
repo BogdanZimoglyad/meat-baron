@@ -11,6 +11,8 @@ const cut = re => { const m = src.match(re); if (!m) { throw new Error('не з�
 const code = [
   cut(/const NEXT=\{[\s\S]*?\n  : NEXT\[o\.status\]\|\|null;/),
   cut(/function dayWord\(ms\)\{[\s\S]*?\n\}/),
+  cut(/function timeline\(list,now\)\{[\s\S]*?\n\}/),
+  cut(/const grid=\(l,now\)=>[^\n]*/),
   cut(/function card\(o,now\)\{[\s\S]*?\n\}/),
   cut(/function more\(o\)\{[\s\S]*?\n\}/),
   cut(/const FORM=\{[\s\S]*?\n\};/),
@@ -169,6 +171,23 @@ t.push(['зібране сьогодні — в купку «Зібрано»',
 t.push(['зібране на інший день лишається в «Чекають свого дня»',
   groupOf({ status: 'accepted', packed: true, day: 'завтра' }) === 2]);
 t.push(['видане зібране — у завершених', groupOf({ status: 'done', packed: true }) === 3]);
+
+// 8. одна черга за часом (03.10): упереміш статуси й доставка, роздільники по годинах
+{
+  const day = new Date(NOW).toLocaleDateString('sv-SE', { timeZone: 'Europe/Kyiv' });
+  const at = hm => new Date(`${day}T${hm}:00+03:00`).getTime();
+  const tl = pick(`timeline(${JSON.stringify([
+    ord({ no: 301, slotAt: at('16:10'), status: 'new', label: 'Нове' }),
+    ord({ no: 302, slotAt: at('14:30'), status: 'cooking', label: 'Готується', mode: 'delivery' }),
+    ord({ no: 303, slotAt: at('14:00'), status: 'accepted', label: 'Прийнято' }),
+    ord({ no: 304, slotAt: 0, status: 'new', label: 'Нове' })
+  ])}, ${NOW})`);
+  const pos = no => tl.indexOf(`data-card="${no}"`);
+  t.push(['черга: «якнайшвидше» першим, далі за часом — 14:00, 14:30, 16:10',
+    pos(304) < pos(303) && pos(303) < pos(302) && pos(302) < pos(301)]);
+  t.push(['черга: роздільник години з кількістю — «14:00 … 2 зам.»', /<b>14:00<\/b><span>[^<]*2 зам\./.test(tl)]);
+  t.push(['черга: статус видно смужкою', tl.includes('s-cooking') && tl.includes('s-new')]);
+}
 
 // 8а. кнопка «Зібрано» на картці — лише коли сервер дозволяє
 h = draw(ord({ status: 'accepted', label: 'Прийнято', can: { money: true, cancel: true, pack: true } }), NOW);
