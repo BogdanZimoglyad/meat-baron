@@ -701,6 +701,8 @@ function more(o){
   /* Перенести на інший день чи годину: клієнт передзвонив і передумав
      (власник, 29.09). Лише поки не почали готувати — так каже сервер. */
   if(can.time) b.push(['time','🕒 Час']);
+  /* Клієнт передумав: «привезіть» чи «заберу сам» (власник, 03.10) */
+  if(can.mode) b.push(['mode',o.mode==='delivery'?'🏪 На самовивіз':'🚕 На доставку']);
   if(can.cancel) b.push(['cancel','✖️ Скасувати',1]);
   /* Уже «Готується», а клієнт переніс час — крок назад відкриває знову
      час, суму й склад (власник, 02.10). Не форма, а одна дія. */
@@ -921,7 +923,26 @@ async function setTime(btn){
   }catch(e){ btn.disabled=false; btn.textContent=was; alert('Немає звʼязку') }
 }
 
+/* Самовивіз ↔ доставка. На доставку — адреса обовʼязкова; на самовивіз —
+   лише підтвердження. Правила (до «Готове», оплата, вартість) — на сервері. */
+function modeForm(o){
+  const toDlv=o.mode!=='delivery';
+  return `<div class="form">
+    <label>${toDlv?'Замість самовивозу — доставка':'Замість доставки — самовивіз'}</label>
+    ${toDlv
+      ? `<input type="text" id="fv" autocomplete="off" placeholder="Адреса: вулиця, будинок, квартира" autofocus>
+         <div class="hint">Оплата стане «готівкою курʼєру». Вартість доставки — потім кнопкою 🚕. Клієнт отримає сповіщення.</div>`
+      : `<div class="hint">Клієнт забере сам${o.ship?`, вартість доставки ${money(o.ship)} знімемо із суми`:''}. Клієнт отримає сповіщення.</div>`}
+    <input type="text" id="fn" placeholder="Причина, якщо треба: клієнт попросив">
+    <div class="row">
+      <button class="ok" data-send="${o.no}" data-kind="mode">${toDlv?'🚕 Зробити доставкою':'🏪 Зробити самовивозом'}</button>
+      <button class="no" data-close="1">Назад</button>
+    </div>
+  </div>`;
+}
+
 function formHtml(o,kind){
+  if(kind==='mode') return modeForm(o);
   if(kind==='plus'||kind==='minus') return lineForms(o,kind);
   if(kind==='time') return timeForm(o);
   const f=FORM[kind];
@@ -1480,8 +1501,20 @@ async function pack(no,on,btn){
 
 /* Сума, доставка, коментар, скасування — усі правила на сервері
    (applyAdjust), панель лише передає, що набрав оператор. */
+async function setMode(btn){
+  const no=btn.dataset.send, o=(DATA&&DATA.orders||[]).find(x=>String(x.no)===String(no))||(FOCUS&&FOCUS.copy)||{};
+  const toDlv=o.mode!=='delivery';
+  const addr=toDlv?String(val('fv')||'').trim():'';
+  if(toDlv&&addr.length<5) return alert('Вкажіть адресу доставки');
+  btn.disabled=true; const was=btn.textContent; btn.textContent='…';
+  const r=await post('/api/op/order/'+no+'/mode',{mode:toDlv?'delivery':'pickup',addr,note:String(val('fn')||'').trim()});
+  if(!r){ btn.disabled=false; btn.textContent=was; return }
+  form=null; await load();
+}
+
 async function send(btn){
   const kind=btn.dataset.kind, no=btn.dataset.send, f=FORM[kind];
+  if(kind==='mode') return setMode(btn);
   let amount=0, note='';
   if(f.n){
     /* «612,40», «612.40», «612 40»(з пробілом), «612,40 ₴» — усе те саме */

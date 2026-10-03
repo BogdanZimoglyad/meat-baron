@@ -229,3 +229,26 @@ test('оператор: ⏸ пауза — сайт бачить плашку; �
   await expect(page.locator('#pauseBar')).toBeHidden();
   expect(errors, 'помилки JS').toEqual([]);
 });
+
+test('оператор: самовивіз → доставка з адресою і назад', async ({ page, bot, request }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  const no = await newOrder(request, 'Панель Спосіб');
+  await openPanel(page, bot);
+  const card = cardOf(page, no);
+  await expect(card).toContainText('самовивіз');
+
+  await card.locator('[data-kind="mode"]').click();
+  await page.locator('[data-send][data-kind="mode"]').click();          // без адреси — не пускає
+  await page.locator('#fv').fill('вул. Сумська 10, кв. 5');
+  await page.locator('[data-send][data-kind="mode"]').click();
+  await expect(card).toContainText('доставка');
+  await expect(card).toContainText('вул. Сумська 10, кв. 5');
+  await expect(card.locator('[data-kind="mode"]')).toHaveText(/На самовивіз/);
+
+  await card.locator('[data-kind="mode"]').click();
+  await page.locator('[data-send][data-kind="mode"]').click();
+  await expect(card).toContainText('самовивіз');
+  await expect(card.locator('[data-kind="mode"]')).toHaveText(/На доставку/);
+  expect(errors, 'помилки JS на сторінці').toEqual([]);
+});
