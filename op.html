@@ -280,6 +280,16 @@ button{font:inherit;cursor:pointer;border:none}
 /* Обраний день видно одразу: заливка й товста рамка. Дні сусіднього
    місяця бліді, і тонка рамка на блідій клітинці губилась — оператор
    тиснув 2 жовтня й не бачив, що обрано саме його (власник, 30.09). */
+/* шкала мангала в клітинці: зелена → жовта → червона (власник, 03.10) */
+.gbar{display:block;width:100%;height:6px;border-radius:999px;background:var(--char);overflow:hidden;margin-top:3px}
+.gbar i{display:block;height:100%;border-radius:999px;background:var(--ok)}
+.gbar i.warn{background:var(--warn)} .gbar i.full{background:var(--ember-hot)}
+.ghours{background:var(--coal);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px}
+.ghours .gh{display:grid;grid-template-columns:48px minmax(0,1fr) 92px;gap:8px;align-items:center;font-size:13.5px;padding:3px 0}
+.ghours .gh .bar{height:10px}
+.ghours .bar i.warn{background:var(--warn)} .ghours .bar i.full{background:var(--ember-hot)}
+.ghours .gh span:last-child{text-align:right;color:var(--smoke);font-variant-numeric:tabular-nums}
+.ghours .gh.full span:last-child{color:var(--ember-hot)}
 .cday.on{opacity:1;border:2px solid var(--ember);background:rgba(196,52,42,.34);box-shadow:0 0 0 2px rgba(196,52,42,.25)}
 .cday.on b{color:#fff}
 /* замовлення в списку дня — натискається й відкриває повну картку */
@@ -1206,6 +1216,7 @@ function calGrid(){
     g+=`<button class="cday ${cls}" data-cday="${d}"><b>${+d.slice(8)}</b>`
       +(x.n?`<span class="n">${x.n} зам.</span>`:'')
       +(x.fg?`<span class="k">🔥 ${wLabel(x.fg)}</span>`:'')
+      +(x.gCap?gbar(x.gUsed,x.gCap,x.gPeak):'')
       +(x.off?`<span class="x">✖ ${x.off}</span>`:'')+`</button>`;
   }
   const [y,m]=CAL.month.split('-').map(Number);
@@ -1235,6 +1246,19 @@ function paintRcal(){ const el=$('rcal'); if(!el) return; el.innerHTML=rcalHtml(
 function paintCal(){ if(view==='cal') drawCal(); else if(view==='orders') paintRcal() }
 let calAt=0;                       // коли календар востаннє питали в сервера
 
+/* Заповнення мангала: колір за часткою — до 60% спокійно, до 90% тісно, далі повно */
+const gpct=(u,c)=>c?Math.round(u/c*100):0;
+const gcls=p=>p>=90?'full':p>=60?'warn':'';
+/* Довжина — скільки зайнято за день (хоч трохи — видно), колір — найтісніша година */
+const gbar=(u,c,peak)=>{ const p=gpct(u,c); return `<span class="gbar" title="мангал ${p}% за день, найтісніша година ${peak||p}%"><i class="${gcls(Math.max(p,peak||0))}" style="width:${u?Math.min(100,Math.max(6,p)):0}%"></i></span>` };
+/* По годинах для обраного дня — як на екрані «Мангал» */
+function grillHours(g){
+  if(!g||!g.hours||!g.hours.length||!g.used) return '';
+  return `<div class="ghours"><div class="hint2" style="padding:0 0 6px">🔥 Мангал: ${wLabel(g.used)} з ${wLabel(g.cap)} (${gpct(g.used,g.cap)}%)</div>
+    ${g.hours.map(x=>{ const p=gpct(x.used,x.cap); return `<div class="gh${p>=100?' full':''}"><b>${x.h}</b>
+      <div class="bar"><i class="${gcls(p)}" style="width:${Math.min(100,p)}%"></i></div>
+      <span>${x.used?wLabel(x.used):'—'} з ${wLabel(x.cap)}</span></div>` }).join('')}</div>`;
+}
 function dayHtml(){
   if(!CAL.pick) return '<p class="hint2">Оберіть день, щоб побачити його замовлення.</p>';
   if(!CAL.day) return '<p class="hint2">Завантажую…</p>';
@@ -1242,7 +1266,8 @@ function dayHtml(){
   const live=list.filter(o=>o.status!=='canceled'), off=list.length-live.length;
   const fg=live.reduce((s,o)=>s+(o.fry?o.fg||0:0),0), sum=live.reduce((s,o)=>s+(o.total||0),0);
   const head=`<div class="dsum"><b>${esc(CAL.day.label)}</b> · ${live.length} зам.`
-    +(fg?' · 🔥 '+wLabel(fg):'')+(sum?' · '+money(sum):'')+(off?` · скасовано ${off}`:'')+`</div>`;
+    +(fg?' · 🔥 '+wLabel(fg):'')+(sum?' · '+money(sum):'')+(off?` · скасовано ${off}`:'')+`</div>`
+    +grillHours(CAL.day.grill);
   if(!list.length) return head+'<p class="hint2">Замовлень на цей день немає.</p>';
   return head+list.map(o=>`<div class="crow${o.status==='canceled'?' off':''}" data-open="${o.no}" role="button" tabindex="0">
       <div class="h"><b>${o.slotAt?hhmm(o.slotAt):'—'}</b><span>№ ${o.no} · ${o.mode==='delivery'?'🚕 доставка':'самовивіз'}</span>

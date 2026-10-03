@@ -24,7 +24,11 @@ const code = [
   cut(/const dWeek=[^\n]*/),
   cut(/const telGroups=[^\n]*/),
   cut(/const groupOf=o=>[\s\S]*?: 1;/),
-  cut(/function dayStrip\(d\)\{[\s\S]*?\n\}/)
+  cut(/function dayStrip\(d\)\{[\s\S]*?\n\}/),
+  cut(/const gpct=[^\n]*/),
+  cut(/const gcls=[^\n]*/),
+  cut(/const gbar=[^\n]*/),
+  cut(/function grillHours\(g\)\{[\s\S]*?\n\}/)
 ].join('\n');
 
 const env = {
@@ -214,5 +218,23 @@ t.push(['сума й мангал на місці', has(s, '8659.42 ₴') && has
 t.push(['скасовані показані окремо', has(s, 'скасовано 2')]);
 t.push(['порожній день — так і кажемо', has(dayStrip({ all: 0 }), 'ще не було')]);
 t.push(['сервер нічого не прислав — не падаємо', has(dayStrip(null), 'ще не було')]);
+
+// 9. мангал у календарі: смужка дня й шкала по годинах (03.10)
+{
+  const fill = h => (h.match(/width:(\d+)%/) || [])[1];
+  let b = pick('gbar(3000,100000,20)');
+  t.push(['мангал: спокійний день — зелена, мала, але видна', fill(b) === '6' && /<i class=""/.test(b)]);
+  b = pick('gbar(3000,100000,95)');
+  t.push(['мангал: одна година забита — смужка червона, хоч день і порожній', /<i class="full"/.test(b)]);
+  b = pick('gbar(70000,100000,70)');
+  t.push(['мангал: тісно — жовта', /<i class="warn"/.test(b) && fill(b) === '70']);
+  const g = { used: 13000, cap: 35000, hours: [
+    { h: '10:00', used: 0, cap: 10000 }, { h: '11:00', used: 10000, cap: 10000 }, { h: '12:00', used: 3000, cap: 15000 }] };
+  const gh = pick('grillHours(' + JSON.stringify(g) + ')');
+  t.push(['мангал по годинах: кожна година — «скільки з скількох»', (gh.match(/class="gh[ "]/g) || []).length === 3 && has(gh, '10 кг з 10 кг')]);
+  t.push(['мангал по годинах: повна година — червона, надбавка видна', has(gh, 'gh full') && has(gh, '3 кг з 15 кг')]);
+  t.push(['мангал по годинах: порожній день — шкали немає',
+    pick('grillHours({used:0,cap:10000,hours:[{h:"10:00",used:0,cap:10000}]})') === '']);
+}
 
 report(t);

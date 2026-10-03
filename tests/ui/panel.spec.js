@@ -252,3 +252,26 @@ test('оператор: самовивіз → доставка з адресо�
   await expect(card.locator('[data-kind="mode"]')).toHaveText(/На доставку/);
   expect(errors, 'помилки JS на сторінці').toEqual([]);
 });
+
+test('календар: смужка мангала в дні й шкала по годинах', async ({ page, bot, request }) => {
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  /* завтра о 12:00 за Києвом — година точно в графіку мангала */
+  const day = new Date(Date.now() + 864e5).toLocaleDateString('sv-SE', { timeZone: 'Europe/Kyiv' });
+  const noon = new Date(`${day}T12:00:00+03:00`).getTime();
+  const r = await request.post('/api/order', { data: {
+    shop: 0, mode: 'pickup', pay: 'cash', nm: 'Панель Мангал', tel: '+380501110077', note: '', fry: true,
+    slotAt: noon, lines: [{ id: osh.id, g: 1500, fry: true }], total: 0 } });
+  expect(r.status(), 'сервер прийняв замовлення').toBe(200);
+
+  await openPanel(page, bot);
+  await page.locator('[data-view="cal"]').click();
+  let cell = page.locator(`.cal [data-cday="${day}"]`);
+  if (!(await cell.count())) { await page.locator('[data-cm="1"]').click(); cell = page.locator(`.cal [data-cday="${day}"]`) }
+  await expect(cell.locator('.gbar i')).toHaveAttribute('style', /width:\d+%/);
+  await cell.click();
+  const hours = page.locator('#cDay .ghours');
+  await expect(hours).toContainText('10:00');
+  await expect(hours.locator('.gh', { hasText: '12:00' })).toContainText('1.5 кг з 10 кг');
+  expect(errors, 'помилки JS на сторінці').toEqual([]);
+});
